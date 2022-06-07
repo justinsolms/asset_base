@@ -1,0 +1,29 @@
+version: 1
+
+directories:
+
+    working:
+
+        cache: './var/cache'
+
+        log: './var/log'
+
+        tmp: './var/tmp'
+
+    factsheets:
+
+        templates: 'fundmanage/factsheets'
+
+        artwork: 'fundmanage/factsheets/art'
+
+        rendered: '~/'
+
+backends:
+
+  database:
+
+    mysql:
+
+        entitybase: 'mysql://justin:future@localhost/%s?unix_socket=/var/run/mysqld/mysqld.sock'
+
+        history: 'mysql://justin:future@localhost/%s?unix_socket=/var/run/mysqld/mysqld.sock'
