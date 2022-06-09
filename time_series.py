@@ -13,18 +13,16 @@ from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
 
-from sqlalchemy.ext.declarative import declarative_base
-
 from asset_base.exceptions import FactoryError
+
+# Import the common declarative base
+from asset_base.common import Base
 
 # Get module-named logger.
 import logging
 logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-
-# Create the declarative base
-Base = declarative_base()
 
 # Pull in the meta data
 metadata = MetaData()
@@ -56,8 +54,8 @@ class TimeSeriesBase(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     """int: Primary key."""
 
-    _entity_id = Column(Integer, ForeignKey('entity.id'), nullable=False)
-    """int: Foreign key giving ``Entity`` a time series capability."""
+    _asset_id = Column(Integer, ForeignKey('asset.id'), nullable=False)
+    """int: Foreign key giving ``Asset`` a time series capability."""
 
     date_stamp = Column(Date, nullable=False)
     """datetime: EOD date."""
@@ -68,7 +66,7 @@ class TimeSeriesBase(Base):
         'polymorphic_on': _discriminator,
     }
     __table_args__ = (
-        UniqueConstraint('_discriminator', '_entity_id', 'date_stamp'),
+        UniqueConstraint('_discriminator', '_asset_id', 'date_stamp'),
     )
 
     date_column_names = ['date_stamp']
@@ -80,7 +78,7 @@ class TimeSeriesBase(Base):
         # its time-series data.
         self.security_class = listed.__class__
 
-        self._entity_id = listed.id
+        self._asset_id = listed.id
         self.date_stamp = date_stamp
 
     @classmethod
@@ -107,7 +105,7 @@ class TimeSeriesBase(Base):
             column with the ISIN number of the ``Listed`` instance.
 
         """
-        # The Entity polymorph security class that aggregates the time series
+        # The Asset polymorph security class that aggregates the time series
         security_class = cls.security_class
 
         # Check for zero rows of data
@@ -116,9 +114,9 @@ class TimeSeriesBase(Base):
             return
 
         # The goal is to substitute the `key_code_name` column for the
-        # `Entity.id`.
+        # `Asset.id`.
         key_code_name = security_class.key_code_name
-        # Get Entity.key_code to Entity.id translation table
+        # Get Asset.key_code to Asset.id translation table
         key_code_id_table = security_class.key_code_id_table(session)
 
         data_table = data_frame
@@ -156,7 +154,7 @@ class TimeSeriesBase(Base):
         instances_list = list()
         data_table.set_index(
             ['entity_id', 'date_stamp'], inplace=True, drop=True)
-        # Iterate over all Entity polymorph instances
+        # Iterate over all Asset polymorph instances
 
         # Determine which, if any, security id's are present in the data.
         entity_id_list = data_table.index.to_frame(
@@ -221,8 +219,8 @@ class TimeSeriesBase(Base):
         security_class = cls.security_class
 
         # The goal is to substitute the `key_code_name` column for the
-        # `Entity.id`.
-        # Get Entity.key_code to Entity.id translation table
+        # `Asset.id`.
+        # Get Asset.key_code to Asset.id translation table
         key_code_id_table = security_class.key_code_id_table(session)
 
         #  Get a table of time-series instances with attribute columns
@@ -230,7 +228,7 @@ class TimeSeriesBase(Base):
         for instance in session.query(cls).all():
             # Get instance data dictionary and add the `Listed` ISIN number
             instance_dict = instance.to_dict()
-            instance_dict['entity_id'] = instance._entity_id
+            instance_dict['entity_id'] = instance._asset_id
             record_list.append(instance_dict)
         instance_table = pd.DataFrame(record_list)
 
@@ -536,7 +534,7 @@ class Dividend(TimeSeriesBase):
 
     id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
     """ Primary key."""
-    # NOTE: Inherited _entity_id backrefs to the polymorphic ListedEquity
+    # NOTE: Inherited _asset_id backrefs to the polymorphic ListedEquity
 
     currency = Column(String, nullable=False)
     """str: 3-Letter currency symbol for the dividend currency. """
@@ -687,7 +685,7 @@ class LivePrices(Base):
         engine = session.bind
 
         # From the data_frame create a translation DataFrame of (isin,
-        # Entity.id) so we can add and Entity.id column to the data_frame.
+        # Asset.id) so we can add and Asset.id column to the data_frame.
         translate_table = list()
         for i, row in data_frame.iterrows():
             # Retrieve the ListedEquity instance by its ISIN and create a
@@ -712,7 +710,7 @@ class LivePrices(Base):
         translate_table.set_index(['mic', 'ticker'], inplace=True)
         data_table = data_frame.join(translate_table, on=['mic', 'ticker'])
         # Drop appropriate columns so that the data_table may be directly
-        # updated into LivePrices via the Entity.id column.
+        # updated into LivePrices via the Asset.id column.
         data_table.drop(['mic', 'ticker'], axis=1, inplace=True)
 
         # Add the data_table to the database as a temporary table. Use the

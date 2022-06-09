@@ -5,6 +5,8 @@
 """ Define classes describing assets such as financial assets.
 """
 
+# TODO: Decide upon key_code and identity_code formats
+
 import sys
 import datetime
 import numpy as np
@@ -29,10 +31,12 @@ from asset_base.exceptions import FactoryError, TimeSeriesNoData, ReconcileError
 from asset_base.exceptions import BadISIN
 
 from asset_base.common import Base, Common
-from asset_base.entity import Currency
+from asset_base.entity import Currency, Exchange, Issuer
 
 # Get module-named logger.
 import logging
+
+from asset_base.time_series import TradeEOD
 logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -134,39 +138,58 @@ class Asset(Common):
 
     # Entity owns Asset. Entity has a reference list to many owned Asset named
     # `asset_list`
-    _entity_id = Column(Integer, ForeignKey('entity.id'))
-    owner = relationship('Entity', backref='asset_list')
+    # FIXME: Currently owner is allowed to be NULL. Make owner compulsory.
+    _owner_id = Column(Integer, ForeignKey('entity.id'))
+    owner = relationship(
+        'Entity', backref='asset_list', foreign_keys=[_owner_id])
 
-    # TODO: This where we would add asset price relationships
+    # TODO: This where we would add asset prices
     # TODO: This is were we would add asset fundamental data relationships
     # TODO: This is were we would add asset book relationships
-    # Live or latest price - relationship:one-to-one:=>(uselist=False)
-    # TODO: Move live prices to the Listed class
-    # _live_prices = relationship('LivePrices', uselist=False)
 
     # Major asset class. This is a generic class so the asset class is
     # indeterminate.
     _asset_class = None
 
-    # Owner entity of this asset
-    owner = relationship('Entity', back_populates='asset_list')
-
-    #  A short class name for use in the alt_name method.
-    _name_appendix = 'Asset'
-
     def __init__(self, name, currency, **kwargs):
         """Instance initialization."""
-        self.name = name
+        super().__init__(name, **kwargs)
+
+        # Pricing currency
         self.currency = currency
+
+        # Asset owner
+        if 'owner' in kwargs:
+            self.owner = kwargs.pop('owner')
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return '{} is an {} priced in {}'.format(
-            self.name, self._discriminator, self.currency.ticker)
+        msg = '{} is an {} priced in {}.'.format(
+            self.name, self._class_name, self.currency_ticker)
+        if self.owner is not None:
+            msg += ' Owner: {}'.format(self.owner)
+
+        return msg
 
     def __repr__(self):
         """Return the official string output."""
-        return '<%s.%s>' % (type(self).__name__,  self.identity_code)
+        if self.owner is None:
+            msg = '<{}(name="{}", currency="{}")>'.format(
+                self._class_name, self.name, self.currency)
+        else:
+            msg = '<{}(name="{}", currency="{!r}", owner={!r})>'.format(
+                self._class_name, self.name, self.currency, self.owner)
+
+        return msg
+
+    @property
+    def domicile(self):
+        """.entity.Domicile : ``Domicile`` of the ``Share`` owner ``Entity``."""
+        # FIXME: Currently owner is allowed to be NULL. Make owner compulsory.
+        if self.owner is None:
+            return None
+        else:
+            return self.owner.domicile
 
     @property
     def key_code(self):
@@ -177,6 +200,11 @@ class Asset(Common):
     def identity_code(self):
         """A human readable string unique to the class instance."""
         return self.currency.ticker + '.' + self.name
+
+    @property
+    def currency_ticker(self):
+        """ISO 4217 3-letter currency code."""
+        return self.currency.ticker
 
     def get_asset_class(self):
         """Return the major asset class in lower-case.
@@ -209,36 +237,66 @@ class Asset(Common):
 
         return self._asset_class
 
-    def get_live_trades(self):
-        # TODO: Integrate with EOD API
-        """Return the live price data
+    @classmethod
+    def factory(cls, session, asset_name, currency_code, create=True, **kwargs):
+        """Manufacture/retrieve an instance from the given parameters.
 
-        Warning
-        -------
-        This data may be stale and would require an update to be initiated.
+        If a record of the specified class instance does not exist then add it,
+        else do nothing. Then return the instance.
 
-        Returns
-        -------
-        dict
-            A live price data dictionary with keys from the
-            ``LivePrices.to_dict()`` method (or its polymorph class' equivalent
-            method).
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        asset_name : str
+            Asset full name.
+        currency_code : str(3)
+            ISO 4217 3-letter currency codes.
+        create : bool, optional
+            If `False` then the factory shall expect the specified `Entity` to
+            already exist in the session or it shall raise an exception instead
+            of creating a first instance.
+
+        Note
+        ----
+        The entity's domicile (and by implication the related currency) must
+        already exist in the session or an exception shall be raised.
+
+
+        Return
+        ------
+        .Entity
+            The single instance that is in the session.
 
         See also
         --------
-        .LivePrices.to_dict
-        """
-        try:
-            # Either sqlalchemy throws NoResultFound
-            live_prices = self._live_prices
-            if live_prices is None:
-                # or if we get None back throw NoResultFound anyway
-                raise NoResultFound
-        except NoResultFound:
-            raise NoResultFound(
-                "No live price found for {}.".format(self.identity_code))
+        .Domicile.factory
 
-        return live_prices.to_dict()
+        """
+        # TODO: It is debatable whether or not this factory method should exist
+        # as Entity should ber an abstract class. Check if entity exists in the
+        # session and if not then add it.
+        try:
+            obj = session.query(cls).join(Currency).filter(
+                cls.name == asset_name,
+                Currency.ticker == currency_code
+            ).one()
+        except NoResultFound:
+            if not create:
+                raise FactoryError(
+                    'Asset "{}", currency="{}", not found.'.format(
+                        asset_name, currency_code))
+            else:
+                # Create a new instance, fetch pre-existing currency
+                currency = Currency.factory(session, currency_code)
+                obj = cls(asset_name, currency, **kwargs)
+                session.add(obj)
+        else:
+            # No changes to reconcile, country_code and entity_name are the key
+            # arguments.
+            pass
+
+        return obj
 
 
 class Cash(Asset):
@@ -284,7 +342,7 @@ class Cash(Asset):
 
     id = Column(Integer, ForeignKey('asset.id'), primary_key=True)
 
-    key_code_name = 'domicile_currency'
+    key_code_name = 'asset_currency'
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -296,17 +354,26 @@ class Cash(Asset):
 
     def __init__(self, currency, **kwargs):
         """Instance initialization."""
+
+        assert 'owner' not in kwargs, 'Unexpected `owner` argument.'
+
         # The name is constrained to that of the currency.
         name = currency.name
         super().__init__(name, currency, **kwargs)
 
-        # Make a prices instance with the default cash unit price of 1.0
-        date_stamp = datetime.date.today()
-        self._live_prices = LivePrices(date_stamp, price=1.0)
-
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return 'Cash %s in %s' % (self.ticker, self.domicile.name)
+        msg = '{} is an {} priced in {}.'.format(
+            self.name, self._class_name, self.currency_ticker)
+
+        return msg
+
+    def __repr__(self):
+        """Return the official string output."""
+        msg = '<{}(currency={!r})>'.format(
+            self._class_name, self.currency)
+
+        return msg
 
     @property
     def ticker(self):
@@ -324,7 +391,7 @@ class Cash(Asset):
         return self.ticker
 
     @classmethod
-    def factory(cls, session, ticker):
+    def factory(cls, session, ticker, create=True, **kwargs):
         """Manufacture/retrieve an instance from the given parameters.
 
         Note
@@ -341,6 +408,10 @@ class Cash(Asset):
             A session attached to the desired database.
         ticker : str(3)
             ISO 4217 3-letter currency codes.
+        create : bool, optional
+            If `False` then the factory shall expect the specified `Entity` to
+            already exist in the session or it shall raise an exception instead
+            of creating a first instance.
 
         Return
         ------
@@ -357,12 +428,17 @@ class Cash(Asset):
             obj = session.query(cls).filter(cls.ticker == ticker).one()
         except NoResultFound:
             # Raise exception if the currency is not found
-            raise FactoryError(f'Currency with ticker `{ticker}` not found.')
+
+            if not create:
+                raise FactoryError(f'Currency with ticker `{ticker}` not found.')
+            else:
+                # Create a new instance, fetch pre-existing currency
+                currency = Currency.factory(session, ticker)
+                obj = cls(currency, **kwargs)
+                session.add(obj)
         else:
             # There would never be changes to Cash to reconcile so just pass
             pass
-        finally:
-            session.flush()
 
         return obj
 
@@ -374,6 +450,11 @@ class Cash(Asset):
         the session are used to build a ``Cash`` instance for each
         ``Currency`` instance.
 
+        Warning
+        -------
+        Please run ``Currency.update_all`` before running this current method to
+        avoid an Exception.
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -382,8 +463,12 @@ class Cash(Asset):
         """
         # A cash instance for every currency
         currency_list = session.query(Currency).all()
+        if len(currency_list) == 0:
+            raise Exception(
+                'No Currency instances found. '
+                'Please run `Currency.update_all`.')
         for currency in currency_list:
-            Currency.factory(session, currency.ticker)
+            Cash.factory(session, currency.ticker)
 
     def get_last_eod_trades(self):
         """Return the last EOD price data set in the history
@@ -452,36 +537,6 @@ class Cash(Asset):
 
         return series
 
-    def get_live_trades(self):
-        # TODO: The required methods are not currently functioning.
-        """Return the live prices if available else the last EOD prices.
-
-        Returns
-        -------
-        dict
-            A cash price End-Of-Day (EOD) data dictionary with keys :
-                date_stamp: The EOD date-time stamp of the data
-                price: Same as the closing price for EOD data
-                close: The market closing price
-
-        Note
-        ----
-        The price of ``Cash`` instances will always be 1.0
-
-        See also
-        --------
-        .get_live_trades
-        .get_last_eod_trades
-        """
-
-        try:
-            data = self.get_live_trades()
-        except NoResultFound:
-            data = self.get_last_eod_trades()
-
-        # Fetch the date filtered range of time-series data.
-        return data
-
 
 class Share(Asset):
     """A financial asset that is a share that has been issued.
@@ -490,15 +545,14 @@ class Share(Asset):
     ----
     This is an abstract class not meant for direct instantiation.
 
-    The domicile of a share is that of the issuer. This may not always be the
-    case and a software upgrade may be needed to address this.
+    The domicile (and therefore also the currency) of a share is that of the
+    issuer. This may not always be the case and a software upgrade in the future
+    may address this.
 
     Parameters
     ----------
     name : str
         Entity full name.
-    currency : .Currency
-        Currency of share issue.
     issuer: .Issuer
         The issuing institution that issues the asset for exchange.
     quote_units : {'units', 'cents'}, optional
@@ -563,9 +617,14 @@ class Share(Asset):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return '{} is a {} in {} issued by {} in {}'.format(
-            self.name, self._discriminator, self.domicile.name,
-            self.issuer.name, self.issuer.domicile.name)
+        return '{} is a {} issued by {} in {}.'.format(
+            self.name, self._class_name,
+            self.issuer.name, self.domicile.country_name)
+
+    @property
+    def domicile(self):
+        """.entity.Domicile : ``Domicile`` of the ``Share`` ``Issuer``."""
+        return self.domicile
 
     @property
     def key_code(self):
@@ -606,7 +665,7 @@ class Share(Asset):
             account domicile. See above examples.
 
         """
-        share_domicile_code = self.issuer.domicile.country_code
+        share_domicile_code = self.domicile.country_code
         if domicile_code == share_domicile_code:
             locality = 'domestic'
         else:
@@ -703,9 +762,9 @@ class Listed(Share):
     """ Primary key."""
 
     # Exchange lists Listed. Exchange has a reference list to many issued Listed
-    # named `listing_list`
+    # named `securities_list`
     _exchange_id = Column(Integer, ForeignKey('exchange.id'), nullable=False)
-    exchange = relationship('Exchange', backref='listing_list')
+    exchange = relationship('Exchange', backref='securities_list')
 
     # Ticker on the listing exchange.
     ticker = Column(String(12), nullable=False)
@@ -780,7 +839,12 @@ class Listed(Share):
             '{} ({}.{}) ISIN:{} is a {} on the {} issued by {} in {}').format(
                 self.name, self.ticker, self.exchange.mic, self.isin,
                 self._discriminator, self.exchange.name, self.issuer.name,
-                self.issuer.domicile.name)
+                self.domicile.country_name)
+
+    @property
+    def domicile(self):
+        """.entity.Domicile : ``Domicile`` of the ``Listed``'s ``Exchange``."""
+        return self.exchange.domicile
 
     @property
     def key_code(self):
@@ -822,7 +886,7 @@ class Listed(Share):
             account domicile. See above examples.
 
         """
-        if self.exchange.domicile.code == domicile_code:
+        if self.exchange.domicile.country_code == domicile_code:
             locality = 'domestic'
         else:
             locality = 'foreign'
@@ -846,7 +910,7 @@ class Listed(Share):
             'ticker': self.ticker,
             'listed_name': self.name,
             'issuer_name': self.issuer.name,
-            'issuer_domicile_code': self.issuer.domicile.code,
+            'issuer_domicile_code': self.domicile.country_code,
             'status': self.status,
         }
 
@@ -944,41 +1008,35 @@ class Listed(Share):
             if not create:
                 raise FactoryError(
                     'Listed ISIN={}, not found.'.format(isin))
-            else:
-                # Go on to crete a new instance if all requirement arguments
-                # are met.
-                pass
-            # Check args here and throw if insufficient instead of relying
-            # on Issuer, Exchange and Listed class checking which ends up with
-            # an exception in Domicile.factory which is useless information
+            # Need sufficient arguments. Due to argument default these can be
+            # None
+            if not all([listed_name, isin, ticker]):
+                raise FactoryError(
+                    'Expected valid listed_name, isin and ticker arguments. '
+                    'Some are None.')
+            if not all([issuer_name, issuer_domicile_code]):
+                raise FactoryError(
+                    'Expected valid issuer_name, issuer_domicile_code '
+                    'arguments. Some are None.',
+                    action='Creation failed')
+            if mic is None:
+                raise FactoryError(
+                    'Expect valid exchange MIC argument. Got None.')
+            # Begin Listed creation process
             try:
-                # If issuer doesn't exist then creation will be attempted
+                exchange = Exchange.factory(session, mic=mic)
+            except FactoryError:
+                # The exchange must already exist.
+                raise FactoryError(f'Exchange {mic} not found.')
+            try:
                 issuer = Issuer.factory(
                     session, issuer_name, issuer_domicile_code)
-            except FactoryError as ex:
+            except FactoryError:
                 raise FactoryError(
-                    'Cannot retrieve the instance. '
-                    'Failed the creation attempt. '
-                    'Expected issuer arguments. '
-                    'Caused by: {}'.format(ex))
-            try:
-                # The exchange must already exist.
-                exchange = Exchange.factory(session, mic=mic)
-            except FactoryError as ex:
-                raise FactoryError(
-                    'Cannot retrieve the instance. '
-                    'Failed the creation attempt. '
-                    'Expected a valid exchange MIC argument. '
-                    'Caused by: {}'.format(ex))
-            try:
-                obj = cls(listed_name, issuer, isin, exchange, ticker, **kwargs)
-            except ValueError as ex:
-                raise FactoryError(
-                    'Cannot construct the instance. '
-                    'Expected a full set of `Listed` positional arguments. '
-                    'Caused by: {}'.format(ex))
-            else:
-                session.add(obj)
+                    'Could not create or retrieve the Issuer')
+            # Now we have all required arguments to create
+            obj = cls(listed_name, issuer, isin, exchange, ticker, **kwargs)
+            session.add(obj)
         else:
             # Reconcile any changes
             if listed_name and listed_name != obj.name:
@@ -991,7 +1049,7 @@ class Listed(Share):
             if issuer_name and obj.issuer.name != issuer_name:
                 raise ReconcileError(obj, 'issuer_name')
             if issuer_domicile_code and \
-                    obj.issuer.domicile.code != issuer_domicile_code:
+                    obj.issuer.domicile.country_code != issuer_domicile_code:
                 raise ReconcileError(obj, 'issuer_domicile_code')
         finally:
             session.flush()
@@ -1118,739 +1176,3 @@ class Listed(Share):
             raise BadISIN(isin)
 
         return isin
-
-
-class ListedEquity(Listed):
-    # TODO:160 Document behaviour. Esp. reg. name and isin changes.
-    # TODO:260 Calculate time-series based on holdings. Specify depth to look
-    """Exchange listed ordinary shares in an issuing company.
-
-    Ordinary shares are also known as equity shares and they are the most
-    common form of share in the UK. An ordinary share gives the right to its
-    owner to share in the profits of the company (dividends) and to vote at
-    general meetings of the company. The residual value of the company is
-    called common stock. A voting share (also called common stock or an
-    ordinary share) is a share of stock giving the stockholder the right to
-    vote on matters of corporate policy and the composition of the members of
-    the board of directors.
-
-    Parameters
-    ----------
-    name : str
-        Entity full name.
-    issuer: .Issuer
-        The issuing institution that issues the asset for exchange.
-    isin : str
-        An International Securities Identification Number (ISIN) uniquely
-        identifies a security. ISINs consist of two alphabetic characters, which
-        are the ISO 3166-1 alpha-2 code for the issuing country (An ISIN cannot
-        specify a particular trading location.), nine alpha-numeric characters
-        (the National Securities Identifying Number, or NSIN, which identifies
-        the security, padded as necessary with leading zeros), and one numerical
-        check digit.
-    exchange : .Exchange
-        The exchange the asset is listed upon.
-    ticker : str
-        The ticker assigned to the asset by the exchange listing process.
-    status : str
-        Flag of listing status ('listed', 'delisted').
-    quote_units : {'units', 'cents'}, optional
-        Price quotations are either in currency units (default) or currency
-        cents.
-    shares_in_issue : int, optional
-        Number of shares in issue.
-    exchange_board : str
-        Board of the exchange that the instrument is listed on.
-    date_stamp : datetime.date
-        Date stamp of the data.
-    industry_class : str, optional
-        The class' mnemonic for the industry classification scheme. The valid
-        values are:
-
-            * 'icb' for the Industry Classification Benchmark (ICB)
-            * No others are implemented as yet.
-
-    industry_class_dict : dict, required if industry_class is given
-        A dictionary of the complete parameter set accepted the industry
-        classification class which has been selected for by the
-        ``industry_class`` parameter. See the documentation for the selected
-        class.
-
-    See also
-    --------
-    .Listed, .Issuer, .Exchange
-    """
-
-    __tablename__ = 'listed_equity'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
-
-    # Major asset class constant. Possibly be overridden by child classes.
-    _asset_class = 'equity'
-
-    id = Column(Integer, ForeignKey('listed.id'), primary_key=True)
-    """ Primary key."""
-
-    # Historical Dividend end-of-day (EOD) time-series collection
-    _dividend_series = relationship('Dividend', backref='listed_equity')
-    # The date of the last update of all time-series instances related to this
-    # class. Must be maintained by update logic.
-    _dividend_series_last_date = Column(Date)
-
-    # Industry classification
-    industry_class = Column(String(16), nullable=True)
-    """str: The `industry classification`_ mnemonic in lowercase.
-
-    .. _`industry classification`:
-        https://en.wikipedia.org/wiki/Industry_classification
-
-    """
-    # Industry classification foreign keys. This is backref'ed as
-    # industry_class_icb
-    _industry_class_icb_id = Column(Integer,
-                                    ForeignKey('industry_class_icb.id'),
-                                    nullable=True)
-
-    #  A short class name for use in the alt_name method.
-    _name_appendix = 'Equity'
-
-    def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
-        """Instance initialization."""
-        super().__init__(
-            name, issuer, isin, exchange, ticker, **kwargs)
-
-        # Select industry classification scheme, initialise and add it.
-        if 'industry_class' in kwargs:
-            if kwargs['industry_class'] == 'icb':
-                self.industry_class = kwargs.pop('industry_class')
-                # Create and assign the industry classification instance
-                self._industry_class_icb = IndustryClassICB(
-                    industry_name=kwargs.pop('industry_name'),
-                    super_sector_name=kwargs.pop('super_sector_name'),
-                    sector_name=kwargs.pop('sector_name'),
-                    sub_sector_name=kwargs.pop('sub_sector_name'),
-                    industry_code=kwargs.pop('industry_code'),
-                    super_sector_code=kwargs.pop('super_sector_code'),
-                    sector_code=kwargs.pop('sector_code'),
-                    sub_sector_code=kwargs.pop('sub_sector_code'),
-                )
-            else:
-                raise ValueError(
-                    'The `industry_class` {} is not implemented.'.format(
-                        self.industry_class))
-
-    @property
-    def industry_class_instance(self):
-        # TODO: Future integration
-        """The `industry classification`_ instance.
-
-        Is an instance of the class that encodes the industry classification.
-        The possible classes are:
-
-        IndustryClassICB
-            The Industry Classification Benchmark (ICB)
-
-        No others are implemented yet. See the `industry classification`_
-        table.
-
-        .. _`industry classification`:
-            https://en.wikipedia.org/wiki/Industry_classification
-
-        """
-        if self.industry_class == 'icb':
-            return self._industry_class_icb
-        else:
-            pass
-
-    def to_dict(self):
-        """Convert class data attributes into a factory compatible dictionary.
-
-        Returns
-        -------
-        dict
-            The dictionary keys are the same as the class' ``factory`` method
-            argument names, with the exception of the ``cls``, ``session`` and
-            ``create`` arguments.
-
-        """
-        dictionary = super().to_dict()
-        additional_dict = {
-            'industry_class': self.industry_class,
-            'industry_name': self._industry_class_icb.industry_name,
-            'super_sector_name': self._industry_class_icb.super_sector_name,
-            'sector_name': self._industry_class_icb.sector_name,
-            'sub_sector_name': self._industry_class_icb.sub_sector_name,
-            'industry_code': self._industry_class_icb.industry_code,
-            'super_sector_code': self._industry_class_icb.super_sector_code,
-            'sector_code': self._industry_class_icb.sector_code,
-            'sub_sector_code': self._industry_class_icb.sub_sector_code,
-        }
-        dictionary.update(additional_dict)
-
-        return dictionary
-
-    @classmethod
-    def update_all(
-            cls, session, get_meta_method,
-            get_eod_method=None, get_dividends_method=None,
-            **kwargs):
-        """ Update/create all the objects in the entitybase session.
-
-        This method updates its class collection of ``TradeEOD`` and
-        ``Dividend`` instances from the ``financial_data`` module.
-
-        This method sets the ``Listed.time_series_last_date`` attribute to
-        ``datetime.datetime.today()`` for its collection of  ``TradeEOD`` and
-        ``Dividend`` instances. This is conditional to the ``last_update``
-        argument.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        get_meta_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to this class' ``factory`` method. This
-            is for the securities meta-data form which ``Listed`` instances
-            shall be created.
-        get_eod_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to the ``TradeEOD`` ``factory`` method.
-            This is for the securities time series trade end of day data form
-            which the ``TradeEOD`` instances shall be created. If this argument
-            is omitted then the ``TradeEOD`` will not be created.
-        get_dividend_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to the ``Dividend`` ``factory``
-            method. This is for the securities time series dividend end of day
-            data form which the ``Dividend`` instances shall be created.
-            If this argument is omitted then the ``Dividend`` will not be
-            created.
-
-        No object shall be destroyed, only updated, or missing object created.
-
-        """
-        # Get securities
-        super().update_all(
-            session, get_meta_method, get_eod_method, **kwargs)
-
-        # Get Dividend trade data.
-        if get_dividends_method is not None:
-            Dividend.update_all(session, get_dividends_method)
-
-    def get_dividend_series(self):
-        """Return the dividends data series for the security.
-        """
-        dividend_dict_list = [s.to_dict() for s in self._dividend_series]
-        if len(dividend_dict_list) == 0:
-            raise TimeSeriesNoData(
-                'No dividend data for  %s' % self.identity_code)
-        series = pd.DataFrame(dividend_dict_list)
-        series['date_stamp'] = pd.to_datetime(series['date_stamp'])
-        series.set_index('date_stamp', inplace=True)
-        series.sort_index(inplace=True)  # Assure ascending
-        series.name = self
-        return series
-
-    # FIXME: Maybe supposed to be with Listed (where the _time_series attr is)
-    def time_series(self,
-                    series='price', price_item='close', return_type='price',
-                    tidy=False):
-        """Retrieve historic time-series for this instance.
-
-        Parameters
-        ----------
-        series : str
-            Which security series:
-
-            'price':
-                The security's periodic trade price.
-            'dividend':
-                The annualized dividend yield.
-            'volume':
-                The volume of trade (total value of trade) in the period.
-        price_item : str
-            The specific item of price. Only valid when the ``series`` argument
-            is set to 'price':
-
-            'close' :
-                The period's close price.
-            'open' :
-                The period's open price.
-            'low' :
-                The period's lowest price.
-            'high' :
-                The period's highest price.
-        return_type : str
-            The specific view of the price series:
-
-            'price':
-                The original price series.
-            'return':
-                The price period-on-period return series.
-            'total_returns':
-                The period-on-period return series inclusive of the extra
-                yield due to dividends paid.
-            'total_price':
-                The price period-on-period price series inclusive of the extra
-                yield due to dividends paid. The total_price series start value
-                is the same as the price start value.
-        tidy : bool
-            When ``True`` then prices are tidied up by removing outliers.
-
-        Note
-        ----
-        The data is re-sampled at the daily frequency (365 days per year). Note
-        that this may introduce some serial correlations (autocorrelations) into
-        the data due to the forward filling of any missing data (NaNs).
-
-        See also
-        --------
-        .Cash.get_time_series_data_frame, .EntityBase.get_time_series_data_frame
-
-        """
-        def get_price_series(price_item):
-            eod = self.get_eod_trade_series()
-            try:
-                price_series = eod[price_item]
-            except pd.KeyError:
-                raise ValueError('Unexpected `price_item` argument.')
-            # Adjust for quotes that are in cents
-            if self.quote_units == 'cents':
-                price_series /= 100.0
-            return price_series
-
-        def get_volume_series():
-            eod = self.get_eod_trade_series()
-            volume_series = eod['volume']
-            return volume_series
-
-        def get_dividend_series():
-            dividends = self.get_dividend_series()
-            dividend_series = dividends['adjusted_value']
-            # Adjust for quotes that are in cents
-            if self.quote_units == 'cents':
-                dividend_series /= 100.0
-            return dividend_series
-
-        def get_total_returns(price_item):
-            price = get_price_series(price_item)
-            price_shift = price.shift(1)
-            # Try to get dividends if any
-            try:
-                dividends = get_dividend_series()
-            except TimeSeriesNoData:
-                pass  # There are not dividends to include
-            else:
-                total_price = price.add(dividends, fill_value=0.0)
-            # Total one period returns
-            total_returns = total_price / price_shift
-            # First return will NaN. Set to unity return.
-            total_returns.iloc[0] = 1.0
-            return total_returns, price
-
-        # The data tidy up method.
-        def remove_outliers(price):
-            """Tidy up the price series."""
-            # Get a numpy array of price values.
-            values = price.values
-            # Check data has minimum padding length for filtfilt to work
-            if values.shape[0] < 7:
-                return price
-            # Index used for interpolation.
-            index = np.arange(np.size(values, axis=0))
-            # Tidy up outliers y erasing them with NaN. Repeat until none.
-            untidy_columns = np.ones_like(price.columns, dtype=bool)
-            # While columns may still be untidy.
-            k = 0
-            while np.any(untidy_columns) and k < 10:
-                k += 1
-                # Work copy of untidy columns.
-                values_untidy = values[:, untidy_columns]
-                # Run a matching forward-backward filter over the price for
-                # untidy columns.
-                sig1 = filtfilt([1, -1], [1], values_untidy, axis=0)
-                # Index of z-scores excursions beyond 3-sigma to create a mask
-                # of untidy positions.
-                z_score = (sig1 - np.nanmean(sig1, axis=0)
-                           ) / np.nanstd(sig1, axis=0)
-                untidy_mask = abs(z_score) > 3  # True at an untidy position.
-                # Detect isolated single tidy data points surrounded by untidy
-                # points. These data point are considered to be part of a wider
-                # outlier set and shall also to be considered untidy. Value 1.5
-                # to reject round-off issues.
-                s_test = filtfilt([1, -1], [1], untidy_mask, axis=0)
-                single = s_test < -1.5
-                untidy_mask |= single
-                # Erase data at untidy locations.
-                values_untidy[untidy_mask] = np.nan
-                # Interpolate each column separately as each has different x_in.
-                for i, column in enumerate(values_untidy.T):
-                    is_nan = untidy_mask[:, i]
-                    not_nan = ~untidy_mask[:, i]
-                    x_data = index[not_nan]
-                    y_data = column[not_nan]
-                    x_in = index[is_nan]
-                    y_out = np.interp(x_in, x_data, y_data)
-                    column[is_nan] = y_out
-                # Replace columns that were tidied up.
-                values[:, untidy_columns] = values_untidy
-                # Identity and mark columns with all rows that were not untidy.
-                # These columns need no further work.
-                untidy_columns[untidy_columns] = np.any(untidy_mask, axis=0)
-
-            # Construct a new DataFrame with the tidy time-series.
-            price = pd.DataFrame(values,
-                                 index=price.index, columns=price.columns)
-
-            return price
-
-        if series == 'price':
-            # Get the price view.
-            if return_type == 'price':
-                result = get_price_series(price_item)
-            elif return_type == 'return':
-                price = get_price_series(price_item)
-                returns = price / price.shift(1)
-                # Remove leading and any other NaN with no-returns=1.0.
-                result = returns.fillna(1.0)
-            elif return_type == 'total_price':
-                # FIXME: What about multiple dividends on the same day?
-                total_returns, price = get_total_returns(price_item)
-                total_returns.iloc[0] = price.iloc[0]
-                result = total_returns.cumprod()
-            elif return_type == 'total_returns':
-                total_returns, price = get_total_returns(price_item)
-                result = total_returns
-            else:
-                raise ValueError(
-                    f'Unexpected return_type argument value `{return_type}`.')
-        elif series == 'distribution':
-            result = get_dividend_series()
-        elif series == 'volume':
-            # Get the volume series.
-            result = get_volume_series()
-        else:
-            raise ValueError(
-                f'Unexpected series argument value `{series}`.')
-
-        # Add the entity (ListedEquity) as the Series name for later use as
-        # column a label in concatenation into a DataFrame
-        result.name = self
-
-        return result
-
-
-class ExchangeTradeFund(ListedEquity):
-    """An exchange-traded fund (ETF).
-
-    An exchange-traded fund (ETF) is an investment fund traded on stock
-    exchanges, much like stocks. An ETF holds assets such as stocks,
-    commodities, or bonds, and trades close to its net asset value over the
-    course of the trading day. Most ETFs track an index, such as a stock index
-    or bond index. ETFs may be attractive as investments because of their low
-    costs, tax efficiency, and stock-like features. By 2013, ETFs were the
-    most popular type of exchange-traded product.
-
-    An ETF combines the valuation feature of a mutual fund or unit investment
-    trust, which can be bought or sold at the end of each trading day for its
-    net asset value, with the trade-ability feature of a closed-end fund, which
-    trades throughout the trading day at prices that may be more or less than
-    its net asset value. Closed-end funds are not considered to be ETFs, even
-    though they are funds and are traded on an exchange.
-
-    ETFs offer both tax efficiency and lower transaction costs.
-
-
-    Parameters
-    ----------
-    domicile : .Domicile
-        Domicile of the entity.
-    name : str
-        Entity full name.
-    issuer: .Issuer
-        The issuing institution that issues the asset for exchange.
-    isin : str
-        An International Securities Identification Number (ISIN) uniquely
-        identifies a security. ISINs consist of two alphabetic characters, which
-        are the ISO 3166-1 alpha-2 code for the issuing country (An ISIN cannot
-        specify a particular trading location.), nine alpha-numeric characters
-        (the National Securities Identifying Number, or NSIN, which identifies
-        the security, padded as necessary with leading zeros), and one numerical
-        check digit.
-    exchange : .Exchange
-        The exchange the asset is listed upon.
-    ticker : str
-        The ticker assigned to the asset by the exchange listing process.
-    exchange_board : str
-        Board of the exchange that the instrument is listed on.
-    date_stamp : datetime.date
-        Date stamp of the data.
-    listing_date : datetime.date
-        Date the instrument was listed on.
-    next_declare_date : datetime.date
-        Date of declaration of next dividend
-    year_end_month : int
-        Month number of financial year end.
-    shares_in_issue : int
-        Number of shares in issue.
-    share_split : float
-        number of shares slit into.
-    status : str
-        Flag of listing status. C - current, S - Suspended.
-    industry_class : str
-        The class' mnemonic for the industry classification scheme. The valid
-        values are:
-
-            * 'icb' for the Industry Classification Benchmark (ICB)
-            * No others are implemented as yet.
-
-    industry_class_dict : dict
-        A dictionary of the complete parameter set accepted the industry
-        classification class which has been selected for by the
-        ``industry_class`` parameter. See the documentation for the selected
-        class.
-    asset_class : str
-        The major asset class. May be one of 'money', 'bond', 'property',
-        'equity', 'commodity'.
-    locality : str
-        May take on the values 'domestic' or 'foreign'.
-
-    Note
-    ----
-    The ``asset_class`` and ``locality``` parameters are are workarounds for not
-    having data for all the underlying securities for our ETFs in the session.
-    Remedying this shall  be the focus of future development work.
-
-    """
-
-    __tablename__ = 'exchange_traded_fund'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
-
-    id = Column(Integer, ForeignKey('listed_equity.id'), primary_key=True)
-    """ Primary key."""
-
-    # HACK: These are are workarounds for not having data for all the underlying
-    # securities for our ETFs.
-    _classes = ('money', 'bond', 'property', 'equity', 'commodity')
-    _asset_class = Column(Enum(*_classes))
-    _locality = Column(String)
-
-    # If True then the fund roll up distributions by reinvesting them, i.e.,
-    # this is a total return fund.
-    roll_up = Column(Boolean)
-
-    # Published Total Expense Ratio of the fund.
-    ter = Column(Float)
-
-    #  A short class name for use in the alt_name method.
-    _name_appendix = 'ETF'
-
-    def __init__(self, domicile, name, issuer, isin, exchange, ticker,
-                 **kwargs):
-        """Instance initialization."""
-        # Optional parameters.
-        if 'asset_class' in kwargs:
-            self._asset_class = kwargs['asset_class']
-        if 'locality' in kwargs:
-            self._locality = kwargs['locality']
-        if 'roll_up' in kwargs:
-            roll_up = kwargs['roll_up']
-            if roll_up in (True, 'TRUE', 'True', 'true'):
-                self.roll_up = True
-            elif roll_up in (False, 'FALSE', 'False', 'false'):
-                self.roll_up = False
-            else:
-                raise ValueError('Unexpected "roll_up" argument.')
-        if 'ter' in kwargs:
-            self.ter = kwargs['ter']
-
-        super().__init__(
-            domicile, name, issuer, isin, exchange, ticker,
-            **kwargs)
-
-    def get_locality(self, domicile_code):
-        """Return the locality "domestic" or "foreign".
-
-        Parameters
-        ----------
-        domicile_code : str(2)
-            ISO 3166-1 Alpha-2 two letter country code of the current account's
-            domicile. The asset's domestic or foreign status shall be determined
-            relative to this.
-
-        Return
-        ------
-        str
-            The asset's domestic or foreign status relative to the current
-            account domicile. See above examples.
-
-        The "domestic" or "foreign" status of an exchange traded fund in a
-        current account is determined only if all the underlying securities of
-        the fund are of the same locality as defined in the
-        ``Listed.get_locality`` method:
-
-        'domestic':
-            If the domicile code of the current account and the fund's
-            underlying securities domicile codes all agree.
-        'foreign':
-            If the domicile code of the current account and the fund's
-            underlying securities domicile codes all disagree.
-        'undefined':
-            If the domicile code of the current account and only some of the
-            fund's underlying securities domicile codes disagree.
-
-        Note
-        ----
-        Currently the "domestic" or "foreign" locality status is determined by
-        external information entered into the entitybase as we don't currently
-        carry information regarding the underlying securities.
-
-        """
-        if self._locality == domicile_code:
-            locality = 'domestic'
-        else:
-            locality = 'foreign'
-
-        return locality
-
-
-class IndustryClassICB(Base):
-    """The Industry Classification Benchmark (ICB) implementation.
-
-    `The Industry Classification Benchmark (ICB)`_ is an `industry
-    classification`_ taxonomy launched by Dow Jones and FTSE in 2005 and now
-    owned solely by FTSE International. It is used to segregate markets into
-    sectors within the macroeconomy. The ICB uses a system of 10 industries,
-    partitioned into 19 super sectors which are further divided into 41 sectors,
-    which then contain 114 sub sectors.
-
-    See also the official `Industry Classification Benchmark`_ website.
-
-    .. _`Industry Classification Benchmark`:
-        http://www.icbenchmark.com/
-
-    The ICB is used globally (though not universally) to divide the market into
-    increasingly specific categories, allowing investors to compare industry
-    trends between well-defined sub sectors. The ICB replaced the legacy FTSE
-    and Dow Jones classification systems on 3 January 2006, and is used today by
-    the NASDAQ, NYSE and several other markets around the globe. All ICB sectors
-    are represented on the New York Stock Exchange except Equity Investment
-    Instruments (8980) and Non-equity Investment Instruments (8990).
-
-    The ICB structure for sector and industry analysis enables the comparison of
-    companies across four levels of classification and national boundaries. It
-    offers a balance between levels of aggregation, for those who look at
-    markets from the top down, and granularity, for those who look at markets
-    from the bottom up.
-
-        * 114 sub sectors allow detailed analysis.
-        * 41 sectors provide a broad benchmark for investment managers.
-        * 19 super sectors can be used for trading.
-        * 10 industries help investors monitor broad industry trends
-
-    Each company is allocated to the sub sector that most closely represents the
-    nature of its business, which is determined by its source of revenue or
-    where it constitutes the majority of revenue.
-
-    .. _`The Industry Classification Benchmark (ICB)`:
-        https://en.wikipedia.org/wiki/Industry_Classification_Benchmark
-
-    .. _`industry classification`:
-        https://en.wikipedia.org/wiki/Industry_classification
-
-    Parameters
-    ----------
-    industry_name : str
-        Industry name.
-    super_sector_name : str
-        Super sector name.
-    sector_name : str
-        Sector name,
-    sub_sector_name : str
-        Sub sector name.
-    industry_code : str
-        Industry code.
-    super_sector_code : str
-        Super sector code.
-    sector_code : str
-        Sector code.
-    sub_sector_code : str
-        Sub sector code.
-
-    See also
-    --------
-    .ListedEquity
-
-    """
-    # FIXME: Currently a new entry is created for each new ListedEquity instance, see below TODO.
-    # TODO: Make the ICB table unique by all its codes, pre-populate it, and link to ListedEquity instances when they are created.
-
-    __tablename__ = 'industry_class_icb'
-
-    id = Column(Integer, primary_key=True)
-    """ Primary key."""
-
-    # Collection of ListedEquity instances having this instance of
-    # ICB classification
-    _listed_equities = relationship(
-        ListedEquity, backref='_industry_class_icb')
-
-    # Industry classification names.
-    industry_name = Column(String(64), nullable=False)
-    super_sector_name = Column(String(64), nullable=False)
-    sector_name = Column(String(64), nullable=False)
-    sub_sector_name = Column(String(64), nullable=False)
-
-    # Industry classification codes.
-    industry_code = Column(String(4), nullable=False)
-    super_sector_code = Column(String(4), nullable=False)
-    sector_code = Column(String(4), nullable=False)
-    sub_sector_code = Column(String(4), nullable=False)
-
-    def __init__(
-            self,
-            industry_name, super_sector_name, sector_name, sub_sector_name,
-            industry_code, super_sector_code, sector_code, sub_sector_code):
-        """Instance initialization."""
-        self.industry_name = industry_name
-        self.super_sector_name = super_sector_name
-        self.sector_name = sector_name
-        self.sub_sector_name = sub_sector_name
-        self.industry_code = industry_code
-        self.super_sector_code = super_sector_code
-        self.sector_code = sector_code
-        self.sub_sector_code = sub_sector_code
-
-    def _reconcile(self, **kwargs):
-        """Reconcile specified parameters with class instance attributes.
-
-        The parameters are the same as those for the `factory` method with the
-        exception of the `session` argument. This method is always used by the
-        `factory` method to reconcile instances retrieved from the session.
-
-        Raises
-        ------
-        ReconcileError
-            The specified parameters do not reconcile with class instance
-            attributes.
-        """
-        # Local attributes to reconcile.
-        try:
-            if kwargs['industry_name'] != self.industry_name:
-                raise ReconcileError(self, 'industry_name')
-            if kwargs['super_sector_name'] != self.super_sector_name:
-                raise ReconcileError(self, 'super_sector_name')
-            if kwargs['sector_name'] != self.sector_name:
-                raise ReconcileError(self, 'sector_name')
-            if kwargs['sub_sector_name'] != self.sub_sector_name:
-                raise ReconcileError(self, 'sub_sector_name')
-            if kwargs['industry_code'] != self.industry_code:
-                raise ReconcileError(self, 'industry_code')
-            if kwargs['super_sector_code'] != self.super_sector_code:
-                raise ReconcileError(self, 'super_sector_code')
-            if kwargs['sector_code'] != self.sector_code:
-                raise ReconcileError(self, 'sector_code')
-            if kwargs['sub_sector_code'] != self.sub_sector_code:
-                raise ReconcileError(self, 'sub_sector_code')
-        except KeyError as ex:
-            raise ValueError('Expected argument: %s' % ex)

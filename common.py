@@ -6,27 +6,18 @@
 """
 
 import sys
-import base64
-import hashlib
-import networkx
 import datetime
 
 import pandas as pd
 
-from sqlalchemy import Float, Integer, String, Date
+from sqlalchemy import Integer, String, Date
 from sqlalchemy import Column
 from sqlalchemy import UniqueConstraint
-
-from sqlalchemy.orm import relationship, backref
-from sqlalchemy.orm.exc import NoResultFound
 
 from sqlalchemy.ext.declarative import declarative_base
 
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
-
-
-from asset_base.exceptions import FactoryError, HoldingsError, ReconcileError
 
 # Get module-named logger.
 import logging
@@ -50,20 +41,14 @@ class TestSession(object):
 class Common(Base):
     """ Common object.
     """
-    __tablename__ = 'common'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    """ Primary key."""
+    __tablename__ = 'common'
 
     # Polymorphism discriminator.
     _discriminator = Column(String(32))
 
-    # A string created by the class which when combined with the _discriminator
-    # attribute shall constitute a unique constraint. It shall be up to the
-    # class to implement this string based on what makes an instance of that
-    # class unique. The string shall be a 32-character maximum.
-    _key = Column(String(32))
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    """ Primary key."""
 
     name = Column(String(256), nullable=False)
     """str: Entity name."""
@@ -88,34 +73,47 @@ class Common(Base):
         'polymorphic_on': _discriminator,
     }
 
-    __table_args__ = (
-        # The entity instance shall be unique in every polymorphic class by its
-        # _key attribute. See above comments on _key attribute
-        UniqueConstraint('_discriminator', '_key'),
-    )
+    # In all polymorph cases the _discriminator must remain as the
+    # `__tablename__` and in most polymorph cases the _discriminator together
+    # with the `id` shall by inheritance be constrained to be unique. In
+    # exceptions to this case the `UniqueConstraint` may be changed by
+    # overriding the `__table_args__` attribute
+    # TODO: Use multiple primary keys across tables instead
+    __table_args__ = (UniqueConstraint('_discriminator', 'id'), )
+
+    def __init__(self, name, **kwargs):
+        """Instance initialization."""
+        self.name = name
+        # Record alternative name if exists.
+        if 'alt_name' in kwargs:
+            self._alt_name = kwargs.pop('alt_name')
+
+        # Record creation date
+        self.date_create = datetime.datetime.today()
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return '{} - {}'.format(self.id, self.name)
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '<{}(name="{}", id="{!r}")>'.format(
+            self._class_name, self.name, self.id)
+
+    @classmethod
+    @property
+    def _class_name(cls):
+        return cls.__name__
 
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.id
+        return '{}.{}'.format(self.id, self.name)
 
-    def set_key(self):
-        """Set the unique constraint's key attribute.
-
-        The key is calculated from a hash of the ``key_code`` attribute.
-
-        Note
-        ----
-        To be called at instance initialization and when a class attribute that
-        defines the uniqueness of an instance is changed.
-        """
-        # This should call child class' key_code (polymorphism)
-        key_string = self.key_code
-        # Unicode-objects must be encoded before hashing
-        key_string = key_string.encode('utf-8')
-        hasher = hashlib.sha1(key_string)  # Collisions are unlikely, use short
-        digest = hasher.digest()  # Digests look horrible
-        self._key = base64.urlsafe_b64encode(digest)  # Make nice ASCII string
+    @property
+    def identity_code(self):
+        """A human readable string unique to the class instance."""
+        return '{}.{}'.format(self.id, self.name)
 
     @classmethod
     def key_code_id_table(cls, session):

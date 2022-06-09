@@ -4,6 +4,7 @@
 
 """ Define classes describing entities such as legal and natural persons.
 """
+# TODO: Decide upon key_code and identity_code formats
 
 import sys
 import base64
@@ -128,11 +129,17 @@ class Currency(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return 'Currency is %s (%s)' % (self.name, self.ticker)
+        return '{} is {} ({})'.format(self._class_name, self.name, self.ticker)
 
     def __repr__(self):
         """Return the official string output."""
-        return '<Currency.%s>' % self.identity_code
+        return '<{}(ticker="{}", name="{}")>'.format(
+            self._class_name, self.ticker, self.name)
+
+    @classmethod
+    @property
+    def _class_name(cls):
+        return cls.__name__
 
     @property
     def key_code(self):
@@ -156,7 +163,7 @@ class Currency(Base):
         session : sqlalchemy.orm.Session
             The database session.
         ticker : str
-            ISO 4217 3-letter currency codes.
+            ISO 4217 3-letter currency code.
         name : str
             ISO 4217 currency names. Required if the specified currency instance
             is not already in the session, else an exception shall be raised; as
@@ -170,6 +177,9 @@ class Currency(Base):
             The single instance that is in the session.
 
         """
+        assert len(ticker) == 3, \
+            'Expected ISO 4217 3-letter currency code.'
+
         # Check if currency exists in the session and if not then add it.
         try:
             obj = session.query(cls).filter(cls.ticker == ticker).one()
@@ -180,20 +190,15 @@ class Currency(Base):
                 session.add(obj)
             else:
                 raise FactoryError(
-                    'Currency creation failed. '
                     'Expected all positional arguments',
                     action='Creation failed')
         else:
             # Reconcile possible changes
             if name and name != obj.name:
-                logger.warning(
-                    'Currency "{}" name changed to "{}"'.format(
-                        obj.ticker, name)
+                raise FactoryError(
+                    'Unexpected name {} for currency {}'.format(
+                        name, obj.ticker)
                 )
-                obj.name = name
-        finally:
-            # FIXME: Make to autoflush
-            session.flush()
 
         return obj
 
@@ -298,7 +303,6 @@ class Domicile(Base):
     """
 
     __tablename__ = 'domicile'
-    __table_args__ = (UniqueConstraint('country_code'),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     """ int : Primary key."""
@@ -311,6 +315,10 @@ class Domicile(Base):
     country_code = Column(String(3), nullable=False)
     country_name = Column(String(256), nullable=False)
 
+    # The ISO 3166-1 Alpha-2 two letter country code is a unique identifier of a
+    # country
+    __table_args__ = (UniqueConstraint('country_code'),)
+
     # Reference to domiciled entities
     # entity_list = relationship('Entity', back_populates='domicile')
 
@@ -322,11 +330,20 @@ class Domicile(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return 'Domicile is %s (%s)' % (self.country_name, self.country_code)
+        return '{} is {} ({})'.format(
+            self._class_name, self.country_name, self.country_code)
 
     def __repr__(self):
         """Return the official string output."""
-        return '<Domicile.%s>' % self.identity_code
+        return \
+            '{}(country_code="{}", country_code="{}", currency="{!r}")'.format(
+                self._class_name, self.country_code, self.country_name,
+                self.currency)
+
+    @classmethod
+    @property
+    def _class_name(cls):
+        return cls.__name__
 
     @property
     def key_code(self):
@@ -369,6 +386,9 @@ class Domicile(Base):
         .Currency.factory,
 
         """
+        assert len(country_code) == 2, \
+            'Expected ISO 3166-1 Alpha-2 two letter country code.'
+
         # Check if domicile exists in the session and if not then add it.
         try:
             obj = session.query(cls).filter(cls.country_code == country_code).one()
@@ -383,16 +403,15 @@ class Domicile(Base):
             obj = cls(country_code, country_name, currency)
             session.add(obj)
         else:
-            # Check the currency is valid
-            if currency_ticker and currency_ticker != obj.currency.ticker:
-                raise FactoryError('Invalid currency_ticker argument.')
-            # Reconcile possible changes
+            # Disallow changes
             if country_name and country_name != obj.country_name:
-                # Domicile has changed its country_name
-                raise FactoryError('Invalid country_name argument.')
-        finally:
-            # FIXME: Add autoflush
-            session.flush()
+                raise FactoryError(
+                    'Invalid country_name argument for country '
+                    '{}.'.format(obj.country_code))
+            if currency_ticker and currency_ticker != obj.currency.ticker:
+                raise FactoryError(
+                    'Invalid currency_ticker argument for country '
+                    '{}.'.format(obj.country_code))
 
         return obj
 
@@ -525,6 +544,7 @@ class Entity(Common):
         entities by this the parent entity. See the `get_weights` method.
 
     """
+
     __tablename__ = 'entity'
     __mapper_args__ = {'polymorphic_identity': __tablename__, }
 
@@ -536,22 +556,10 @@ class Entity(Common):
     _domicile_id = Column(Integer, ForeignKey('domicile.id'), nullable=False)
     domicile = relationship('Domicile', backref='entity_list')
 
-    #  A short class name for use in the alt_name method.
-    _name_appendix = 'Entity'
-
     def __init__(self, name, domicile, **kwargs):
         """Instance initialization."""
-        self.name = name
+        super().__init__(name, **kwargs)
         self.domicile = domicile
-
-        # Set the key part of the unique constraint. See _key and __table_args__
-        # attributes comments above. The key is chosen as the class
-        # identity_code which itself is chosen to be unique.
-        self.set_key()
-
-        # Record alternative name if exists.
-        if 'alt_name' in kwargs:
-            self._alt_name = kwargs['alt_name']
 
         # Record the current date as the system entry date of the model.
         self.date_create = datetime.date.today()
@@ -560,26 +568,31 @@ class Entity(Common):
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return '{} is an {} in {}'.format(
-            self.name, self._discriminator, self.domicile.country_name)
+            self.name, self._class_name, self.domicile.country_name)
 
     def __repr__(self):
         """Return the official string output."""
-        return '<%s.%s>' % (type(self).__name__,  self.identity_code)
+        return '<{}(name="{}", domicile="{!r}")>'.format(
+            self._class_name, self.name, self.domicile)
 
+    @property
+    def currency(self):
+        """Currency : ``Currency`` of the ``Entity`` ``Domicile``."""
+        return self.domicile.currency
 
     @property
     def alt_name(self):
         if self._alt_name:
-            name = self._alt_name + ' ' + self._name_appendix
+            name = self._alt_name + ' ' + self._class_name
         else:
-            name = self.name + ' ' + self._name_appendix
+            name = self.name + ' ' + self._class_name
 
         return name
 
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.domicile.identity_code + '.' + self.name
+        return self.domicile.key_code + '.' + self.name
 
     @property
     def identity_code(self):
@@ -672,8 +685,6 @@ class Entity(Common):
             # No changes to reconcile, country_code and entity_name are the key
             # arguments.
             pass
-        finally:
-            session.flush()
 
         # TODO: Make this an add_children method instead & create a unittest.
         #  Check for children in keyword arguments.
@@ -726,9 +737,6 @@ class Institution(Entity):
     id = Column(Integer, ForeignKey('entity.id'), primary_key=True)
     """ Primary key."""
 
-    #  A short class name for use in the alt_name method.
-    _name_appendix = 'Institution'
-
     def __init__(self, name, domicile, **kwargs):
         """Instance initialization."""
         super().__init__(name=name, domicile=domicile, **kwargs)
@@ -758,9 +766,6 @@ class Issuer(Institution):
 
     # Collection of the issued Model instances.
     # TODO: Use backref in Model
-
-    #  A short class name for use in the alt_name method.
-    _name_appendix = 'Issuer'
 
     def __init__(self, name, domicile, **kwargs):
         """Instance initialization."""
@@ -824,9 +829,6 @@ class Exchange(Institution):
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
-    #  A short class name for use in the alt_name method.
-    _name_appendix = 'Exchange'
-
     def __init__(self, name, domicile, mic, **kwargs):
         """Instance initialization."""
         self.mic = mic
@@ -835,6 +837,16 @@ class Exchange(Institution):
             self.eod_code = kwargs.pop('eod_code')
 
         super().__init__(name, domicile, **kwargs)
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return '{} ({}) is an {} in {}'.format(
+            self.name, self.mic, self._class_name, self.domicile.country_name)
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '<{}(name="{}", domicile="{!r}", mic="{}")>'.format(
+            self._class_name, self.name, self.domicile, self.mic)
 
     @property
     def key_code(self):

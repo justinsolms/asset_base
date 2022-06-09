@@ -75,8 +75,8 @@ class TestCurrency(unittest.TestCase):
         """Currency name changed."""
         obj = Currency.factory(self.session, self.ticker, self.name)
         new_name = 'A Changed Currency Name for Testing'
-        obj = Currency.factory(self.session, self.ticker, new_name)
-        self.assertEqual(obj.name, new_name)
+        with self.assertRaises(FactoryError):
+            obj = Currency.factory(self.session, self.ticker, new_name)
 
     def test_factory_fail(self):
         """Instance Factory Fails."""
@@ -191,9 +191,9 @@ class TestDomicile(unittest.TestCase):
                          self.currency.ticker)
         # Change domicile name. Change currency
         new_country_name = 'A New Domicile Name for Testing'
-        new_currency_code = self.currency1.ticker
+        new_currency_code = 'YYY'
         with self.assertRaises(FactoryError):
-            domicile = Domicile.factory(
+            Domicile.factory(
                 self.session, self.country_code,
                 new_country_name, new_currency_code)
         # Bad currency code
@@ -254,7 +254,7 @@ class TestEntity(unittest.TestCase):
         cls.country_name = cls.domicile_item.country_name.to_list()[0]
         cls.currency_ticker = cls.domicile_item.currency_ticker.to_list()[0]
         cls.name = 'Test Entity'
-        cls.test_str = 'Test Entity is an entity in United States'
+        cls.test_str = 'Test Entity is an Entity in United States'
         cls.key_code = 'US.Test Entity'
         cls.identity_code = 'US.Test Entity'
 
@@ -306,7 +306,8 @@ class TestEntity(unittest.TestCase):
     def test_factory_fail(self):
         """Test session add fail if second add has wrong country_name."""
         with self.assertRaises(FactoryError):
-            Entity.factory(self.session, self.name, 'WRONG_DOMICILE_CODE')
+            wrong_country_code = '##'
+            Entity.factory(self.session, self.name, wrong_country_code)
 
     def test_factory_no_create(self):
         """Test create parameter."""
@@ -366,7 +367,7 @@ class TestExchange(TestInstitution):
         cls.exchange_name = cls.exchange_item.exchange_name.to_list()[0]
         cls.country_code = cls.exchange_item.country_code.to_list()[0]
         cls.eod_code = cls.exchange_item.eod_code.to_list()[0]
-        cls.test_str = 'USA Stocks is an exchange in United States'
+        cls.test_str = 'USA Stocks (XNYS) is an Exchange in United States'
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -436,8 +437,9 @@ class TestExchange(TestInstitution):
     def test_factory_fail(self):
         """Test session add fail if second add has wrong domicile_name."""
         with self.assertRaises(FactoryError):
+            wrong_country_code = '##'
             Exchange.factory(
-                self.session, self.mic, self.exchange_name, 'WRONG_DOMICILE',
+                self.session, self.mic, self.exchange_name, wrong_country_code,
                 eod_code=self.eod_code)
 
     def test_from_data_frame(self):
