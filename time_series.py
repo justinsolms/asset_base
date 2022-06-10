@@ -138,7 +138,7 @@ class TimeSeriesBase(Base):
         # duplicate data which we wish to avoid.
         last_date = cls.assert_last_dates(session, asset_class)
         if last_date is None:
-            # No last_date has been set yet as the entitybase is still empty.
+            # No last_date has been set yet as the asset_base is still empty.
             pass
         else:
             last_date = pd.to_datetime(last_date)

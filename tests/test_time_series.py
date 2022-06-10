@@ -1,14 +1,14 @@
 import unittest
 import datetime
 import pandas as pd
-import pandas
 from asset_base.common import TestSession
 
 from asset_base.financial_data import SecuritiesFundamentals, SecuritiesHistory, Static
 
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
-from asset_base.asset import Listed
+from asset_base.asset import Listed, ListedEquity
 from asset_base.time_series import Dividend, TimeSeriesBase, TradeEOD
+from fundmanage.utils import date_to_str
 
 
 class TestTimeSeriesBase(unittest.TestCase):
@@ -48,7 +48,7 @@ class TestTimeSeriesBase(unittest.TestCase):
         # Similar set up to test_financial_data
         # Each test with a clean sqlite in-memory database
         self.session = TestSession().session
-        # Add all initialization objects to entitybase
+        # Add all initialization objects to asset_base
         static = Static()
         Currency.update_all(self.session, get_method=static.get_currency)
         Domicile.update_all(self.session, get_method=static.get_domicile)
@@ -78,7 +78,7 @@ class TestTimeSeriesBase(unittest.TestCase):
         # `setUp` as this risk mix-ups in the child test classes.
         self.listed = Listed(
             self.name,  self.issuer, self.isin, self.exchange, self.ticker,
-            self.status)
+            status=self.status)
         ts_item1 = TimeSeriesBase(self.listed, date_stamp=datetime.date.today())
         ts_item2 = TimeSeriesBase(self.listed, date_stamp=datetime.date.today())
         self.session.add(ts_item1)
@@ -132,7 +132,7 @@ class TestTradeEOD(TestTimeSeriesBase):
         super().setUp()
         # Add *ALL* Listed security instances
         Listed.from_data_frame(self.session, self.securities_dataframe)
-        # Securities entitybase instances list
+        # Securities asset_base instances list
         self.securities_list = self.session.query(Listed).all()
 
     def test___init__(self):
@@ -180,7 +180,7 @@ class TestTradeEOD(TestTimeSeriesBase):
         df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
         # Call the tested method.
         TradeEOD.from_data_frame(self.session, Listed, data_frame=df)
-        # Retrieve the submitted date stamped data from entitybase
+        # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(TradeEOD).all()])
         # Test against last date data
@@ -215,11 +215,11 @@ class TestTradeEOD(TestTimeSeriesBase):
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all(self):
-        """ Update/create all the objects in the entitybase session."""
+        """ Update/create all the objects in the asset_base session."""
         # This test is stolen from test_financial_data
         # Call the tested method.
         TradeEOD.update_all(self.session, Listed, self.feed.get_eod)
-        # Retrieve the submitted date stamped data from entitybase
+        # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(TradeEOD).all()])
         # Test over test-date-range
@@ -297,7 +297,7 @@ class TestDividend(TestTimeSeriesBase):
         super().setUp()
         # Add *ALL* Listed security instances
         ListedEquity.from_data_frame(self.session, self.securities_dataframe)
-        # Securities entitybase instances list
+        # Securities asset_base instances list
         self.securities_list = self.session.query(ListedEquity).all()
         # Get AAPL Inc instance form committed instances. This is different
         # from the inherited `self.listed` instance; which it must override
@@ -356,7 +356,7 @@ class TestDividend(TestTimeSeriesBase):
         df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
         # Call the tested method.
         Dividend.from_data_frame(self.session, ListedEquity, data_frame=df)
-        # Retrieve the submitted date stamped data from entitybase
+        # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(Dividend).all()])
         df.sort_values(by='date_stamp', inplace=True)
@@ -393,6 +393,8 @@ class TestDividend(TestTimeSeriesBase):
         df.reset_index(drop=True, inplace=True)
         test_df.reset_index(drop=True, inplace=True)
         test_df = test_df[df.columns]  # Align columns rank
+        date_to_str(df)
+        date_to_str(test_df)
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all(self):
@@ -400,7 +402,7 @@ class TestDividend(TestTimeSeriesBase):
         # Test stolen from test_financial_data
         # Call the tested method.
         Dividend.update_all(self.session, ListedEquity, self.feed.get_dividends)
-        # Retrieve the submitted date stamped data from entitybase
+        # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(Dividend).all()])
         test_df = self.test_df.copy()
