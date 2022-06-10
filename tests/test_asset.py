@@ -8,8 +8,9 @@ from asset_base.financial_data import SecuritiesFundamentals, SecuritiesHistory,
 from asset_base.common import TestSession
 from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
-from asset_base.asset import Asset, Cash, Listed, Share
-from asset_base.time_series import TradeEOD
+from asset_base.asset import Asset, Cash, Listed, ListedEquity, Share
+from asset_base.time_series import Dividend, TradeEOD
+from fundmanage.utils import date_to_str
 
 
 class TestAsset(unittest.TestCase):
@@ -703,5 +704,373 @@ class TestListed(TestShare):
         bad_isin = 'US0378331006'  # Test ISIN last digit modified
         with self.assertRaises(BadISIN):
             listed._check_isin(bad_isin)
+
+
+class TestListedEquity(TestListed):
+    """Test ListedEquity and IndustryClassICB classes."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up test class fixtures."""
+        super().setUpClass()
+        # Specify which class is being tested. Apply when tests are meant to be
+        # inherited.
+        cls.Cls = ListedEquity
+        # Securities EOD-data
+        cls.get_dividends_method = SecuritiesHistory().get_dividends
+        # ICB Classification
+        cls.industry_class = 'icb'
+        cls.industry_name = 'Exchange Traded Funds'
+        cls.super_sector_name = 'Exchange Traded Products'
+        cls.sector_name = 'Exchange Traded Funds'
+        cls.sub_sector_name = 'Exchange Traded Funds'
+        cls.industry_code = 'A140'
+        cls.super_sector_code = 'A300'
+        cls.sector_code = 'A310'
+        cls.sub_sector_code = 'A311'
+
+        # Additional Test data for dividends form the TestDividend test class.
+        # Remember the Trade EOD test data is inherited form the parent class.
+        cls.div_from_date = '2020-01-01'
+        cls.div_to_date = '2020-12-31'
+        cls.div_columns = [
+            'date_stamp', 'ticker', 'mic', 'isin',
+            'currency', 'declaration_date', 'payment_date', 'period',
+            'record_date', 'unadjusted_value', 'adjusted_value']
+        # FIXME: Why is ZAC the currency, check the dividends history!!
+        cls.div_test_df = pd.DataFrame([  # Last 3 dividends
+            ['2020-10-21', 'STX40', 'XJSE', 'ZAE000027108', 'ZAC',
+                None,         None,        None,         None, 9.1925, 9.1925],
+            ['2020-11-06', 'AAPL',  'XNYS', 'US0378331005', 'USD', '2020-10-29',
+                '2020-11-12', 'Quarterly', '2020-11-09', 0.2050, 0.2050],
+            ['2020-11-30', 'MCD',   'XNYS', 'US5801351017', 'USD', '2020-10-08',
+                '2020-12-15', 'Quarterly', '2020-12-01', 1.2900, 1.2900]],
+            columns=cls.div_columns)
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        super().setUp()
+        # Insert selected sub-set securities meta-data
+
+    def to_dividend_dict(self, item):
+        """Convert all class price attributes to a dictionary."""
+        data = {
+            "date_stamp": item.date_stamp,
+            "isin": item.listed_equity.isin,
+            "ticker": item.listed_equity.ticker,
+            "mic": item.listed_equity.exchange.mic,
+            "currency": item.currency,
+            "declaration_date": item.declaration_date,
+            "payment_date": item.payment_date,
+            "period": item.period,
+            "record_date": item.record_date,
+            "unadjusted_value": item.unadjusted_value,
+            "adjusted_value": item.adjusted_value,
+        }
+
+        return data
+
+    def test___init__(self):
+        """Initialization."""
+        # Create Issuer instance here as it should be created during testing
+        # only as later on the Listed.factory method will be tested to create
+        # the issuer from it's arguments.
+        issuer = Issuer.factory(
+            self.session, self.issuer_name, self.issuer_domicile_code)
+
+        # Test without industry classification
+        listed = ListedEquity(
+            self.name, issuer, self.isin, self.exchange, self.ticker,
+            status=self.status)
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
+        # Check domicile, against ISIN, against issuer arguments.
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
+        # Check status
+        self.assertEqual(listed.status, listed.status)
+
+        # Test with industry classification
+        listed = ListedEquity(
+            self.name,  issuer, self.isin, self.exchange, self.ticker,
+            status=self.status,
+            industry_class='icb',
+            industry_name=self.industry_name,
+            super_sector_name=self.super_sector_name,
+            sector_name=self.sector_name,
+            sub_sector_name=self.sub_sector_name,
+            industry_code=self.industry_code,
+            super_sector_code=self.super_sector_code,
+            sector_code=self.sector_code,
+            sub_sector_code=self.sub_sector_code,)
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
+        # Check domicile, against ISIN, against issuer arguments.
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
+        # Check status
+        self.assertEqual(listed.status, listed.status)
+        # Check industry classification info
+        self.assertEqual(listed.industry_class, self.industry_class)
+        icb = listed.industry_class_instance
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
+
+    def test_factory(self):
+        """Full suite of factory parameters with previously existing issuer."""
+        # Add. Issuer should be automatically created.
+        listed = ListedEquity.factory(
+            self.session, self.isin, self.mic, self.ticker, self.name,
+            self.issuer_domicile_code, self.issuer_name, self.status,
+            industry_class='icb',
+            industry_name=self.industry_name,
+            super_sector_name=self.super_sector_name,
+            sector_name=self.sector_name,
+            sub_sector_name=self.sub_sector_name,
+            industry_code=self.industry_code,
+            super_sector_code=self.super_sector_code,
+            sector_code=self.sector_code,
+            sub_sector_code=self.sub_sector_code,)
+        # Inspect database for expected number of entities
+        self.assertEqual(len(self.session.query(Issuer).all()), 1)
+        self.assertEqual(len(self.session.query(ListedEquity).all()), 1)
+        # Different query argument sets produce the same instance
+        # Firstly buy ISIN
+        listed1 = ListedEquity.factory(self.session, isin=self.isin)
+        self.assertEqual(listed, listed1)
+        # Secondly by (MIC,ticker)
+        listed2 = ListedEquity.factory(
+            self.session, mic=self.mic, ticker=self.ticker)
+        self.assertEqual(listed, listed2)
+        # Attributes
+        self.assertEqual(listed.name, self.name)
+        issuer = Issuer.factory(
+            self.session, self.issuer_name, self.issuer_domicile_code)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
+        # Check domicile, against ISIN country code, against issuer arguments.
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
+        # Check status
+        self.assertEqual(listed.status, listed.status)
+        # Check industry classification info
+        self.assertEqual(listed.industry_class, self.industry_class)
+        icb = listed.industry_class_instance
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
+
+    def test_from_data_frame(self):
+        """Get data from a pandas.DataFrame."""
+        # Insert selected sub-set securities meta-data
+        ListedEquity.from_data_frame(
+            self.session, data_frame=self.securities_dataframe)
+        # Test one ListedEquity instance
+        listed = ListedEquity.factory(self.session, self.isin)
+        # Attributes
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
+        issuer = Issuer.factory(
+            self.session, self.issuer_name, self.issuer_domicile_code)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
+        # Check domicile, against ISIN, against issuer arguments.
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
+        # Check status
+        self.assertEqual(listed.status, listed.status)
+        # Check industry classification info
+        self.assertEqual(listed.industry_class, self.industry_class)
+        icb = listed.industry_class_instance
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
+
+    def test_to_data_frame(self):
+        """Convert class data attributes into a factory compatible dataframe."""
+        # Insert selected sub-set securities meta-data
+        ListedEquity.from_data_frame(
+            self.session, data_frame=self.securities_dataframe)
+        # Method to be tested
+        df = ListedEquity.to_data_frame(self.session)
+        # Test data
+        test_df = self.securities_dataframe.copy()
+        # Test
+        df.sort_values(by='isin', inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        test_df.sort_values(by='isin', inplace=True)
+        test_df.reset_index(drop=True, inplace=True)
+        test_df = test_df[df.columns]  # Align columns rank
+        pd.testing.assert_frame_equal(test_df, df)
+
+    def test_update_all(self):
+        """Update all Listed instances from a getter method."""
+        # Insert all securities meta-data (for all securities)
+        ListedEquity.update_all(self.session, self.get_meta_method)
+        # Test one ListedEquity instance
+        listed = ListedEquity.factory(self.session, self.isin)
+        # Attributes
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
+        issuer = Issuer.factory(
+            self.session, self.issuer_name, self.issuer_domicile_code)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
+        # Check domicile, against ISIN, against issuer arguments.
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
+        # Check status
+        self.assertEqual(listed.status, listed.status)
+        # Check industry classification info
+        self.assertEqual(listed.industry_class, self.industry_class)
+        icb = listed.industry_class_instance
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
+
+    def test_update_all_trade_eod_and_dividends(self):
+        """Update all Listed, TradeEOD, Dividend objs from getter methods."""
+        # Insert only selected subset of securities meta-data. Update all data
+        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # securities by using the _test_isin_list keyword argument.
+        ListedEquity.update_all(  # Method to be tested
+            self.session, self.get_meta_method,
+            get_eod_method=self.get_eod_method,
+            get_dividends_method=self.get_dividends_method,
+            _test_isin_list=[self.isin, self.isin1, self.isin2])
+
+        # Retrieve the submitted TradeEOD data from entitybase
+        df = pd.DataFrame([self.to_eod_dict(item)
+                           for item in self.session.query(TradeEOD).all()])
+        # Test
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df.sort_values(['date_stamp', 'ticker'], inplace=True)
+        # Test against last date test_values data
+        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d')
+        df = df[df['date_stamp'] == last_date]
+        self.assertFalse(df.empty)
+        # Exclude adjusted_close as it changes
+        df = df[self.test_columns]  # Column select and rank for testing
+        df.reset_index(drop=True, inplace=True)
+        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+
+        df = pd.DataFrame([self.to_dividend_dict(item)
+                           for item in self.session.query(Dividend).all()])
+        # BUG : Is empty df
+        df.sort_values(by='date_stamp', inplace=True)
+        # Test over test-date-range
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df.set_index('date_stamp', inplace=True)
+        df = df.loc[self.div_from_date:self.div_to_date]
+        df.reset_index(inplace=True)
+        # Test
+        self.assertEqual(len(df), 12)
+        df.reset_index(inplace=True, drop=True)
+        self.assertEqual(set(df.columns), set(self.div_columns))
+        # Test against last 3 dividends
+        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
+        date_to_str(df)  # Convert Timestamps
+        df.replace({pd.NaT: None}, inplace=True)  # Replace pandas NaT with None
+        self.assertTrue(
+            df.sort_index(axis='columns').equals(
+                self.div_test_df.sort_index(axis='columns')),
+            'Dividend test data mismatch')
+
+    def test_get_dividend_series(self):
+        """Return the EOD trade data series for the security."""
+        # Insert only selected subset of securities meta-data. Update all data
+        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # securities by using the _test_isin_list keyword argument.
+        ListedEquity.update_all(  # Method to be tested
+            self.session, self.get_meta_method,
+            get_eod_method=self.get_eod_method,
+            get_dividends_method=self.get_dividends_method,
+            _test_isin_list=[self.isin, self.isin1, self.isin2])
+        # Method to be tested
+        df = ListedEquity.factory(
+            self.session, self.isin).get_dividend_series()
+        df1 = ListedEquity.factory(
+            self.session, self.isin1).get_dividend_series()
+        df2 = ListedEquity.factory(
+            self.session, self.isin2).get_dividend_series()
+        df = pd.concat([df, df1, df2], axis='index')
+        # Test over test-date-range
+        test_df = self.div_test_df.copy()
+        df.sort_index(inplace=True)
+        df = df.loc[self.from_date:self.to_date]
+        df = df.iloc[-3:]  # Test data is for last three
+        df.reset_index(inplace=True)
+        test_df = test_df[df.columns]
+        # Make dates all strings for simple testing.
+        date_to_str(df)  # Convert Timestamps
+        # Test
+        pd.testing.assert_frame_equal(test_df, df)
+
+    def test_time_series(self):
+        """Retrieve historic time-series"""
+        # Insert only selected subset of securities meta-data. Update all data
+        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # securities by using the _test_isin_list keyword argument.
+        ListedEquity.update_all(  # Method to be tested
+            self.session, self.get_meta_method,
+            get_eod_method=self.get_eod_method,
+            get_dividends_method=self.get_dividends_method,
+            _test_isin_list=[self.isin2])
+        # Test for AAPL Inc.
+        listed = ListedEquity.factory(self.session, self.isin2)
+        # Method to be tested
+        df = listed.time_series()
+        # Check data
+        # NOTE: These values may change as EOD historical data gets corrected
+        # FIXME: Check total_returns/total_prices are accurate!!!
+        self.assertEqual(df[self.to_date], 54.60)
+        df = listed.time_series(series='distribution')
+        self.assertEqual(df[self.from_date:self.to_date][-1], 0.091925)
+        df = listed.time_series(series='volume')
+        self.assertEqual(df[self.to_date], 112700)
+        df = listed.time_series(return_type='total_price')
+        self.assertEqual(df[self.to_date], 81.24353503753133)
+        # Check security name
+        self.assertEqual(df.name.identity_code, listed.identity_code)
 
 

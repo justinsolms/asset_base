@@ -32,7 +32,8 @@ from asset_base.exceptions import BadISIN
 
 from asset_base.common import Base, Common
 from asset_base.entity import Currency, Exchange, Issuer
-from asset_base.time_series import TradeEOD
+from asset_base.industry_class import IndustryClassICB
+from asset_base.time_series import Dividend, TradeEOD
 
 # Get module-named logger.
 import logging
@@ -1177,3 +1178,597 @@ class Listed(Share):
             raise BadISIN(isin)
 
         return isin
+
+
+class ListedEquity(Listed):
+    # TODO:160 Document behaviour. Esp. reg. name and isin changes.
+    # TODO:260 Calculate time-series based on holdings. Specify depth to look
+    """Exchange listed ordinary shares in an issuing company.
+
+    Ordinary shares are also known as equity shares and they are the most
+    common form of share in the UK. An ordinary share gives the right to its
+    owner to share in the profits of the company (dividends) and to vote at
+    general meetings of the company. The residual value of the company is
+    called common stock. A voting share (also called common stock or an
+    ordinary share) is a share of stock giving the stockholder the right to
+    vote on matters of corporate policy and the composition of the members of
+    the board of directors.
+
+    Parameters
+    ----------
+    name : str
+        Entity full name.
+    issuer: .Issuer
+        The issuing institution that issues the asset for exchange.
+    isin : str
+        An International Securities Identification Number (ISIN) uniquely
+        identifies a security. ISINs consist of two alphabetic characters, which
+        are the ISO 3166-1 alpha-2 code for the issuing country (An ISIN cannot
+        specify a particular trading location.), nine alpha-numeric characters
+        (the National Securities Identifying Number, or NSIN, which identifies
+        the security, padded as necessary with leading zeros), and one numerical
+        check digit.
+    exchange : .Exchange
+        The exchange the asset is listed upon.
+    ticker : str
+        The ticker assigned to the asset by the exchange listing process.
+    status : str
+        Flag of listing status ('listed', 'delisted').
+    quote_units : {'units', 'cents'}, optional
+        Price quotations are either in currency units (default) or currency
+        cents.
+    shares_in_issue : int, optional
+        Number of shares in issue.
+    exchange_board : str
+        Board of the exchange that the instrument is listed on.
+    date_stamp : datetime.date
+        Date stamp of the data.
+    industry_class : str, optional
+        The class' mnemonic for the industry classification scheme. The valid
+        values are:
+
+            * 'icb' for the Industry Classification Benchmark (ICB)
+            * No others are implemented as yet.
+
+    industry_class_dict : dict, required if industry_class is given
+        A dictionary of the complete parameter set accepted the industry
+        classification class which has been selected for by the
+        ``industry_class`` parameter. See the documentation for the selected
+        class.
+
+    See also
+    --------
+    .Listed, .Issuer, .Exchange
+    """
+
+    __tablename__ = 'listed_equity'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    # Major asset class constant. Possibly be overridden by child classes.
+    _asset_class = 'equity'
+
+    id = Column(Integer, ForeignKey('listed.id'), primary_key=True)
+    """ Primary key."""
+
+    # Historical Dividend end-of-day (EOD) time-series collection
+    _dividend_series = relationship('Dividend', backref='listed_equity')
+    # The date of the last update of all time-series instances related to this
+    # class. Must be maintained by update logic.
+    _dividend_series_last_date = Column(Date)
+
+    # Industry classification
+    industry_class = Column(String(16), nullable=True)
+    """str: The `industry classification`_ mnemonic in lowercase.
+
+    .. _`industry classification`:
+        https://en.wikipedia.org/wiki/Industry_classification
+
+    """
+    # Industry classification foreign keys. This is backref'ed as
+    # industry_class_icb
+    _industry_class_icb_id = Column(Integer,
+                                    ForeignKey('industry_class_icb.id'),
+                                    nullable=True)
+
+    #  A short class name for use in the alt_name method.
+    _name_appendix = 'Equity'
+
+    def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
+        """Instance initialization."""
+        super().__init__(
+            name, issuer, isin, exchange, ticker, **kwargs)
+
+        # Select industry classification scheme, initialise and add it.
+        if 'industry_class' in kwargs:
+            if kwargs['industry_class'] == 'icb':
+                self.industry_class = kwargs.pop('industry_class')
+                # Create and assign the industry classification instance
+                self._industry_class_icb = IndustryClassICB(
+                    industry_name=kwargs.pop('industry_name'),
+                    super_sector_name=kwargs.pop('super_sector_name'),
+                    sector_name=kwargs.pop('sector_name'),
+                    sub_sector_name=kwargs.pop('sub_sector_name'),
+                    industry_code=kwargs.pop('industry_code'),
+                    super_sector_code=kwargs.pop('super_sector_code'),
+                    sector_code=kwargs.pop('sector_code'),
+                    sub_sector_code=kwargs.pop('sub_sector_code'),
+                )
+            else:
+                raise ValueError(
+                    'The `industry_class` {} is not implemented.'.format(
+                        self.industry_class))
+
+    @property
+    def industry_class_instance(self):
+        # TODO: Future integration
+        """The `industry classification`_ instance.
+
+        Is an instance of the class that encodes the industry classification.
+        The possible classes are:
+
+        IndustryClassICB
+            The Industry Classification Benchmark (ICB)
+
+        No others are implemented yet. See the `industry classification`_
+        table.
+
+        .. _`industry classification`:
+            https://en.wikipedia.org/wiki/Industry_classification
+
+        """
+        if self.industry_class == 'icb':
+            return self._industry_class_icb
+        else:
+            pass
+
+    def to_dict(self):
+        """Convert class data attributes into a factory compatible dictionary.
+
+        Returns
+        -------
+        dict
+            The dictionary keys are the same as the class' ``factory`` method
+            argument names, with the exception of the ``cls``, ``session`` and
+            ``create`` arguments.
+
+        """
+        dictionary = super().to_dict()
+        additional_dict = {
+            'industry_class': self.industry_class,
+            'industry_name': self._industry_class_icb.industry_name,
+            'super_sector_name': self._industry_class_icb.super_sector_name,
+            'sector_name': self._industry_class_icb.sector_name,
+            'sub_sector_name': self._industry_class_icb.sub_sector_name,
+            'industry_code': self._industry_class_icb.industry_code,
+            'super_sector_code': self._industry_class_icb.super_sector_code,
+            'sector_code': self._industry_class_icb.sector_code,
+            'sub_sector_code': self._industry_class_icb.sub_sector_code,
+        }
+        dictionary.update(additional_dict)
+
+        return dictionary
+
+    @classmethod
+    def update_all(
+            cls, session, get_meta_method,
+            get_eod_method=None, get_dividends_method=None,
+            **kwargs):
+        """ Update/create all the objects in the entitybase session.
+
+        This method updates its class collection of ``TradeEOD`` and
+        ``Dividend`` instances from the ``financial_data`` module.
+
+        This method sets the ``Listed.time_series_last_date`` attribute to
+        ``datetime.datetime.today()`` for its collection of  ``TradeEOD`` and
+        ``Dividend`` instances. This is conditional to the ``last_update``
+        argument.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_meta_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with the data items
+            in columns named according to this class' ``factory`` method. This
+            is for the securities meta-data form which ``Listed`` instances
+            shall be created.
+        get_eod_method : financial_data module class method, optional
+            The method that returns a ``pandas.DataFrame`` with the data items
+            in columns named according to the ``TradeEOD`` ``factory`` method.
+            This is for the securities time series trade end of day data form
+            which the ``TradeEOD`` instances shall be created. If this argument
+            is omitted then the ``TradeEOD`` will not be created.
+        get_dividend_method : financial_data module class method, optional
+            The method that returns a ``pandas.DataFrame`` with the data items
+            in columns named according to the ``Dividend`` ``factory``
+            method. This is for the securities time series dividend end of day
+            data form which the ``Dividend`` instances shall be created.
+            If this argument is omitted then the ``Dividend`` will not be
+            created.
+
+        No object shall be destroyed, only updated, or missing object created.
+
+        """
+        # Get securities
+        super().update_all(
+            session, get_meta_method, get_eod_method, **kwargs)
+
+        # Get Dividend trade data.
+        if get_dividends_method is not None:
+            Dividend.update_all(session, cls, get_dividends_method)
+
+    def get_dividend_series(self):
+        """Return the dividends data series for the security.
+        """
+        dividend_dict_list = [s.to_dict() for s in self._dividend_series]
+        if len(dividend_dict_list) == 0:
+            raise TimeSeriesNoData(
+                'No dividend data for  %s' % self.identity_code)
+        series = pd.DataFrame(dividend_dict_list)
+        series['date_stamp'] = pd.to_datetime(series['date_stamp'])
+        series.set_index('date_stamp', inplace=True)
+        series.sort_index(inplace=True)  # Assure ascending
+        series.name = self
+        return series
+
+    # FIXME: Maybe supposed to be with Listed (where the _time_series attr is)
+    def time_series(self,
+                    series='price', price_item='close', return_type='price',
+                    tidy=False):
+        """Retrieve historic time-series for this instance.
+
+        Parameters
+        ----------
+        series : str
+            Which security series:
+
+            'price':
+                The security's periodic trade price.
+            'dividend':
+                The annualized dividend yield.
+            'volume':
+                The volume of trade (total value of trade) in the period.
+        price_item : str
+            The specific item of price. Only valid when the ``series`` argument
+            is set to 'price':
+
+            'close' :
+                The period's close price.
+            'open' :
+                The period's open price.
+            'low' :
+                The period's lowest price.
+            'high' :
+                The period's highest price.
+        return_type : str
+            The specific view of the price series:
+
+            'price':
+                The original price series.
+            'return':
+                The price period-on-period return series.
+            'total_returns':
+                The period-on-period return series inclusive of the extra
+                yield due to dividends paid.
+            'total_price':
+                The price period-on-period price series inclusive of the extra
+                yield due to dividends paid. The total_price series start value
+                is the same as the price start value.
+        tidy : bool
+            When ``True`` then prices are tidied up by removing outliers.
+
+        Note
+        ----
+        The data is re-sampled at the daily frequency (365 days per year). Note
+        that this may introduce some serial correlations (autocorrelations) into
+        the data due to the forward filling of any missing data (NaNs).
+
+        See also
+        --------
+        .Cash.get_time_series_data_frame, .EntityBase.get_time_series_data_frame
+
+        """
+        def get_price_series(price_item):
+            eod = self.get_eod_trade_series()
+            try:
+                price_series = eod[price_item]
+            except pd.KeyError:
+                raise ValueError('Unexpected `price_item` argument.')
+            # Adjust for quotes that are in cents
+            if self.quote_units == 'cents':
+                price_series /= 100.0
+            return price_series
+
+        def get_volume_series():
+            eod = self.get_eod_trade_series()
+            volume_series = eod['volume']
+            return volume_series
+
+        def get_dividend_series():
+            dividends = self.get_dividend_series()
+            dividend_series = dividends['adjusted_value']
+            # Adjust for quotes that are in cents
+            if self.quote_units == 'cents':
+                dividend_series /= 100.0
+            return dividend_series
+
+        def get_total_returns(price_item):
+            price = get_price_series(price_item)
+            price_shift = price.shift(1)
+            # Try to get dividends if any
+            try:
+                dividends = get_dividend_series()
+            except TimeSeriesNoData:
+                pass  # There are not dividends to include
+            else:
+                total_price = price.add(dividends, fill_value=0.0)
+            # Total one period returns
+            total_returns = total_price / price_shift
+            # First return will NaN. Set to unity return.
+            total_returns.iloc[0] = 1.0
+            return total_returns, price
+
+        # The data tidy up method.
+        def remove_outliers(price):
+            """Tidy up the price series."""
+            # Get a numpy array of price values.
+            values = price.values
+            # Check data has minimum padding length for filtfilt to work
+            if values.shape[0] < 7:
+                return price
+            # Index used for interpolation.
+            index = np.arange(np.size(values, axis=0))
+            # Tidy up outliers y erasing them with NaN. Repeat until none.
+            untidy_columns = np.ones_like(price.columns, dtype=bool)
+            # While columns may still be untidy.
+            k = 0
+            while np.any(untidy_columns) and k < 10:
+                k += 1
+                # Work copy of untidy columns.
+                values_untidy = values[:, untidy_columns]
+                # Run a matching forward-backward filter over the price for
+                # untidy columns.
+                sig1 = filtfilt([1, -1], [1], values_untidy, axis=0)
+                # Index of z-scores excursions beyond 3-sigma to create a mask
+                # of untidy positions.
+                z_score = (sig1 - np.nanmean(sig1, axis=0)
+                           ) / np.nanstd(sig1, axis=0)
+                untidy_mask = abs(z_score) > 3  # True at an untidy position.
+                # Detect isolated single tidy data points surrounded by untidy
+                # points. These data point are considered to be part of a wider
+                # outlier set and shall also to be considered untidy. Value 1.5
+                # to reject round-off issues.
+                s_test = filtfilt([1, -1], [1], untidy_mask, axis=0)
+                single = s_test < -1.5
+                untidy_mask |= single
+                # Erase data at untidy locations.
+                values_untidy[untidy_mask] = np.nan
+                # Interpolate each column separately as each has different x_in.
+                for i, column in enumerate(values_untidy.T):
+                    is_nan = untidy_mask[:, i]
+                    not_nan = ~untidy_mask[:, i]
+                    x_data = index[not_nan]
+                    y_data = column[not_nan]
+                    x_in = index[is_nan]
+                    y_out = np.interp(x_in, x_data, y_data)
+                    column[is_nan] = y_out
+                # Replace columns that were tidied up.
+                values[:, untidy_columns] = values_untidy
+                # Identity and mark columns with all rows that were not untidy.
+                # These columns need no further work.
+                untidy_columns[untidy_columns] = np.any(untidy_mask, axis=0)
+
+            # Construct a new DataFrame with the tidy time-series.
+            price = pd.DataFrame(values,
+                                 index=price.index, columns=price.columns)
+
+            return price
+
+        if series == 'price':
+            # Get the price view.
+            if return_type == 'price':
+                result = get_price_series(price_item)
+            elif return_type == 'return':
+                price = get_price_series(price_item)
+                returns = price / price.shift(1)
+                # Remove leading and any other NaN with no-returns=1.0.
+                result = returns.fillna(1.0)
+            elif return_type == 'total_price':
+                # FIXME: What about multiple dividends on the same day?
+                total_returns, price = get_total_returns(price_item)
+                total_returns.iloc[0] = price.iloc[0]
+                result = total_returns.cumprod()
+            elif return_type == 'total_returns':
+                total_returns, price = get_total_returns(price_item)
+                result = total_returns
+            else:
+                raise ValueError(
+                    f'Unexpected return_type argument value `{return_type}`.')
+        elif series == 'distribution':
+            result = get_dividend_series()
+        elif series == 'volume':
+            # Get the volume series.
+            result = get_volume_series()
+        else:
+            raise ValueError(
+                f'Unexpected series argument value `{series}`.')
+
+        # Add the entity (ListedEquity) as the Series name for later use as
+        # column a label in concatenation into a DataFrame
+        result.name = self
+
+        return result
+
+
+class ExchangeTradeFund(ListedEquity):
+    """An exchange-traded fund (ETF).
+
+    An exchange-traded fund (ETF) is an investment fund traded on stock
+    exchanges, much like stocks. An ETF holds assets such as stocks,
+    commodities, or bonds, and trades close to its net asset value over the
+    course of the trading day. Most ETFs track an index, such as a stock index
+    or bond index. ETFs may be attractive as investments because of their low
+    costs, tax efficiency, and stock-like features. By 2013, ETFs were the
+    most popular type of exchange-traded product.
+
+    An ETF combines the valuation feature of a mutual fund or unit investment
+    trust, which can be bought or sold at the end of each trading day for its
+    net asset value, with the trade-ability feature of a closed-end fund, which
+    trades throughout the trading day at prices that may be more or less than
+    its net asset value. Closed-end funds are not considered to be ETFs, even
+    though they are funds and are traded on an exchange.
+
+    ETFs offer both tax efficiency and lower transaction costs.
+
+
+    Parameters
+    ----------
+    domicile : .Domicile
+        Domicile of the entity.
+    name : str
+        Entity full name.
+    issuer: .Issuer
+        The issuing institution that issues the asset for exchange.
+    isin : str
+        An International Securities Identification Number (ISIN) uniquely
+        identifies a security. ISINs consist of two alphabetic characters, which
+        are the ISO 3166-1 alpha-2 code for the issuing country (An ISIN cannot
+        specify a particular trading location.), nine alpha-numeric characters
+        (the National Securities Identifying Number, or NSIN, which identifies
+        the security, padded as necessary with leading zeros), and one numerical
+        check digit.
+    exchange : .Exchange
+        The exchange the asset is listed upon.
+    ticker : str
+        The ticker assigned to the asset by the exchange listing process.
+    exchange_board : str
+        Board of the exchange that the instrument is listed on.
+    date_stamp : datetime.date
+        Date stamp of the data.
+    listing_date : datetime.date
+        Date the instrument was listed on.
+    next_declare_date : datetime.date
+        Date of declaration of next dividend
+    year_end_month : int
+        Month number of financial year end.
+    shares_in_issue : int
+        Number of shares in issue.
+    share_split : float
+        number of shares slit into.
+    status : str
+        Flag of listing status. C - current, S - Suspended.
+    industry_class : str
+        The class' mnemonic for the industry classification scheme. The valid
+        values are:
+
+            * 'icb' for the Industry Classification Benchmark (ICB)
+            * No others are implemented as yet.
+
+    industry_class_dict : dict
+        A dictionary of the complete parameter set accepted the industry
+        classification class which has been selected for by the
+        ``industry_class`` parameter. See the documentation for the selected
+        class.
+    asset_class : str
+        The major asset class. May be one of 'money', 'bond', 'property',
+        'equity', 'commodity'.
+    locality : str
+        May take on the values 'domestic' or 'foreign'.
+
+    Note
+    ----
+    The ``asset_class`` and ``locality``` parameters are are workarounds for not
+    having data for all the underlying securities for our ETFs in the session.
+    Remedying this shall  be the focus of future development work.
+
+    """
+
+    __tablename__ = 'exchange_traded_fund'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    id = Column(Integer, ForeignKey('listed_equity.id'), primary_key=True)
+    """ Primary key."""
+
+    # HACK: These are are workarounds for not having data for all the underlying
+    # securities for our ETFs.
+    _classes = ('money', 'bond', 'property', 'equity', 'commodity')
+    _asset_class = Column(Enum(*_classes))
+    _locality = Column(String)
+
+    # If True then the fund roll up distributions by reinvesting them, i.e.,
+    # this is a total return fund.
+    roll_up = Column(Boolean)
+
+    # Published Total Expense Ratio of the fund.
+    ter = Column(Float)
+
+    #  A short class name for use in the alt_name method.
+    _name_appendix = 'ETF'
+
+    def __init__(self, domicile, name, issuer, isin, exchange, ticker,
+                 **kwargs):
+        """Instance initialization."""
+        # Optional parameters.
+        if 'asset_class' in kwargs:
+            self._asset_class = kwargs['asset_class']
+        if 'locality' in kwargs:
+            self._locality = kwargs['locality']
+        if 'roll_up' in kwargs:
+            roll_up = kwargs['roll_up']
+            if roll_up in (True, 'TRUE', 'True', 'true'):
+                self.roll_up = True
+            elif roll_up in (False, 'FALSE', 'False', 'false'):
+                self.roll_up = False
+            else:
+                raise ValueError('Unexpected "roll_up" argument.')
+        if 'ter' in kwargs:
+            self.ter = kwargs['ter']
+
+        super().__init__(
+            domicile, name, issuer, isin, exchange, ticker,
+            **kwargs)
+
+    def get_locality(self, domicile_code):
+        """Return the locality "domestic" or "foreign".
+
+        Parameters
+        ----------
+        domicile_code : str(2)
+            ISO 3166-1 Alpha-2 two letter country code of the current account's
+            domicile. The asset's domestic or foreign status shall be determined
+            relative to this.
+
+        Return
+        ------
+        str
+            The asset's domestic or foreign status relative to the current
+            account domicile. See above examples.
+
+        The "domestic" or "foreign" status of an exchange traded fund in a
+        current account is determined only if all the underlying securities of
+        the fund are of the same locality as defined in the
+        ``Listed.get_locality`` method:
+
+        'domestic':
+            If the domicile code of the current account and the fund's
+            underlying securities domicile codes all agree.
+        'foreign':
+            If the domicile code of the current account and the fund's
+            underlying securities domicile codes all disagree.
+        'undefined':
+            If the domicile code of the current account and only some of the
+            fund's underlying securities domicile codes disagree.
+
+        Note
+        ----
+        Currently the "domestic" or "foreign" locality status is determined by
+        external information entered into the entitybase as we don't currently
+        carry information regarding the underlying securities.
+
+        """
+        if self._locality == domicile_code:
+            locality = 'domestic'
+        else:
+            locality = 'foreign'
+
+        return locality
