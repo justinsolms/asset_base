@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-"""Test suite for the entitybase module.
+"""Test suite for the asset_base module.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>. This file is part of
 the fundmanage module. The fundmanage module can not be modified, copied and/or
@@ -13,7 +13,7 @@ sets up test case fixtures. The design of all the tests is to have ``setUp``
 initialize a new and empty memory database for every test case.
 
 All non-committed class fixtures are set up in the classmethod ``setUpClass``
-and the committed ``entitybase`` ORM class instances are committed in the test
+and the committed ``asset_base`` ORM class instances are committed in the test
 case fixture set up method ``setUp`` after a new blank database has been created
 using the class fixtures set up in ``setUpClass``.
 
@@ -35,7 +35,7 @@ from asset_base.financial_data import SecuritiesHistory
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-import asset_base.asset_base as entitybase
+import asset_base.asset_base as asset_base
 from asset_base.exceptions import BadISIN, ReconcileError
 from asset_base.time_series import TimeSeriesNoData
 from asset_base.exceptions import FactoryError
@@ -73,12 +73,12 @@ class TestSession(object):
 
     def __init__(self):
         self.engine = create_engine('sqlite://', echo=True)
-        Base.metadata.create_all(self.engine)  # Using entitybase.Base
+        Base.metadata.create_all(self.engine)  # Using asset_base.Base
         self.session = Session(self.engine)
 
 
 class TestEntityBaseSetUp(unittest.TestCase):
-    """Set up and tear down the entitybase manager.
+    """Set up and tear down the asset_base manager.
 
     This test is complex and different enough that it warrants it's own test.
     """
@@ -90,7 +90,7 @@ class TestEntityBaseSetUp(unittest.TestCase):
         # inherited.
         cls.Cls = EntityBase
 
-        # Make a memory based entitybase session with test data.
+        # Make a memory based asset_base session with test data.
         # Set up with only AAPL, MCD and STX40 respectively
         cls.isin = 'US0378331005'
         cls.isin1 = 'US5801351017'
@@ -106,26 +106,26 @@ class TestEntityBaseSetUp(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        self.entitybase = EntityBase(dialect='memory', testing=True)
-        self.session = self.entitybase.session
+        self.asset_base = EntityBase(dialect='memory', testing=True)
+        self.session = self.asset_base.session
 
         # For a fresh test delete any previously dumped data, but keep the dump
         # folder
-        self.entitybase.delete_dumps(delete_folder=False)
+        self.asset_base.delete_dumps(delete_folder=False)
 
         # Set-up the database with some securities
-        self.entitybase.set_up(
+        self.asset_base.set_up(
             _test_isin_list=[self.isin, self.isin1, self.isin2],
             )
 
     def tearDown(self):
         """Tear down test case fixtures."""
-        # Tear down entitybase and delete the dump folder and its contents.
-        self.entitybase.tear_down(delete_dump_data=True)
+        # Tear down asset_base and delete the dump folder and its contents.
+        self.asset_base.tear_down(delete_dump_data=True)
 
     def test___init__(self):
         """Instance initialization."""
-        self.assertIsInstance(self.entitybase, EntityBase)
+        self.assertIsInstance(self.asset_base, EntityBase)
 
     def test_set_up(self):
         """Set up the database."""
@@ -159,12 +159,12 @@ class TestEntityBaseSetUp(unittest.TestCase):
 
         # Tear the database down. This should dump some data for reuse at
         # the next set_up
-        self.entitybase.tear_down()
+        self.asset_base.tear_down()
 
         # Re-set-up the database again with some securities. This should reuse
         # the dump data and have a much younger from_date in the feed API
         # fetches
-        self.entitybase.set_up(
+        self.asset_base.set_up(
             _test_isin_list=[self.isin, self.isin1, self.isin2]
             )
 
@@ -172,7 +172,7 @@ class TestEntityBaseSetUp(unittest.TestCase):
         # preventing any further ORM based lazy object attribute loading.
         # Therefore we need to call for new object form the new session created
         # in `set_up`.
-        self.session = self.entitybase.session  # Get the fresh session
+        self.session = self.asset_base.session  # Get the fresh session
 
         # Test for duplicates in the time series
         assert_no_index_duplicates(security, security1, security2)
@@ -219,7 +219,7 @@ class TestEntityBaseSetUp(unittest.TestCase):
 
 
 class TestEntityBase(unittest.TestCase):
-    """The entitybase manager."""
+    """The asset_base manager."""
 
     @classmethod
     def setUpClass(cls):
@@ -237,7 +237,7 @@ class TestEntityBase(unittest.TestCase):
         # inherited.
         cls.Cls = EntityBase
 
-        # Make a memory based entitybase session with test data.
+        # Make a memory based asset_base session with test data.
         # Set up with only AAPL, MCD and STX40 respectively
         cls.isin = 'US0378331005'
         cls.isin1 = 'US5801351017'
@@ -251,9 +251,9 @@ class TestEntityBase(unittest.TestCase):
         cash_ticker_list = [cls.cash_ticker, cls.cash_ticker1]
 
         # Set-up the database with some securities. (See Note above!).
-        cls.entitybase = EntityBase(dialect='memory', testing=True)
-        cls.session = cls.entitybase.session
-        cls.entitybase.set_up(_test_isin_list=cls.isin_list)
+        cls.asset_base = EntityBase(dialect='memory', testing=True)
+        cls.session = cls.asset_base.session
+        cls.asset_base.set_up(_test_isin_list=cls.isin_list)
 
         # Get financial asset entities and cash currency
         cls.security_list = cls.session.query(Listed).filter(Listed.isin.in_(cls.isin_list)).all()
@@ -264,8 +264,8 @@ class TestEntityBase(unittest.TestCase):
     def tearDownClass(cls):
         """ Tear down class test fixtures. """
         # Delete test dump folder and its contents.
-        # Tear down entitybase and delete the dump folder and its contents.
-        cls.entitybase.tear_down(delete_dump_data=True)
+        # Tear down asset_base and delete the dump folder and its contents.
+        cls.asset_base.tear_down(delete_dump_data=True)
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -277,13 +277,13 @@ class TestEntityBase(unittest.TestCase):
 
     def test___init__(self):
         """Instance initialization."""
-        self.assertIsInstance(self.entitybase, EntityBase)
+        self.assertIsInstance(self.asset_base, EntityBase)
 
     def test_time_series(self):
         """Cash and non-cash securities."""
         # Retrieve time series
-        data = self.entitybase.time_series(self.asset_list)
-        data_tickers = entitybase.replace_time_series_labels(data, 'ticker')
+        data = self.asset_base.time_series(self.asset_list)
+        data_tickers = asset_base.replace_time_series_labels(data, 'ticker')
         # Test column labels
         self.assertAlmostEqual(
             [s.ticker for s in self.asset_list].sort(),
@@ -296,7 +296,7 @@ class TestEntityBase(unittest.TestCase):
         last_date = last_date_data['date_stamp'].max()
         self.assertEqual(last_date, data.index[-1])
         # Test column labels
-        data_id_code = entitybase.replace_time_series_labels(
+        data_id_code = asset_base.replace_time_series_labels(
             data, 'identity_code')
         columns_data = [s.identity_code for s in self.asset_list]
         columns_id_code = [s for s in data_id_code.columns]

@@ -205,7 +205,7 @@ class Model(Entity):
         the model instance in question must itself first be erased for the
         session and a new one created with the new ``parameters`` and
         ``weights`` arguments. Typically the ``EntityBase.set_up()`` and
-        ``EntityBase.tear_down()`` methods erase the entire entitybase database.
+        ``EntityBase.tear_down()`` methods erase the entire asset_base database.
 
         Parameters
         ----------

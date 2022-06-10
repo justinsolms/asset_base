@@ -34,7 +34,7 @@ class TestSession(object):
 
     def __init__(self):
         self.engine = create_engine('sqlite://', echo=True)
-        Base.metadata.create_all(self.engine)  # Using entitybase.Base
+        Base.metadata.create_all(self.engine)  # Using asset_base.Base
         self.session = Session(self.engine, autoflush=True, autocommit=False)
 
 
@@ -189,7 +189,7 @@ class Common(Base):
 
     @classmethod
     def update_all(cls, session, get_method, **kwargs):
-        """ Update/create all the objects in the entitybase session.
+        """ Update/create all the objects in the asset_base session.
 
         Parameters
         ----------

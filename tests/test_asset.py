@@ -40,7 +40,7 @@ class TestAsset(unittest.TestCase):
         """Set up test case fixtures."""
         # Each test with a clean sqlite in-memory database
         self.session = TestSession().session
-        # Add all Currency objects to entitybase
+        # Add all Currency objects to asset_base
         Currency.update_all(self.session, get_method=Static().get_currency)
         self.currency = Currency.factory(self.session, self.currency_ticker)
 
@@ -216,7 +216,7 @@ class TestShare(TestAsset):
     def setUp(self):
         """Set up test case fixtures."""
         super().setUp()
-        # Add all Domicile objects to the entitybase
+        # Add all Domicile objects to the asset_base
         Domicile.update_all(self.session, get_method=Static().get_domicile)
         self.domicile = Domicile.factory(self.session, self.domicile_code)
         # Issuer
@@ -326,7 +326,7 @@ class TestListed(TestShare):
     def setUp(self):
         """Set up test case fixtures."""
         super().setUp()
-        # Add all Exchange objects to entitybase
+        # Add all Exchange objects to asset_base
         Exchange.update_all(self.session, get_method=Static().get_exchange)
         self.exchange = Exchange.factory(self.session, mic=self.mic)
         self.exchange1 = Exchange.factory(self.session, mic=self.mic1)
@@ -601,7 +601,7 @@ class TestListed(TestShare):
             self.session, self.get_meta_method,
             get_eod_method=self.get_eod_method,
             _test_isin_list=[self.isin, self.isin1, self.isin2])
-        # Retrieve the submitted TradeEOD data from entitybase
+        # Retrieve the submitted TradeEOD data from asset_base
         df = pd.DataFrame([self.to_eod_dict(item)
                            for item in self.session.query(TradeEOD).all()])
         # Test
@@ -979,7 +979,7 @@ class TestListedEquity(TestListed):
             get_dividends_method=self.get_dividends_method,
             _test_isin_list=[self.isin, self.isin1, self.isin2])
 
-        # Retrieve the submitted TradeEOD data from entitybase
+        # Retrieve the submitted TradeEOD data from asset_base
         df = pd.DataFrame([self.to_eod_dict(item)
                            for item in self.session.query(TradeEOD).all()])
         # Test

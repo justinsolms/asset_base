@@ -18,9 +18,7 @@ from asset_base.financial_data import Dump, Static
 from asset_base.financial_data import SecuritiesFundamentals
 from asset_base.financial_data import SecuritiesHistory
 from asset_base.financial_data import ForexHistory
-from asset_base.entity import Domicile
-from asset_base.asset import Currency
-from asset_base.asset import Exchange
+from asset_base.entity import Currency, Domicile, Exchange
 from asset_base.asset import Listed
 from asset_base.asset_base import AssetBase
 from fundmanage.utils import date_to_str
@@ -137,16 +135,16 @@ class TestSecuritiesHistory(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean entitybase
-        self.entitybase = AssetBase(dialect='memory')
-        self.session = self.entitybase.session
-        # Add all initialization objects to entitybase
+        # Each test with a clean asset_base
+        self.asset_base = AssetBase(dialect='memory')
+        self.session = self.asset_base.session
+        # Add all initialization objects to asset_base
         static_obj = Static()
         Currency.update_all(self.session, get_method=static_obj.get_currency)
         Domicile.update_all(self.session, get_method=static_obj.get_domicile)
         Exchange.update_all(self.session, get_method=static_obj.get_exchange)
         Listed.from_data_frame(self.session, self.securities_dataframe)
-        # Securities entitybase instances list
+        # Securities asset_base instances list
         self.securities_list = self.session.query(Listed).all()
 
     def test___init__(self):
@@ -219,16 +217,16 @@ class TestForexHistory(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean entitybase
-        self.entitybase = AssetBase(dialect='memory')
-        self.session = self.entitybase.session
-        # Add all initialization objects to entitybase
+        # Each test with a clean asset_base
+        self.asset_base = AssetBase(dialect='memory')
+        self.session = self.asset_base.session
+        # Add all initialization objects to asset_base
         static_obj = Static()
         Currency.update_all(self.session, get_method=static_obj.get_currency)
         Domicile.update_all(self.session, get_method=static_obj.get_domicile)
         Exchange.update_all(self.session, get_method=static_obj.get_exchange)
         Listed.from_data_frame(self.session, self.securities_dataframe)
-        # Securities entitybase instances list
+        # Securities asset_base instances list
         self.securities_list = self.session.query(Listed).all()
 
     def test___init__(self):

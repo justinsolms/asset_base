@@ -417,7 +417,7 @@ class Cash(Asset):
 
         Return
         ------
-        entitybase.Cash
+        asset_base.Cash
             The single instance that is in the session.
 
         See also
@@ -446,7 +446,7 @@ class Cash(Asset):
 
     @classmethod
     def update_all(cls, session):
-        """Update/create all the objects in the entitybase session.
+        """Update/create all the objects in the asset_base session.
 
         The existing records of the ``Currency`` instances in
         the session are used to build a ``Cash`` instance for each
@@ -1062,7 +1062,7 @@ class Listed(Share):
     def update_all(
             cls, session, get_meta_method, get_eod_method=None,
             **kwargs):
-        """ Update/create all the objects in the entitybase session.
+        """ Update/create all the objects in the asset_base session.
 
         This method updates its class collection of ``TradeEOD`` instances from
         the ``financial_data`` module.
@@ -1353,7 +1353,7 @@ class ListedEquity(Listed):
             cls, session, get_meta_method,
             get_eod_method=None, get_dividends_method=None,
             **kwargs):
-        """ Update/create all the objects in the entitybase session.
+        """ Update/create all the objects in the asset_base session.
 
         This method updates its class collection of ``TradeEOD`` and
         ``Dividend`` instances from the ``financial_data`` module.
@@ -1762,7 +1762,7 @@ class ExchangeTradeFund(ListedEquity):
         Note
         ----
         Currently the "domestic" or "foreign" locality status is determined by
-        external information entered into the entitybase as we don't currently
+        external information entered into the asset_base as we don't currently
         carry information regarding the underlying securities.
 
         """

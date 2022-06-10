@@ -217,7 +217,7 @@ class Currency(Base):
 
     @classmethod
     def update_all(cls, session, get_method):
-        """ Update/create all the objects in the entitybase session.
+        """ Update/create all the objects in the asset_base session.
 
         Parameters
         ----------
@@ -432,7 +432,7 @@ class Domicile(Base):
     @classmethod
     def update_all(cls, session, get_method):
         # FIXME: Convert to a mixin
-        """ Update/create all the objects in the entitybase session.
+        """ Update/create all the objects in the asset_base session.
 
         Parameters
         ----------

@@ -13,7 +13,7 @@ This module provides static data for domicile and currency data as well as
 securities basic data. The module can use various data financial data feed APIs
 but currently only the EOFHistoricalData.com API is implemented. The module
 conditions API data with formats and naming conventions appropriate to the
-``entitybase`` module requirements. Internally it makes use of renaming
+``asset_base`` module requirements. Internally it makes use of renaming
 dictionaries for ease of maintenance.
 
 
@@ -36,8 +36,8 @@ class _Feed(object, metaclass=abc.ABCMeta):
 
     Parameters
     ----------
-    entitybase : fundmanage.entitybase.EntityBase
-        An ``entitybase`` database manager with a session to the database.
+    asset_base : fundmanage.asset_base.EntityBase
+        An ``asset_base`` database manager with a session to the database.
     """
 
     def _path(self, file_name=None):
@@ -191,7 +191,7 @@ class Dump(_Feed):
 class Static(_Feed):
     """Static data feed class.
 
-    This class provides static data needed for the `entitybase` module such as:
+    This class provides static data needed for the `asset_base` module such as:
 
         * Currency information.
         * Domicile information.
@@ -366,7 +366,7 @@ class SecuritiesHistory(_Feed):
 
         This method fetches the data from the specified feed.
 
-        securities_list : list of .entitybase.Listed or child classes
+        securities_list : list of .asset_base.Listed or child classes
             A list of securities that are listed and traded.
         from_date : datetime.date
             Inclusive start date of historical data. If not provided then the
@@ -420,7 +420,7 @@ class SecuritiesHistory(_Feed):
             data['_key'] = data[['mic', 'ticker']
                                 ].to_records(index=False).tolist()
             data['isin'] = data['_key'].map(mic_ticker_to_isin_dict)
-            # These columns are expected by entitybase
+            # These columns are expected by asset_base
             data.drop(columns=['_key', 'mic', 'ticker'], inplace=True)
             # Condition date
             data['date_stamp'] = pd.to_datetime(data['date_stamp'])
@@ -435,7 +435,7 @@ class SecuritiesHistory(_Feed):
 
         This method fetches the data from the specified feed.
 
-        securities_list : list of .entitybase.Listed or child classes A list of
+        securities_list : list of .asset_base.Listed or child classes A list of
             securities that are listed and traded. from_date : datetime.date
             Inclusive start date of historical data. If not provided then the
             date is set to 1900-01-01. to_date : datetime.date, optional
@@ -489,7 +489,7 @@ class SecuritiesHistory(_Feed):
             data['_key'] = data[['mic', 'ticker']
                                 ].to_records(index=False).tolist()
             data['isin'] = data['_key'].map(mic_ticker_to_isin_dict)
-            # These columns are expected by entitybase
+            # These columns are expected by asset_base
             data.drop(columns=['_key', 'mic', 'ticker'], inplace=True)
             # Condition date
             for column in date_columns_list:
@@ -518,7 +518,7 @@ class ForexHistory(_Feed):
 
         This method fetches the data from the specified feed.
 
-        forex_list : list of .entitybase.Listed or child classes
+        forex_list : list of .asset_base.Listed or child classes
             A list of securities that are listed and traded.
         from_date : datetime.date
             Inclusive start date of historical data. If not provided then the

@@ -114,7 +114,7 @@ class TestDomicile(unittest.TestCase):
 
     Note
     ----
-    All Currency object instances shall be in entitybase before any dependent
+    All Currency object instances shall be in asset_base before any dependent
     Domicile instances are created.
     """
 
@@ -144,7 +144,7 @@ class TestDomicile(unittest.TestCase):
         """Set up test case fixtures."""
         # Each test with a clean sqlite in-memory session
         self.session = TestSession().session
-        # Add all currency objects to entitybase
+        # Add all currency objects to asset_base
         Currency.update_all(self.session, get_method=Static().get_currency)
         self.currency = Currency.factory(self.session, self.currency_ticker)
         self.currency1 = Currency.factory(self.session, self.currency_ticker1)
@@ -262,9 +262,9 @@ class TestEntity(unittest.TestCase):
         """Set up test case fixtures."""
         # Each test with a clean sqlite in-memory session
         self.session = TestSession().session
-        # Add all Currency objects to entitybase
+        # Add all Currency objects to asset_base
         Currency.update_all(self.session, get_method=Static().get_currency)
-        # Add all Domicile objects to the entitybase
+        # Add all Domicile objects to the asset_base
         Domicile.update_all(self.session, get_method=Static().get_domicile)
         self.domicile = Domicile.factory(self.session, self.country_code)
 

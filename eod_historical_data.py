@@ -51,8 +51,8 @@ class _API(aiohttp.ClientSession):
 
     Parameters
     ----------
-    entitybase : fundmanage.entitybase.EntityBase
-        An ``entitybase`` database manager with a session to the database.
+    asset_base : fundmanage.asset_base.EntityBase
+        An ``asset_base`` database manager with a session to the database.
 
     """
     # Feed

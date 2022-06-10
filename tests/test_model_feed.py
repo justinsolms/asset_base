@@ -14,7 +14,7 @@ distributed without the express permission of Justin Solms.
 import unittest
 
 from asset_base.model_feed import TestData, ModelFeed
-from asset_base.entitybase import Model
+from asset_base.asset_base import Model
 
 from fundmanage.tests.fixture_entitybase import *
 from fundmanage.tests.fixture_financial_feed import *
@@ -34,11 +34,11 @@ class TestTestData(unittest.TestCase):
     @classmethod
     def tearDownClass(self):
         """Tear down test fixtures."""
-        self.entitybase.tear_down()
+        self.asset_base.tear_down()
 
     def setUp(self):
         """Set up test case fixtures."""
-        self.test_data = TestData(self.entitybase)
+        self.test_data = TestData(self.asset_base)
 
     def test___init__(self):
         """Initialization."""
@@ -46,7 +46,7 @@ class TestTestData(unittest.TestCase):
 
     def test_fetch(self):
         self.test_data.fetch()
-        session = self.entitybase.session
+        session = self.asset_base.session
         model = Model.factory(session,
                               ticker='MODTICK1',
                               issuer_name='Ze Modeller',
@@ -76,22 +76,22 @@ class TestModelFeed(unittest.TestCase):
     @classmethod
     def tearDownClass(self):
         """Tear down test fixtures."""
-        self.entitybase.tear_down()
+        self.asset_base.tear_down()
 
     def setUp(self):
         """Set up test case fixtures."""
-        self.model_feed = ModelFeed(self.entitybase)
+        self.model_feed = ModelFeed(self.asset_base)
 
     def test_init(self):
         """Initialization."""
         self.assertIsInstance(self.model_feed, ModelFeed)
 
     def test_add_model(self):
-        """Add models to the entitybase database."""
+        """Add models to the asset_base database."""
         # Add form test data
         self.model_feed.add_model('testdata')
         # Test retrieval
-        session = self.entitybase.session
+        session = self.asset_base.session
         parent = Model.factory(session,
                               ticker='MODTICK1',
                               issuer_name='Ze Modeller',

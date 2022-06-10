@@ -24,6 +24,6 @@ backends:
 
     mysql:
 
-        entitybase: 'mysql://justin:future@localhost/%s?unix_socket=/var/run/mysqld/mysqld.sock'
+        asset_base: 'mysql://justin:future@localhost/%s?unix_socket=/var/run/mysqld/mysqld.sock'
 
         history: 'mysql://justin:future@localhost/%s?unix_socket=/var/run/mysqld/mysqld.sock'

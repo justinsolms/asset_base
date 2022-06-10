@@ -13,8 +13,8 @@ distributed without the express permission of Justin Solms.
 import xml.etree.ElementTree as ET
 from xml.etree.ElementTree import Element
 
-from asset_base.entitybase import Model
-from asset_base.entitybase import Listed
+from asset_base.asset_base import Model
+from asset_base.asset_base import Listed
 
 # For abstract base classes.
 import abc
@@ -31,17 +31,17 @@ class _Feed(object):
 
     Parameters
     ----------
-    entitybase : .entitybase.EntityBase
-        An ``entitybase`` database manager with a session to the database.
+    asset_base : .asset_base.EntityBase
+        An ``asset_base`` database manager with a session to the database.
     """
 
     # For abstract base classes.
     __metaclass__ = abc.ABCMeta
 
-    def __init__(self, entitybase):
+    def __init__(self, asset_base):
         """Instance initialization."""
-        self.entitybase = entitybase
-        self.session = entitybase.session
+        self.asset_base = asset_base
+        self.session = asset_base.session
 
         self._path = os.path.dirname(
             os.path.abspath(__file__)) + self.data_path
@@ -79,22 +79,22 @@ class Sunstrike(_Feed):
 
     Parameters
     ----------
-    entitybase : .entitybase.EntityBase
-        An instance of the entitybase database.
+    asset_base : .asset_base.EntityBase
+        An instance of the asset_base database.
 
     Example
     -------
-    >>> from fundmanage.entitybase import EntityBase, Model
+    >>> from fundmanage.asset_base import EntityBase, Model
     >>> from fundmanage.model_feed import Sunstrike
-    >>> entitybase = EntityBase()
-    >>> model_feed = Sunstrike(entitybase)
+    >>> asset_base = EntityBase()
+    >>> model_feed = Sunstrike(asset_base)
     >>> model_feed.fetch()
     >>> # Fetch a model instance.
-    >>> model = Model.factory(entitybase.session, ticker='ITRSVPCAU')
+    >>> model = Model.factory(asset_base.session, ticker='ITRSVPCAU')
     >>> print '%r' % model
     <Model:Sunstrike Capital (Pty) Ltd:ITRSVPCAU>
     >>> # Fetch a model copy.
-    >>> model = Model.factory(entitybase.session, ticker='ITRLAPCAU')
+    >>> model = Model.factory(asset_base.session, ticker='ITRLAPCAU')
     >>> print '%r' % model
     <Model:Sunstrike Capital (Pty) Ltd:ITRLAPCAU>
 
@@ -104,9 +104,9 @@ class Sunstrike(_Feed):
     file_name = 'sunstrike_capital.xml'
     sub_path = ''
 
-    def __init__(self, entitybase):
+    def __init__(self, asset_base):
         """Instance initialization."""
-        super(Sunstrike, self).__init__(entitybase)
+        super(Sunstrike, self).__init__(asset_base)
 
     def _parse(self, tree):
         """Parse an XML tree."""
@@ -157,7 +157,7 @@ class Sunstrike(_Feed):
                            (item.tag, instance.attrib['name']))
                     raise ValueError(msg)
 
-                # Add weight to a dictionary with the entitybase.Asset.id number
+                # Add weight to a dictionary with the asset_base.Asset.id number
                 # as the key.
                 weight_dict[asset.id] = float(item.text)
 
@@ -336,19 +336,19 @@ class ModelFeed(object):
 
     Parameters
     ----------
-    entitybase : .entitybase.EntityBase
-        An ``entitybase`` database manager with a session to the database.
+    asset_base : .asset_base.EntityBase
+        An ``asset_base`` database manager with a session to the database.
 
     See also
     --------
-    .entitybase.Model,
-    .entitybase.EntityBase,
+    .asset_base.Model,
+    .asset_base.EntityBase,
     """
 
-    def __init__(self, entitybase):
+    def __init__(self, asset_base):
         """Initialize instance."""
-        self.entitybase = entitybase
-        self.session = entitybase.session
+        self.asset_base = asset_base
+        self.session = asset_base.session
 
     def add_model(self, source):
         """Insert data from a source into the session.
@@ -366,11 +366,11 @@ class ModelFeed(object):
         """
         if source == 'testdata':
             logger.info('Fetching test model data in XML format.')
-            source = TestData(self.entitybase)
+            source = TestData(self.asset_base)
             source.fetch()
         elif source == 'sunstrike_capital':
             logger.info('Fetching Sunstrike Capital model data in XML format.')
-            source = Sunstrike(self.entitybase)
+            source = Sunstrike(self.asset_base)
             source.fetch()
         else:
             raise ValueError('Unexpected source argument.')
