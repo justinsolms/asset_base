@@ -13,6 +13,7 @@ distributed without the express permission of Justin Solms.
 import unittest
 import os
 import pandas as pd
+from asset_base.common import TestSession
 
 from asset_base.financial_data import Dump, Static
 from asset_base.financial_data import SecuritiesFundamentals
@@ -43,7 +44,7 @@ class TestStatic(unittest.TestCase):
 
     def test_get_currency(self):
         """Get currency data from local static file."""
-        columns = ['currency_code', 'currency_name']
+        columns = ['ticker', 'name']
         data = self.feed.get_currency()
         self.assertListEqual(data.columns.tolist(), columns)
         for i, row in data.iterrows():
@@ -55,7 +56,7 @@ class TestStatic(unittest.TestCase):
 
     def test_get_domicile(self):
         """Get currency data from local static file."""
-        columns = ['domicile_code', 'domicile_name', 'currency_code']
+        columns = ['country_code', 'country_name', 'currency_ticker']
         data = self.feed.get_domicile()
         self.assertEqual(set(data.columns.tolist()), set(columns))
         for i, row in data.iterrows():
@@ -70,7 +71,7 @@ class TestStatic(unittest.TestCase):
 
     def test_get_exchange(self):
         """Get currency data from local static file."""
-        columns = ['domicile_code', 'mic', 'exchange_name', 'eod_code']
+        columns = ['country_code', 'mic', 'exchange_name', 'eod_code']
         data = self.feed.get_exchange()
         self.assertEqual(set(data.columns.tolist()), set(columns))
         for i, row in data.iterrows():
@@ -112,7 +113,7 @@ class TestSecuritiesFundamentals(unittest.TestCase):
             'sector_code': str, 'sector_name': str,
             'sub_sector_code': str, 'sub_sector_name': str,
             'super_sector_code': str, 'super_sector_name': str, 'ter': float,
-            'ticker': str, 'status': str}
+            'ticker': str, 'status': str, 'quote_units': str}
         data = self.feed.get_securities()
         self.assertEqual(set(data.columns.tolist()), set(columns_dict.keys()))
 
@@ -135,9 +136,8 @@ class TestSecuritiesHistory(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean asset_base
-        self.asset_base = AssetBase(dialect='memory')
-        self.session = self.asset_base.session
+        # Each test with a clean sqlite in-memory database
+        self.session = TestSession().session
         # Add all initialization objects to asset_base
         static_obj = Static()
         Currency.update_all(self.session, get_method=static_obj.get_currency)
@@ -204,10 +204,14 @@ class TestSecuritiesHistory(unittest.TestCase):
 
 
 class TestForexHistory(unittest.TestCase):
+    @unittest.skip('Skip tests, development to be fully completed.')
 
     @classmethod
     def setUpClass(cls):
         """Set up test class fixtures."""
+        # Securities meta-data
+        cls.get_meta_method = SecuritiesFundamentals().get_securities
+        cls.securities_dataframe = cls.get_meta_method()
         # Securities meta-data
         cls.get_method = SecuritiesFundamentals().get_securities
         # Securities feed
@@ -217,15 +221,14 @@ class TestForexHistory(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean asset_base
-        self.asset_base = AssetBase(dialect='memory')
-        self.session = self.asset_base.session
+        # Each test with a clean sqlite in-memory database
+        self.session = TestSession().session
         # Add all initialization objects to asset_base
         static_obj = Static()
         Currency.update_all(self.session, get_method=static_obj.get_currency)
         Domicile.update_all(self.session, get_method=static_obj.get_domicile)
         Exchange.update_all(self.session, get_method=static_obj.get_exchange)
-        Listed.from_data_frame(self.session, self.securities_dataframe)
+        Listed.from_data_frame(self.session, data_frame=self.securities_dataframe)
         # Securities asset_base instances list
         self.securities_list = self.session.query(Listed).all()
 
@@ -323,6 +326,7 @@ class Suite(object):
             TestStatic,
             TestSecuritiesFundamentals,
             TestSecuritiesHistory,
+            TestForexHistory,
             TestDump,
         ]
 

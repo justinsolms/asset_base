@@ -548,7 +548,7 @@ class ForexHistory(_Feed):
 
             try:
                 data = feed.get_forex(forex_list, from_date, to_date)
-            except Exception() as ex:
+            except Exception as ex:
                 logger.error('Failed to get Forex data.')
                 raise ex
             # If no data then just return a simple empty pandas DataFrame.

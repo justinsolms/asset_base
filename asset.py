@@ -598,10 +598,14 @@ class Share(Asset):
     #  A short class name for use in the alt_name method.
     _name_appendix = 'Share'
 
-    def __init__(self, name, issuer, **kwargs):
+    def __init__(self, name, issuer, currency=None, **kwargs):
         """Instance initialization."""
-        #  The currency is the issuer's domicile's currency
-        currency = issuer.domicile.currency
+        # If the currency is not provided then the currency is the issuer's
+        # domicile's currency
+        if currency is None:
+            domicile = issuer.domicile
+            currency = domicile.currency
+
         super().__init__(name, currency, **kwargs)
 
         self.issuer = issuer
@@ -793,6 +797,7 @@ class Listed(Share):
 
     def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
+
         # Do no remove this code!!. Some methods that use this class (such as
         # factory methods) are able to place arguments with a None value, this
         # circumventing Python's positional-arguments checks. Check manually
@@ -803,16 +808,16 @@ class Listed(Share):
             raise ValueError(
                 'Unexpected `None` value for some positional arguments.')
 
-        super().__init__(name, issuer, **kwargs)
+        # Currency is the exchange listing currency, i.e., the exchange's
+        # domicile currency which overwrites the parent class Share issuer's
+        # domicile's currency
+        currency = exchange.domicile.currency
+
+        super().__init__(name, issuer, currency, **kwargs)
 
         # Instrument identification and listing
         self.exchange = exchange
         self.ticker = ticker
-
-        # Currency is the exchange listing currency, i.e., the exchange's
-        # domicile currency which overwrites the parent class Share issuer's
-        # domicile's currency
-        self.currency = exchange.domicile.currency
 
         # Check to see if the isin number provided is valid. This checks the
         # length and check digit.
@@ -1053,8 +1058,6 @@ class Listed(Share):
             if issuer_domicile_code and \
                     obj.issuer.domicile.country_code != issuer_domicile_code:
                 raise ReconcileError(obj, 'issuer_domicile_code')
-        finally:
-            session.flush()
 
         return obj
 
