@@ -1329,7 +1329,7 @@ class TestListed(TestShare):
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
         # Test security `time_series_last_date` attributes
-        ts_last_date = TradeEOD.assert_last_dates(self.session)
+        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
         self.assertEqual(ts_last_date, datetime.date.today())
 
     def test_get_eod_trade_series(self):
@@ -1970,7 +1970,7 @@ class TestTradeEOD(TestTimeSeriesBase):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
         # Test security `time_series_last_date` attributes
-        ts_last_date = TradeEOD.assert_last_dates(self.session)
+        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
         self.assertEqual(ts_last_date, df_last_date)
 
     def test_to_data_frame(self):
@@ -1982,7 +1982,7 @@ class TestTradeEOD(TestTimeSeriesBase):
         # Call the tested method.
         TradeEOD.from_data_frame(self.session, data_frame=test_df)
         # Method to be tested
-        df = TradeEOD.to_data_frame(self.session)
+        df = TradeEOD.to_data_frame(self.session, Listed)
         # Test - first aligning rows and columns
         df.sort_values(by=['isin', 'date_stamp'], inplace=True)
         test_df.sort_values(by=['isin', 'date_stamp'], inplace=True)
@@ -1995,7 +1995,7 @@ class TestTradeEOD(TestTimeSeriesBase):
         """ Update/create all the objects in the entitybase session."""
         # This test is stolen from test_financial_data
         # Call the tested method.
-        TradeEOD.update_all(self.session, self.feed.get_eod)
+        TradeEOD.update_all(self.session, Listed, self.feed.get_eod)
         # Retrieve the submitted date stamped data from entitybase
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(TradeEOD).all()])
@@ -2151,7 +2151,7 @@ class TestDividend(TestTimeSeriesBase):
             df.sort_index(axis='columns'),
             )
         # Test security `time_series_last_date` attributes
-        ts_last_date = Dividend.assert_last_dates(self.session)
+        ts_last_date = Dividend.assert_last_dates(self.session, ListedEquity)
         self.assertEqual(ts_last_date, df_last_date)
 
     def test_to_data_frame(self):
@@ -2163,7 +2163,7 @@ class TestDividend(TestTimeSeriesBase):
         # Call the tested method.
         Dividend.from_data_frame(self.session, data_frame=test_df)
         # Method to be tested
-        df = Dividend.to_data_frame(self.session)
+        df = Dividend.to_data_frame(self.session, ListedEquity)
         # Test
         df.sort_values(by=['isin', 'date_stamp'], inplace=True)
         test_df.sort_values(by=['isin', 'date_stamp'], inplace=True)
@@ -2176,7 +2176,7 @@ class TestDividend(TestTimeSeriesBase):
         """Get historical dividends for a specified list of securities."""
         # Test stolen from test_financial_data
         # Call the tested method.
-        Dividend.update_all(self.session, self.feed.get_dividends)
+        Dividend.update_all(self.session, ListedEquity, self.feed.get_dividends)
         # Retrieve the submitted date stamped data from entitybase
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(Dividend).all()])
