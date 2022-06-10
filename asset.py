@@ -178,7 +178,7 @@ class Asset(Common):
             msg = '<{}(name="{}", currency="{}")>'.format(
                 self._class_name, self.name, self.currency)
         else:
-            msg = '<{}(name="{}", currency="{!r}", owner={!r})>'.format(
+            msg = '<{}(name="{}", currency={!r}, owner={!r})>'.format(
                 self._class_name, self.name, self.currency, self.owner)
 
         return msg
@@ -1094,7 +1094,7 @@ class Listed(Share):
 
         # Get EOD trade data.
         if get_eod_method is not None:
-            TradeEOD.update_all(session, Listed, get_eod_method)
+            TradeEOD.update_all(session, cls, get_eod_method)
 
     def get_eod_trade_series(self):
         """Return the EOD trade data series for the security.

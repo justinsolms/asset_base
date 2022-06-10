@@ -8,6 +8,8 @@
 from __future__ import annotations
 # Used to avoid ImportError (most likely due to a circular import)
 from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from asset_base.asset import Asset
 
 import sys
 import datetime
@@ -17,8 +19,6 @@ from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
 
-if TYPE_CHECKING:
-    from asset_base.asset import Asset
 
 from asset_base.exceptions import FactoryError
 

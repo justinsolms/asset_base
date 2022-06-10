@@ -7,24 +7,18 @@
 # TODO: Decide upon key_code and identity_code formats
 
 import sys
-import base64
-import hashlib
-import networkx
 import datetime
 
-import pandas as pd
 
-from sqlalchemy import Float, Integer, String, Date
+from sqlalchemy import Integer, String
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
 
-from sqlalchemy.orm import relationship, backref
+from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from sqlalchemy.ext.declarative import declarative_base
-
 from asset_base.common import Base, Common
-from asset_base.exceptions import FactoryError, HoldingsError, ReconcileError
+from asset_base.exceptions import FactoryError, ReconcileError
 
 
 # Get module-named logger.
@@ -336,7 +330,7 @@ class Domicile(Base):
     def __repr__(self):
         """Return the official string output."""
         return \
-            '{}(country_code="{}", country_code="{}", currency="{!r}")'.format(
+            '{}(country_code="{}", country_code="{}", currency={!r})'.format(
                 self._class_name, self.country_code, self.country_name,
                 self.currency)
 
@@ -572,7 +566,7 @@ class Entity(Common):
 
     def __repr__(self):
         """Return the official string output."""
-        return '<{}(name="{}", domicile="{!r}")>'.format(
+        return '<{}(name="{}", domicile={!r})>'.format(
             self._class_name, self.name, self.domicile)
 
     @property
@@ -845,7 +839,7 @@ class Exchange(Institution):
 
     def __repr__(self):
         """Return the official string output."""
-        return '<{}(name="{}", domicile="{!r}", mic="{}")>'.format(
+        return '<{}(name="{}", domicile={!r}, mic="{}")>'.format(
             self._class_name, self.name, self.domicile, self.mic)
 
     @property
