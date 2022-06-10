@@ -482,19 +482,19 @@ class TestListed(TestShare):
             issuer_domicile_code=self.issuer_domicile_code,
             issuer_name=self.issuer_name)
         # Test retrieval on ISIN fails Issuer requirement
-        with self.assertRaises(FactoryError) as fail:
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 self.isin1)  # Wrong ISIN
         # Test retrieval on MIC, Ticker pair fails Issuer requirement
-        with self.assertRaises(FactoryError) as fail:
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 ticker=self.ticker1,  # Wrong ticker
                 mic=self.mic)
         # Test retrieval on MIC, Ticker pair fails Listed.__init__ argument
         # requirements
-        with self.assertRaises(FactoryError) as fail:
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 issuer_domicile_code=self.issuer_domicile_code,
@@ -502,7 +502,7 @@ class TestListed(TestShare):
                 ticker=self.ticker1,
                 mic=self.mic)
         # Test retrieval on MIC, Ticker pair fails Exchange.mic argument
-        with self.assertRaises(FactoryError) as fail:
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 issuer_domicile_code=self.issuer_domicile_code,
@@ -615,7 +615,7 @@ class TestListed(TestShare):
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
         # Test security `time_series_last_date` attributes
-        ts_last_date = TradeEOD.assert_last_dates(self.session)
+        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
         self.assertEqual(ts_last_date, datetime.date.today())
 
     def test_get_eod_trade_series(self):

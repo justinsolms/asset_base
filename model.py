@@ -88,7 +88,7 @@ class Model(Entity):
     ticker = Column(String(12), nullable=False)
 
     #  A short class name for use in the alt_name method.
-    _name_appendix = 'Model'
+    _class_name = 'Model'
 
     def __init__(self, name, issuer, ticker, **kwargs):
         """Instance initialization."""

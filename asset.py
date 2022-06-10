@@ -32,11 +32,12 @@ from asset_base.exceptions import BadISIN
 
 from asset_base.common import Base, Common
 from asset_base.entity import Currency, Exchange, Issuer
+from asset_base.time_series import TradeEOD
 
 # Get module-named logger.
 import logging
 
-from asset_base.time_series import TradeEOD
+
 logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -619,7 +620,7 @@ class Share(Asset):
         """Return the informal string output. Interchangeable with str(x)."""
         return '{} is a {} issued by {} in {}.'.format(
             self.name, self._class_name,
-            self.issuer.name, self.domicile.country_name)
+            self.issuer.name, self.issuer.domicile.country_name)
 
     @property
     def domicile(self):
@@ -910,7 +911,7 @@ class Listed(Share):
             'ticker': self.ticker,
             'listed_name': self.name,
             'issuer_name': self.issuer.name,
-            'issuer_domicile_code': self.domicile.country_code,
+            'issuer_domicile_code': self.issuer.domicile.country_code,
             'status': self.status,
         }
 
@@ -1093,7 +1094,7 @@ class Listed(Share):
 
         # Get EOD trade data.
         if get_eod_method is not None:
-            TradeEOD.update_all(session, get_eod_method)
+            TradeEOD.update_all(session, Listed, get_eod_method)
 
     def get_eod_trade_series(self):
         """Return the EOD trade data series for the security.

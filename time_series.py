@@ -4,6 +4,10 @@
 
 """ Support for time series data.
 """
+# Allows  in type hints to use class names instead of class name strings
+from __future__ import annotations
+# Used to avoid ImportError (most likely due to a circular import)
+from typing import TYPE_CHECKING
 
 import sys
 import datetime
@@ -12,6 +16,9 @@ import pandas as pd
 from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
+
+if TYPE_CHECKING:
+    from asset_base.asset import Asset
 
 from asset_base.exceptions import FactoryError
 
@@ -74,15 +81,11 @@ class TimeSeriesBase(Base):
 
     def __init__(self, listed, date_stamp):
         """Instance initialization."""
-        # ``Listed`` (or child security class) : The security class that is updating
-        # its time-series data.
-        self.security_class = listed.__class__
-
         self._asset_id = listed.id
         self.date_stamp = date_stamp
 
     @classmethod
-    def from_data_frame(cls, session, data_frame):
+    def from_data_frame(cls, session, asset_class: Asset, data_frame):
         """Create multiple class instances in the session from a dataframe.
 
         This method updates all of a specified time series aggregated by the
@@ -98,6 +101,10 @@ class TimeSeriesBase(Base):
         ----------
         session : sqlalchemy.orm.Session
             The database session.
+        asset_class : .asset.Asset (or child class)
+            The Asset class that is updating its time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
         data_frame : pandas.DataFrame
             A ``pandas.DataFrame`` with columns of the same name as this
             class' constructor method arguments, with the exception that instead
@@ -105,8 +112,6 @@ class TimeSeriesBase(Base):
             column with the ISIN number of the ``Listed`` instance.
 
         """
-        # The Asset polymorph security class that aggregates the time series
-        security_class = cls.security_class
 
         # Check for zero rows of data
         if data_frame.empty:
@@ -115,9 +120,9 @@ class TimeSeriesBase(Base):
 
         # The goal is to substitute the `key_code_name` column for the
         # `Asset.id`.
-        key_code_name = security_class.key_code_name
+        key_code_name = asset_class.key_code_name
         # Get Asset.key_code to Asset.id translation table
-        key_code_id_table = security_class.key_code_id_table(session)
+        key_code_id_table = asset_class.key_code_id_table(session)
 
         data_table = data_frame
 
@@ -131,7 +136,7 @@ class TimeSeriesBase(Base):
         # financial data API services very often return which may include data
         # falling on a date that has already been stored. This may lead to
         # duplicate data which we wish to avoid.
-        last_date = cls.assert_last_dates(session)
+        last_date = cls.assert_last_dates(session, asset_class)
         if last_date is None:
             # No last_date has been set yet as the entitybase is still empty.
             pass
@@ -166,8 +171,8 @@ class TimeSeriesBase(Base):
             return
         # Fetch the relevant securities
         security_list = session.query(
-            security_class).filter(security_class.id.in_(entity_id_list)).all()
-        # Add data to each security's time series' security_class
+            asset_class).filter(asset_class.id.in_(entity_id_list)).all()
+        # Add data to each security's time series' asset_class
         for security in security_list:
             # Get the security's time series.
             series = data_table.loc[security.id]
@@ -197,10 +202,10 @@ class TimeSeriesBase(Base):
         # Make sure the date is a datetime.date instance to avoid a bug due to
         # SQLite allowing the SqlAlchemy `Date` column type to be stored as a
         # `DateTime` column type!!
-        cls.update_last_dates(session, last_date.date())
+        cls.update_last_dates(session, asset_class, last_date.date())
 
     @classmethod
-    def to_data_frame(cls, session):
+    def to_data_frame(cls, session, asset_class):
         """Convert all instances to a single data table.
 
         Parameters
@@ -215,13 +220,16 @@ class TimeSeriesBase(Base):
             class' constructor method arguments, with the exception that instead
             of a column named ``listed``, instead there shall be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
+        asset_class : .asset.Asset (or child class)
+            The Asset class that is updating its time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
         """
-        security_class = cls.security_class
 
         # The goal is to substitute the `key_code_name` column for the
         # `Asset.id`.
         # Get Asset.key_code to Asset.id translation table
-        key_code_id_table = security_class.key_code_id_table(session)
+        key_code_id_table = asset_class.key_code_id_table(session)
 
         #  Get a table of time-series instances with attribute columns
         record_list = list()
@@ -246,7 +254,7 @@ class TimeSeriesBase(Base):
         return data_table
 
     @classmethod
-    def update_all(cls, session, get_method):
+    def update_all(cls, session, asset_class, get_method):
         """ Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -262,26 +270,31 @@ class TimeSeriesBase(Base):
         get_method : financial_data module class method
             The method that returns a ``pandas.DataFrame`` with columns of the
             same name as all this class' constructor method arguments.
+        asset_class : .asset.Asset (or child class)
+            The Asset class that is updating its time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
 
         No object shall be destroyed, only updated, or missing object created.
 
         """
+
         # Assert that all time_series_last_date attributes are aligned
         # Determine date ranges.
-        from_date = cls.assert_last_dates(session)
+        from_date = cls.assert_last_dates(session, asset_class)
         to_date = datetime.date.today()
 
         # Get all Listed instances so we can fetch their EOD trade data
-        securities_list = session.query(cls.security_class).all()
+        securities_list = session.query(asset_class).all()
         # Get all financial data from the from_date till today.
         data_frame = get_method(securities_list, from_date, to_date)
         # Bulk add/update data.
-        cls.from_data_frame(session, data_frame)
+        cls.from_data_frame(session, asset_class, data_frame)
         # Set all security last dates to today
-        cls.update_last_dates(session, datetime.date.today())
+        cls.update_last_dates(session, asset_class, datetime.date.today())
 
     @classmethod
-    def assert_last_dates(cls, session, date=None):
+    def assert_last_dates(cls, session, asset_class, date=None):
         """Assert alignment of all security class instance time series last date
         attributes.
 
@@ -298,11 +311,15 @@ class TimeSeriesBase(Base):
             attributes are equal to this date. If not provided then it is
             asserted that all ``time_series_last_date`` attributes are simply
             equal.
+        asset_class : .asset.Asset (or child class)
+            The Asset class that is updating its time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
 
         Returns
         -------
         datetime.datetime.date
-            The common last common date across all the ``security_class``
+            The common last common date across all the ``asset_class``
             instances.
 
         See also
@@ -310,8 +327,9 @@ class TimeSeriesBase(Base):
         set_all_time_series_last_dates
 
         """
+
         # Get all securities instances in class
-        securities_list = session.query(cls.security_class).all()
+        securities_list = session.query(asset_class).all()
         # Edge case for no security instances
         if len(securities_list) == 0:
             return
@@ -343,12 +361,12 @@ class TimeSeriesBase(Base):
 
         logging.info(
             'True: all security class `{}.time_series_last_date` = {}.'.format(
-                cls.security_class.__name__, date))
+                asset_class.__name__, date))
 
         return last_date
 
     @classmethod
-    def update_last_dates(cls, session, date):
+    def update_last_dates(cls, session, asset_class, date):
         """Align all all security class instance time series last date
         attributes.
 
@@ -360,8 +378,10 @@ class TimeSeriesBase(Base):
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        security_class: ``Listed`` (or child security class)
-            The security class that is updating its time-series data.
+        asset_class : .asset.Asset (or child class)
+            The Asset class that is updating its time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
         date : datetime.date, datetime.datetime
             The date to set all ``time_series_last_date`` attributes to.
 
@@ -370,6 +390,7 @@ class TimeSeriesBase(Base):
         assert_all_time_series_last_dates
 
         """
+
         if isinstance(date, datetime.date):
             pass
         elif isinstance(date, datetime.datetime):
@@ -378,7 +399,7 @@ class TimeSeriesBase(Base):
             raise ValueError(
                 'Expected a `datetime.date` for the `date` argument.')
 
-        securities_list = session.query(cls.security_class).all()
+        securities_list = session.query(asset_class).all()
         # Edge case for no security instances
         if len(securities_list) == 0:
             return
@@ -387,17 +408,17 @@ class TimeSeriesBase(Base):
 
         logging.info(
             'Set all security class `{}.time_series_last_date` = {}.'.format(
-                cls.security_class.__name__, date))
+                asset_class.__name__, date))
 
     @classmethod
     def _set_last_dates(cls, securities_list, date):
         """Set the security class last date for all security instances. """
-        pass
+        raise NotImplementedError('Pease override this method.')
 
     @classmethod
     def _get_last_dates(cls, securities_list):
         """Get the security class last date for all security instances. """
-        return None
+        raise NotImplementedError('Pease override this method.')
 
 
 class TradeEOD(TimeSeriesBase):
@@ -691,6 +712,7 @@ class LivePrices(Base):
             # Retrieve the ListedEquity instance by its ISIN and create a
             # (ticker, mic, id) entry. Warn if not found in database.
             try:
+                # FIXME: I assume `asset.Listed` means the same as `asset_class`
                 entity = asset.Listed.factory(
                     session,
                     ticker=row['ticker'], mic=row['mic'],
