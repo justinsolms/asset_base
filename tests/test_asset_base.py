@@ -306,13 +306,7 @@ class TestEntityBase(unittest.TestCase):
 
 
 class Suite(object):
-    """For running the complete test suite.
-
-    Run this with the command:
-
-        ``python -m fundmanage.tests.test_entitybase``
-
-    """
+    """Test suite"""
 
     def __init__(self):
         """Initialization."""
@@ -320,20 +314,7 @@ class Suite(object):
 
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
-            TestCurrency,
-            TestDomicile,
-            TestEntity,
-            TestTimeSeriesBase,
-            TestInstitution,
-            TestIssuer,
-            TestExchange,
-            TestAsset,
-            TestCash,
-            TestShare,
-            TestListed,
-            TestListedEquity,
-            TestTradeEOD,
-            TestDividend,
+            TestSession,
             TestEntityBaseSetUp,
             TestEntityBase,
         ]

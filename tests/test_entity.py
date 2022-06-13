@@ -472,3 +472,38 @@ class TestExchange(TestInstitution):
                 eod_code=self.eod_code, create=False)
 
 
+class Suite(object):
+    """Test suite"""
+
+    def __init__(self):
+        """Initialization."""
+        suite = unittest.TestSuite()
+
+        # Classes that are passing. Add the others later when they too work.
+        test_classes = [
+            TestCurrency,
+            TestDomicile,
+            TestEntity,
+            TestInstitution,
+            TestIssuer,
+            TestExchange,
+        ]
+
+        suites_list = list()
+        loader = unittest.TestLoader()
+        for test_class in test_classes:
+            suites_list.append(loader.loadTestsFromTestCase(test_class))
+
+        suite.addTests(suites_list)
+
+        self.suite = suite
+
+    def run(self):
+        runner = unittest.TextTestRunner()
+        runner.run(self.suite)
+
+
+if __name__ == '__main__':
+
+    suite = Suite()
+    suite.run()

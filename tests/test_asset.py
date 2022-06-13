@@ -1074,3 +1074,37 @@ class TestListedEquity(TestListed):
         self.assertEqual(df.name.identity_code, listed.identity_code)
 
 
+class Suite(object):
+    """Test suite"""
+
+    def __init__(self):
+        """Initialization."""
+        suite = unittest.TestSuite()
+
+        # Classes that are passing. Add the others later when they too work.
+        test_classes = [
+            TestAsset,
+            TestCash,
+            TestShare,
+            TestListed,
+            TestListedEquity,
+        ]
+
+        suites_list = list()
+        loader = unittest.TestLoader()
+        for test_class in test_classes:
+            suites_list.append(loader.loadTestsFromTestCase(test_class))
+
+        suite.addTests(suites_list)
+
+        self.suite = suite
+
+    def run(self):
+        runner = unittest.TextTestRunner()
+        runner.run(self.suite)
+
+
+if __name__ == '__main__':
+
+    suite = Suite()
+    suite.run()
