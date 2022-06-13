@@ -3,7 +3,7 @@ import datetime
 import pandas as pd
 from asset_base.common import TestSession
 
-from asset_base.financial_data import SecuritiesFundamentals, SecuritiesHistory, Static
+from asset_base.financial_data import Dump, SecuritiesFundamentals, SecuritiesHistory, Static
 
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Listed, ListedEquity
@@ -237,6 +237,25 @@ class TestTradeEOD(TestTimeSeriesBase):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
 
+    def test_dump(self):
+        """Dump all class instances and their time series data to disk."""
+        # Dumper
+        dumper = Dump(testing=True)
+        # For testing delete old any test dump folder and re-create it empty
+        dumper.delete(delete_folder=True)  # Delete dump folder and contents
+        dumper.makedir()
+        # This test is stolen from test_financial_data
+        # Call API for data
+        test_df = self.feed.get_eod(
+            self.securities_list, self.from_date, self.to_date)
+        # Call the tested method.
+        TradeEOD.from_data_frame(self.session, Listed, data_frame=test_df)
+        # Methods to be tested
+        TradeEOD.dump(self.session, dumper, Listed)
+        # Verify dump file exists.
+        self.assertTrue(
+            dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+
 
 class TestDividend(TestTimeSeriesBase):
     """A single listed security's date-stamped EOD trade data."""
@@ -420,6 +439,25 @@ class TestDividend(TestTimeSeriesBase):
         test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         # Test
         pd.testing.assert_frame_equal(test_df, df)
+
+    def test_dump(self):
+        """Dump all class instances and their time series data to disk."""
+        # Dumper
+        dumper = Dump(testing=True)
+        # For testing delete old any test dump folder and re-create it empty
+        dumper.delete(delete_folder=True)  # Delete dump folder and contents
+        dumper.makedir()
+        # This test is stolen from test_financial_data
+        # Call API for data
+        test_df = self.feed.get_dividends(
+            self.securities_list, self.from_date, self.to_date)
+        # Call the tested method.
+        Dividend.from_data_frame(self.session, ListedEquity, data_frame=test_df)
+        # Methods to be tested
+        Dividend.dump(self.session, dumper, ListedEquity)
+        # Verify dump file exists.
+        self.assertTrue(
+            dumper.exists(Dividend), 'Dividend dump file not found.')
 
 
 class Suite(object):

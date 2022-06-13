@@ -8,6 +8,7 @@
 from __future__ import annotations
 # Used to avoid ImportError (most likely due to a circular import)
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from asset_base.asset import Asset
 
@@ -19,6 +20,7 @@ from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
 
+from asset_base.financial_data import Dump
 
 from asset_base.exceptions import FactoryError
 
@@ -85,6 +87,11 @@ class TimeSeriesBase(Base):
         self.date_stamp = date_stamp
 
     @classmethod
+    @property
+    def _class_name(cls):
+        return cls.__name__
+
+    @classmethod
     def from_data_frame(cls, session, asset_class: Asset, data_frame):
         """Create multiple class instances in the session from a dataframe.
 
@@ -102,7 +109,7 @@ class TimeSeriesBase(Base):
         session : sqlalchemy.orm.Session
             The database session.
         asset_class : .asset.Asset (or child class)
-            The Asset class that is updating its time-series data. (Not to be
+            The ``Asset`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
         data_frame : pandas.DataFrame
@@ -221,7 +228,7 @@ class TimeSeriesBase(Base):
             of a column named ``listed``, instead there shall be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
         asset_class : .asset.Asset (or child class)
-            The Asset class that is updating its time-series data. (Not to be
+            The ``Asset`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
         """
@@ -271,7 +278,7 @@ class TimeSeriesBase(Base):
             The method that returns a ``pandas.DataFrame`` with columns of the
             same name as all this class' constructor method arguments.
         asset_class : .asset.Asset (or child class)
-            The Asset class that is updating its time-series data. (Not to be
+            The ``Asset`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
 
@@ -294,6 +301,32 @@ class TimeSeriesBase(Base):
         cls.update_last_dates(session, asset_class, datetime.date.today())
 
     @classmethod
+    def dump(cls, session, dumper: Dump, asset_class):
+        """Dump all class instances and their time series data to disk.
+
+        The data can be re-used to re-create all class instances and the time
+        series data using the ``reuse`` method.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        dumper : .financial_data.Dump
+            The financial data dumper.
+
+        See also
+        --------
+        .asset_base.AssetBase.dump
+
+        """
+        dump_dict = dict()
+
+        # A table item for  all instances of this class
+        dump_dict[cls._class_name] = cls.to_data_frame(session, asset_class)
+        # Serialize
+        dumper.write(dump_dict)
+
+    @classmethod
     def assert_last_dates(cls, session, asset_class, date=None):
         """Assert alignment of all security class instance time series last date
         attributes.
@@ -312,7 +345,7 @@ class TimeSeriesBase(Base):
             asserted that all ``time_series_last_date`` attributes are simply
             equal.
         asset_class : .asset.Asset (or child class)
-            The Asset class that is updating its time-series data. (Not to be
+            The ``Asset`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
 
@@ -379,7 +412,7 @@ class TimeSeriesBase(Base):
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         asset_class : .asset.Asset (or child class)
-            The Asset class that is updating its time-series data. (Not to be
+            The ``Asset`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
         date : datetime.date, datetime.datetime

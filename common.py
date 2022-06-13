@@ -179,6 +179,7 @@ class Common(Base):
             ``cls``, ``session`` and ``create`` arguments.
         """
         record_list = list()
+        # For all class instances in the database
         for instance in session.query(cls).all():
             # Get instance data dictionary and add the `Listed` ISIN number
             instance_dict = instance.to_dict()

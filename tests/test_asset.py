@@ -1,9 +1,10 @@
+from ast import Div
 import unittest
 import datetime
 import pandas as pd
 import pandas
 
-from asset_base.financial_data import SecuritiesFundamentals, SecuritiesHistory, Static
+from asset_base.financial_data import Dump, SecuritiesFundamentals, SecuritiesHistory, Static
 
 from asset_base.common import TestSession
 from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
@@ -581,6 +582,28 @@ class TestListed(TestShare):
         # Check status
         self.assertEqual(listed.status, listed.status)
 
+    def test_dump(self):
+        """Dump all class instances and their time series data to disk."""
+        # Dumper
+        dumper = Dump(testing=True)
+        # For testing delete old any test dump folder and re-create it empty
+        dumper.delete(delete_folder=True)  # Delete dump folder and contents
+        dumper.makedir()
+        # Insert only selected subset of securities meta-data
+        # Update all data instances: Listed & TradeEOD. Force a limited set of 3
+        # securities by using the _test_isin_list keyword argument.
+        Listed.update_all(  # Method to be tested
+            self.session, self.get_meta_method,
+            get_eod_method=self.get_eod_method,
+            _test_isin_list=[self.isin, self.isin1, self.isin2])
+        # Methods to be tested
+        Listed.dump(self.session, dumper)
+        # Verify dump files exists.
+        self.assertTrue(
+            dumper.exists(Listed), 'Listed dump file not found.')
+        self.assertTrue(
+            dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+
     def test_key_code_id_table(self):
         """A table of all instance's ``Entity.id`` against ``key_code``."""
         # Insert all securities meta-data (for all securities)
@@ -967,6 +990,31 @@ class TestListedEquity(TestListed):
         self.assertEqual(icb.super_sector_code, self.super_sector_code)
         self.assertEqual(icb.sector_code, self.sector_code)
         self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
+
+    def test_dump(self):
+        """Dump all class instances and their time series data to disk."""
+        # Dumper
+        dumper = Dump(testing=True)
+        # For testing delete old any test dump folder and re-create it empty
+        dumper.delete(delete_folder=True)  # Delete dump folder and contents
+        dumper.makedir()
+        # Insert only selected subset of securities meta-data. Update all data
+        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # securities by using the _test_isin_list keyword argument.
+        ListedEquity.update_all(  # Method to be tested
+            self.session, self.get_meta_method,
+            get_eod_method=self.get_eod_method,
+            get_dividends_method=self.get_dividends_method,
+            _test_isin_list=[self.isin, self.isin1, self.isin2])
+        # Methods to be tested
+        ListedEquity.dump(self.session, dumper)
+        # Verify dump files exists.
+        self.assertTrue(
+            dumper.exists(ListedEquity), 'Listed dump file not found.')
+        self.assertTrue(
+            dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+        self.assertTrue(
+            dumper.exists(Dividend), 'Dividend dump file not found.')
 
     def test_update_all_trade_eod_and_dividends(self):
         """Update all Listed, TradeEOD, Dividend objs from getter methods."""

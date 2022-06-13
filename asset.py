@@ -20,17 +20,16 @@ from scipy.signal import filtfilt
 
 from sqlalchemy import Float, Integer, String, Enum, Date, Boolean
 from sqlalchemy import MetaData, Column, ForeignKey
-from sqlalchemy import UniqueConstraint
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from sqlalchemy.ext.declarative import declarative_base
-
 from asset_base.exceptions import FactoryError, TimeSeriesNoData, ReconcileError
 from asset_base.exceptions import BadISIN
 
-from asset_base.common import Base, Common
+from asset_base.financial_data import Dump
+
+from asset_base.common import Common
 from asset_base.entity import Currency, Exchange, Issuer
 from asset_base.industry_class import IndustryClassICB
 from asset_base.time_series import Dividend, TradeEOD
@@ -1100,6 +1099,36 @@ class Listed(Share):
         if get_eod_method is not None:
             TradeEOD.update_all(session, cls, get_eod_method)
 
+    @classmethod
+    def dump(cls, session, dumper: Dump):
+        """Dump all class instances and their time series data to disk.
+
+        The data can be re-used to re-create all class instances and the time
+        series data using the ``reuse`` method.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        dumper : .financial_data.Dump
+            The financial data dumper.
+
+        See also
+        --------
+        .asset_base.AssetBase.dump
+
+        """
+        dump_dict = dict()
+
+        # A table item for  all instances of this class
+        dump_dict[cls._class_name] = cls.to_data_frame(session)
+        # Serialize
+        dumper.write(dump_dict)
+
+        # For all class instances in the database get a table for their
+        # time-series
+        TradeEOD.dump(session, dumper, Listed)
+
     def get_eod_trade_series(self):
         """Return the EOD trade data series for the security.
 
@@ -1400,6 +1429,32 @@ class ListedEquity(Listed):
         if get_dividends_method is not None:
             Dividend.update_all(session, cls, get_dividends_method)
 
+    @classmethod
+    def dump(cls, session, dumper: Dump):
+        """Dump all class instances and their time series data to disk.
+
+        The data can be re-used to re-create all class instances and the time
+        series data using the ``reuse`` method.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        dumper : .financial_data.Dump
+            The financial data dumper.
+
+        See also
+        --------
+        .asset_base.AssetBase.dump
+
+        """
+        # Dump parent class
+        super().dump(session, dumper)
+
+        # For all class instances in the database get a table for their
+        # time-series
+        Dividend.dump(session, dumper, ListedEquity)
+
     def get_dividend_series(self):
         """Return the dividends data series for the security.
         """
@@ -1587,7 +1642,7 @@ class ListedEquity(Listed):
             else:
                 raise ValueError(
                     f'Unexpected return_type argument value `{return_type}`.')
-        elif series == 'distribution':
+        elif series == 'dividend':
             result = get_dividend_series()
         elif series == 'volume':
             # Get the volume series.

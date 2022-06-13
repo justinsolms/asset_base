@@ -3,7 +3,7 @@
 """
 
 
-class _EntityException(BaseException):
+class _BaseException(BaseException):
     """Fund exception.
 
     Parameters
@@ -60,19 +60,19 @@ class _EntityException(BaseException):
                 'action': self.action}
 
 
-class FactoryError(_EntityException):
+class FactoryError(_BaseException):
     """Entity not found in database or could not be created."""
 
 
-class HoldingsError(_EntityException):
+class HoldingsError(_BaseException):
     """Any model specific error."""
 
 
-class TimeSeriesNoData(_EntityException):
+class TimeSeriesNoData(_BaseException):
     """Time series data returns empty."""
 
 
-class BadISIN(_EntityException):
+class BadISIN(_BaseException):
     """A Listed ISIN number exception.
 
     Parameters
@@ -95,7 +95,7 @@ class BadISIN(_EntityException):
         super().__init__(msg, **kwargs)
 
 
-class ReconcileError(_EntityException):
+class ReconcileError(_BaseException):
     """Raised when parameters and object attributes do not reconcile.
 
     Parameters

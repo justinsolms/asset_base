@@ -187,6 +187,25 @@ class Dump(_Feed):
             else:
                 logger.info('Deleted dump folder %s', path)
 
+    def exists(self, dump_class):
+        """Verify that a dump file exits for a dumped class.
+
+        Warning
+        -------
+        An important use is to verify that dump files were created before
+        tearing down a database.
+
+        Parameters
+        ----------
+        dump_class : .asset.Asset or child class
+            The class for which the dump files existence must be verified. The
+            class must have a valid ``dump`` method.
+        """
+        file_name = f'{dump_class._class_name}.pandas.dataframe.pkl'
+        path = self._path(file_name)
+
+        return os.path.exists(path)
+
 
 class Static(_Feed):
     """Static data feed class.
