@@ -582,7 +582,7 @@ class TestListed(TestShare):
         # Check status
         self.assertEqual(listed.status, listed.status)
 
-    def test_dump(self):
+    def test_0_dump(self):
         """Dump all class instances and their time series data to disk."""
         # Dumper
         dumper = Dump(testing=True)
@@ -603,6 +603,58 @@ class TestListed(TestShare):
             dumper.exists(Listed), 'Listed dump file not found.')
         self.assertTrue(
             dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+
+    def test_1_reuse(self):
+        """Reuse dumped data as a database initialization resource.
+
+        This test must run after ``test_0_dump`` so that the dump file exists
+        and that the time series dates are correct; which is why there is a
+        numeric part to the test names; as `unittest` sorts tests by test method
+        name.
+        """
+        # Dumper
+        dumper = Dump(testing=True)
+        Listed.reuse(self.session, dumper)
+
+        # Test one Listed instance
+        listed = Listed.factory(self.session, self.isin)
+        # Attributes
+        self.assertIsInstance(listed, Listed)
+        self.assertEqual(listed.name, self.name)
+        issuer = Issuer.factory(
+            self.session, self.issuer_name, self.issuer_domicile_code)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
+        # Check domicile, against ISIN, against issuer arguments.
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
+        # Check status
+        self.assertEqual(listed.status, listed.status)
+
+        # Retrieve the submitted TradeEOD data from asset_base
+        df = pd.DataFrame([self.to_eod_dict(item)
+                           for item in self.session.query(TradeEOD).all()])
+        # Test
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df_last_date = df['date_stamp'].iloc[-1].to_pydatetime().date()
+        df.sort_values(['date_stamp', 'ticker'], inplace=True)
+        # Test against last date test_values data
+        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d')
+        df = df[df['date_stamp'] == last_date]
+        self.assertFalse(df.empty)
+        # Exclude adjusted_close as it changes
+        df = df[self.test_columns]  # Column select and rank for testing
+        df.reset_index(drop=True, inplace=True)
+        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+        # Test security `time_series_last_date` attributes
+        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
+        self.assertEqual(
+            ts_last_date, df_last_date,
+            'The TradeEOD time series dates do not seem correct.'
+            'Please run `testListed.test_0_dump` first.')
 
     def test_key_code_id_table(self):
         """A table of all instance's ``Entity.id`` against ``key_code``."""
@@ -991,7 +1043,7 @@ class TestListedEquity(TestListed):
         self.assertEqual(icb.sector_code, self.sector_code)
         self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
 
-    def test_dump(self):
+    def test_0_dump(self):
         """Dump all class instances and their time series data to disk."""
         # Dumper
         dumper = Dump(testing=True)
@@ -1015,6 +1067,72 @@ class TestListedEquity(TestListed):
             dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
         self.assertTrue(
             dumper.exists(Dividend), 'Dividend dump file not found.')
+
+    def test_1_reuse(self):
+        """Reuse dumped data as a database initialization resource.
+
+        This test must run after ``test_0_dump`` so that the dump file exists
+        and that the time series dates are correct; which is why there is a
+        numeric part to the test names; as `unittest` sorts tests by test method
+        name.
+        """
+        # Dumper
+        dumper = Dump(testing=True)
+        ListedEquity.reuse(self.session, dumper)
+
+        # Test one ListedEquity instance
+        listed = ListedEquity.factory(self.session, self.isin)
+        # Attributes
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
+        issuer = Issuer.factory(
+            self.session, self.issuer_name, self.issuer_domicile_code)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
+        # Check domicile, against ISIN, against issuer arguments.
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
+        # Check status
+        self.assertEqual(listed.status, listed.status)
+
+        # Retrieve the submitted TradeEOD data from asset_base
+        df = pd.DataFrame([self.to_eod_dict(item)
+                           for item in self.session.query(TradeEOD).all()])
+        # Test
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df.sort_values(['date_stamp', 'ticker'], inplace=True)
+        # Test against last date test_values data
+        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d')
+        df = df[df['date_stamp'] == last_date]
+        self.assertFalse(df.empty)
+        # Exclude adjusted_close as it changes
+        df = df[self.test_columns]  # Column select and rank for testing
+        df.reset_index(drop=True, inplace=True)
+        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+
+        df = pd.DataFrame([self.to_dividend_dict(item)
+                           for item in self.session.query(Dividend).all()])
+        df.sort_values(by='date_stamp', inplace=True)
+        # Test over test-date-range
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df.set_index('date_stamp', inplace=True)
+        df = df.loc[self.div_from_date:self.div_to_date]
+        df.reset_index(inplace=True)
+        # Test
+        self.assertEqual(len(df), 12)
+        df.reset_index(inplace=True, drop=True)
+        self.assertEqual(set(df.columns), set(self.div_columns))
+        # Test against last 3 dividends
+        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
+        date_to_str(df)  # Convert Timestamps
+        df.replace({pd.NaT: None}, inplace=True)  # Replace pandas NaT with None
+        self.assertTrue(
+            df.sort_index(axis='columns').equals(
+                self.div_test_df.sort_index(axis='columns')),
+            'Dividend test data mismatch')
 
     def test_update_all_trade_eod_and_dividends(self):
         """Update all Listed, TradeEOD, Dividend objs from getter methods."""
@@ -1044,7 +1162,6 @@ class TestListedEquity(TestListed):
 
         df = pd.DataFrame([self.to_dividend_dict(item)
                            for item in self.session.query(Dividend).all()])
-        # BUG : Is empty df
         df.sort_values(by='date_stamp', inplace=True)
         # Test over test-date-range
         df['date_stamp'] = pd.to_datetime(df['date_stamp'])

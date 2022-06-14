@@ -159,6 +159,7 @@ class TimeSeriesBase(Base):
 
         # Join to create a new extended instance_table with the security column.
         # Only for time series instances (left join).
+        # FIXME: Warn or raise if left and right are not congruent
         data_table = data_table.merge(
             key_code_id_table, on=key_code_name, how='left')
         data_table.drop(columns=key_code_name, inplace=True)
@@ -313,10 +314,14 @@ class TimeSeriesBase(Base):
             A session attached to the desired database.
         dumper : .financial_data.Dump
             The financial data dumper.
+        asset_class : .asset.Asset (or child class)
+            The ``Asset`` class which has this time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
 
         See also
         --------
-        .asset_base.AssetBase.dump
+        .reuse
 
         """
         dump_dict = dict()
@@ -325,6 +330,39 @@ class TimeSeriesBase(Base):
         dump_dict[cls._class_name] = cls.to_data_frame(session, asset_class)
         # Serialize
         dumper.write(dump_dict)
+
+    @classmethod
+    def reuse(cls, session, dumper: Dump, asset_class):
+        """Reuse dumped data as a database initialization resource.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        dumper : .financial_data.Dump
+            The financial data dumper.
+        asset_class : .asset.Asset (or child class)
+            The ``Asset`` class which has this time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
+
+        Warning
+        -------
+        This method is intended to be used only to initialise a new and empty database.
+        Data in the reused dump file that has a `date_stamp` on or before the
+        recorded last date from the previous addition of time series instances
+        will be ignored. In other words, your dumped data will not be reused.
+
+        See also
+        --------
+        .dump
+
+        """
+        # Uses dict data structures. See the docs.
+        class_name = cls._class_name
+        data_frame_dict = dumper.read(name_list=[class_name])
+        cls.from_data_frame(
+            session, asset_class, data_frame_dict[class_name])
 
     @classmethod
     def assert_last_dates(cls, session, asset_class, date=None):

@@ -1118,9 +1118,8 @@ class Listed(Share):
         .asset_base.AssetBase.dump
 
         """
-        dump_dict = dict()
-
         # A table item for  all instances of this class
+        dump_dict = dict()
         dump_dict[cls._class_name] = cls.to_data_frame(session)
         # Serialize
         dumper.write(dump_dict)
@@ -1128,6 +1127,39 @@ class Listed(Share):
         # For all class instances in the database get a table for their
         # time-series
         TradeEOD.dump(session, dumper, Listed)
+
+    @classmethod
+    def reuse(cls, session, dumper: Dump):
+        """Reuse dumped data as a database initialization resource.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        dumper : .financial_data.Dump
+            The financial data dumper.
+
+        Warning
+        -------
+        This method is intended to be used only to initialise a new and empty database.
+        Data in the reused dump file that has a `date_stamp` on or before the
+        recorded last date from the previous addition of time series instances
+        will be ignored. In other words, your dumped data will not be reused.
+
+        See also
+        --------
+        .dump
+
+        """
+        class_name = cls._class_name
+        # A table item for  all instances of this class
+        # Uses dict data structures. See the docs.
+        data_frame_dict = dumper.read(name_list=[class_name])
+        cls.from_data_frame(session, data_frame_dict[class_name])
+
+        # For all class instances in the database get a table for their
+        # time-series
+        TradeEOD.reuse(session, dumper, Listed)
 
     def get_eod_trade_series(self):
         """Return the EOD trade data series for the security.
@@ -1448,12 +1480,42 @@ class ListedEquity(Listed):
         .asset_base.AssetBase.dump
 
         """
-        # Dump parent class
+        # Parent class dumper
         super().dump(session, dumper)
 
         # For all class instances in the database get a table for their
         # time-series
         Dividend.dump(session, dumper, ListedEquity)
+
+    @classmethod
+    def reuse(cls, session, dumper: Dump):
+        """Reuse dumped data as a database initialization resource.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        dumper : .financial_data.Dump
+            The financial data dumper.
+
+        Warning
+        -------
+        This method is intended to be used only to initialise a new and empty database.
+        Data in the reused dump file that has a `date_stamp` on or before the
+        recorded last date from the previous addition of time series instances
+        will be ignored. In other words, your dumped data will not be reused.
+
+        See also
+        --------
+        .dump
+
+        """
+        # Parent class re-user
+        super().reuse(session, dumper)
+
+        # For all class instances in the database get a table for their
+        # time-series
+        Dividend.reuse(session, dumper, Listed)
 
     def get_dividend_series(self):
         """Return the dividends data series for the security.

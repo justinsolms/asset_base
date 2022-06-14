@@ -237,7 +237,7 @@ class TestTradeEOD(TestTimeSeriesBase):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
 
-    def test_dump(self):
+    def test_0_dump(self):
         """Dump all class instances and their time series data to disk."""
         # Dumper
         dumper = Dump(testing=True)
@@ -250,11 +250,46 @@ class TestTradeEOD(TestTimeSeriesBase):
             self.securities_list, self.from_date, self.to_date)
         # Call the tested method.
         TradeEOD.from_data_frame(self.session, Listed, data_frame=test_df)
-        # Methods to be tested
+        # Dump methods to be tested
         TradeEOD.dump(self.session, dumper, Listed)
         # Verify dump file exists.
         self.assertTrue(
             dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+
+    def test_1_reuse(self):
+        """Reuse dumped data as a database initialization resource.
+
+        This test must run after ``test_0_dump`` so that the dump file exists;
+        which is why there is a numeric part to the test names; as `unittest`
+        sorts tests by test method name.
+        """
+        # Dumper
+        dumper = Dump(testing=True)
+        # Verify dump file exists.
+        self.assertTrue(
+            dumper.exists(TradeEOD),
+            'TradeEOD dump file not found. '
+            'Please run `TestTradeEOD.test_0_dump` first.')
+        # Reuse
+        TradeEOD.reuse(self.session, dumper, Listed)
+        # Retrieve the reused/restored date stamped data from asset_base
+        df = pd.DataFrame(
+            [self.to_dict(item) for item in self.session.query(TradeEOD).all()])
+        # Keep last date for testing later
+        date_stamp = pd.to_datetime(df['date_stamp'])
+        df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
+        # Test against last date data
+        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d').date()
+        df = df[df['date_stamp'] == last_date][self.test_columns]
+        # Exclude adjusted_close as it changes
+        df.drop(columns='adjusted_close', inplace=True)
+        self.assertFalse(df.empty)
+        for i, item in enumerate(df.iterrows()):
+            symbol, series = item
+            self.assertEqual(series.tolist(), self.test_values[i])
+        # Test security `time_series_last_date` attributes
+        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
+        self.assertEqual(ts_last_date, df_last_date.date())
 
 
 class TestDividend(TestTimeSeriesBase):
@@ -440,7 +475,7 @@ class TestDividend(TestTimeSeriesBase):
         # Test
         pd.testing.assert_frame_equal(test_df, df)
 
-    def test_dump(self):
+    def test_0_dump(self):
         """Dump all class instances and their time series data to disk."""
         # Dumper
         dumper = Dump(testing=True)
@@ -458,6 +493,41 @@ class TestDividend(TestTimeSeriesBase):
         # Verify dump file exists.
         self.assertTrue(
             dumper.exists(Dividend), 'Dividend dump file not found.')
+
+    def test_1_reuse(self):
+        """Reuse dumped data as a database initialization resource.
+
+        This test must run after ``test_0_dump`` so that the dump file exists;
+        which is why there is a numeric part to the test names; as `unittest`
+        sorts tests by test method name.
+        """
+        # Dumper
+        dumper = Dump(testing=True)
+        # Verify dump file exists.
+        self.assertTrue(
+            dumper.exists(Dividend),
+            'Dividend dump file not found. '
+            'Please run `TestDividend.test_0_dump` first.')
+        # Reuse
+        Dividend.reuse(self.session, dumper, ListedEquity)
+        # Retrieve the submitted date stamped data from asset_base
+        df = pd.DataFrame(
+            [self.to_dict(item) for item in self.session.query(Dividend).all()])
+        test_df = self.test_df.copy()
+        # Test over test-date-range
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df.set_index('date_stamp', inplace=True)
+        df.sort_index(inplace=True)
+        df = df.loc[self.from_date:self.to_date]
+        df = df.iloc[-3:]  # Test data is for last three
+        df.reset_index(inplace=True)
+        df = df[test_df.columns]
+        # Make dates all strings for simple testing.
+        self.date_to_str(df)  # Convert Timestamps
+        self.date_to_str(test_df)  # Convert Timestamps
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        # Test
+        pd.testing.assert_frame_equal(test_df, df)
 
 
 class Suite(object):

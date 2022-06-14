@@ -77,6 +77,11 @@ class Dump(_Feed):
 
         The destination folder is `data/dump`.
 
+        The dumper uses a dump_dict : dict of pandas.DataFrame, with the key the
+        CSV dump file prefix when dumping (writing), for the same reason it uses
+        a list of file name prefixes for reading. The reason is that this class
+        was originally designed to work with multiple class dumps at once.
+
     """
     def __init__(self, testing=False):
         """Instance initialization.
