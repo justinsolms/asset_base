@@ -1567,7 +1567,7 @@ class ListedEquity(Listed):
                 The original price series.
             'return':
                 The price period-on-period return series.
-            'total_returns':
+            'total_return':
                 The period-on-period return series inclusive of the extra
                 yield due to dividends paid.
             'total_price':
@@ -1698,7 +1698,7 @@ class ListedEquity(Listed):
                 total_returns, price = get_total_returns(price_item)
                 total_returns.iloc[0] = price.iloc[0]
                 result = total_returns.cumprod()
-            elif return_type == 'total_returns':
+            elif return_type == 'total_return':
                 total_returns, price = get_total_returns(price_item)
                 result = total_returns
             else:

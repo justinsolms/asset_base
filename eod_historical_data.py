@@ -142,7 +142,8 @@ class _API(aiohttp.ClientSession):
                     ClientConnectorError,
                     ) as ex:
                 logger.info(
-                    'Got %s with %s', ex.__class__.__name__, response_url)
+                    'Got %s with %s, parameter=%r',
+                    ex.__class__.__name__, url, params)
                 if retries == 'last':
                     logger.exception('Too many retries, giving up!')
                     raise ex

@@ -15,7 +15,7 @@ import os
 import pandas as pd
 from asset_base.common import TestSession
 
-from asset_base.financial_data import Dump, Static
+from asset_base.financial_data import Dump, DumpReadError, Static
 from asset_base.financial_data import SecuritiesFundamentals
 from asset_base.financial_data import SecuritiesHistory
 from asset_base.financial_data import ForexHistory
@@ -287,6 +287,11 @@ class TestDump(unittest.TestCase):
     def setUp(self):
         """Set up test case fixtures."""
         self.dumper = Dump()
+        self.dumper.delete(delete_folder=False)  # Delete contents only
+
+    def tearDown(self):
+        """Tear down test case fixtures."""
+        self.dumper.delete(delete_folder=True)  # Delete test dump folder
 
     def test___init__(self):
         """Initialization."""
@@ -307,6 +312,12 @@ class TestDump(unittest.TestCase):
         for key, df_read_data in dump_dict.items():
             df_test_data = self.data_dict[key]
             pd.testing.assert_frame_equal(df_test_data, df_read_data)
+
+    def test_read_fail(self):
+        """Fails dump file read."""
+        name_list = self.data_dict.keys()
+        with self.assertRaises(DumpReadError):
+            self.dumper.read(name_list)
 
     def test_delete(self):
         """Delete the dump folder and its contents."""

@@ -2,12 +2,14 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-"""Object relational mapping module to the ``asset_base`` database model.
+"""Object relational mapping module to the ``asset_base`` database.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
 This file is part of the fundmanage module.
 The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
+
+FIXME: Re-write this doc post split of Entity and Asset class inheritance
 
 It is natural to think of anything as an entity. We assert the following
 paradigm. A person is a natural person is an entity (Currently persons are not
@@ -51,7 +53,7 @@ is why the relationships and hierarchies matter.
 
 It is part of the To-Do list to bring natural entities (natural persons) into
 this view. However, it may be practical to keep them in a separate schemas with
-the ``Entity.id``'s being the glue. Such a scheme is used with another database
+the ``Asset.id``'s being the glue. Such a scheme is used with another database
 module, the fund ``submissions``. module.
 
 See also
@@ -71,15 +73,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy import String
 from sqlalchemy import MetaData, Column
 
-from sqlalchemy.ext.declarative import declarative_base
-
 from sqlalchemy_utils import drop_database
 from sqlalchemy_utils import create_database
 from sqlalchemy_utils import database_exists
 
+from asset_base.common import Base
+from asset_base.entity import Domicile, Exchange
 from asset_base.asset import ListedEquity, Currency, Cash
-from asset_base.time_series import TradeEOD, Dividend
-from asset_base.entity import Domicile, Entity, Exchange
 
 import asset_base.financial_data as fd
 
@@ -88,9 +88,6 @@ import logging
 logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
-
-# Create the declarative base
-Base = declarative_base()
 
 # Pull in the meta data
 metadata = MetaData()
@@ -109,17 +106,17 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
             values:
 
             'id':
-                Uses the security (entity) ``id`` number attribute.
+                Uses the security (asset) ``id`` number attribute.
             'identity_code':
-                Uses the security (entity) ``identity_code`` attribute.
+                Uses the security (asset) ``identity_code`` attribute.
             'ticker':
-                Uses the security (entity) ``ticker`` attribute.
+                Uses the security (asset) ``ticker`` attribute.
             'isin':
-                Uses the security (entity) ``isin`` attribute.
+                Uses the security (asset) ``isin`` attribute.
             'name':
-                Uses the security (entity) ``name`` attribute.
+                Uses the security (asset) ``name`` attribute.
             'alt_name':
-                Uses the alternative security (entity) ``alt_name``
+                Uses the alternative security (asset) ``alt_name``
                 attribute.
 
     inplace: bool
@@ -230,7 +227,8 @@ class AssetBase(object):
             A MySQL session.
 
     """
-    data_reuse_classes = [ListedEquity, TradeEOD, Dividend]
+    # These must only be Asset polymorphs
+    classes_to_dump = [ListedEquity]
 
     def __init__(self, dialect='sqlite', testing=False):
         """Instance initialization.
@@ -318,9 +316,7 @@ class AssetBase(object):
         data download form feeds.
 
         The dump shall include data from the classes:
-        - ListedEquity
-        - TradeEOD
-        - Dividend
+        - ListedEquity (and its time series data: TradeEOD and Dividend)
 
         This excludes the following data items which are always available as
         static data through the ``financial_data.Static`` class or as
@@ -330,34 +326,21 @@ class AssetBase(object):
         - Exchange
         - Cash
         """
-        dumper = self.dumper
-        dump_dict = dict()
-        for cls in self.data_reuse_classes:
-            class_name = cls.__tablename__
-            dump_dict[class_name] = cls.to_data_frame(self.session)
-        dumper.write(dump_dict)
+        for cls in self.classes_to_dump:
+            cls.dump(self.session, self.dumper)
 
     def reuse(self):
         """Reuse dumped data as a database initialization resource.
-
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
 
         See also
         --------
         .dump
         """
-        dumper = self.dumper
-        name_list = [cls.__tablename__ for cls in self.data_reuse_classes]
-        dump_dict = dumper.read(name_list)
-        for cls in self.data_reuse_classes:
-            class_name = cls.__tablename__
-            if class_name in dump_dict:
-                data_frame = dump_dict[class_name]
-                cls.from_data_frame(self.session, data_frame)
-            else:
-                logger.warning(
-                    'No reuse data for class {}.'.format(class_name))
+        for cls in self.classes_to_dump:
+            try:
+                cls.reuse(self.session, self.dumper)
+            except fd.DumpReadError:
+                logger.info(f'Unavailable dump data for {cls._asset_class}')
 
     def delete_dumps(self, delete_folder=True):
         """Delete dumped data folder
@@ -374,10 +357,21 @@ class AssetBase(object):
         """
         self.dumper.delete(delete_folder=delete_folder)
 
-    def set_up(self, _test_isin_list=None):
-        """Set up the database for operations."""
+    def set_up(self, reuse=True, update=True, _test_isin_list=None):
+        """Set up the database for operations.
+
+        Parameters
+        ----------
+        reuse : bool
+            When `True` then previous dumped database content will be reused to
+            initialise the database.
+        update : bool
+            When `True` then feeds will be checked for newer data.
+
+        """
         # Create a new database and engine if not existing
         if not hasattr(self, 'session'):
+            logger.info('New database session created.')
             self.new_database()
 
         # Record creation moment as a string (item, value) pair
@@ -394,7 +388,8 @@ class AssetBase(object):
         Cash.update_all(self.session)
 
         # Reuse old dumped/cached data
-        self.reuse()
+        if reuse:
+            self.reuse()
 
         # Check for newer securities data and update the database
         fundamentals = fd.SecuritiesFundamentals()
@@ -404,8 +399,9 @@ class AssetBase(object):
             get_meta_method=fundamentals.get_securities,
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
-            _test_isin_list=_test_isin_list,
+            _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
             )
+        # NOTE: Future security classes place their update_all() methods here.
 
     def tear_down(self, delete_dump_data=False):
         """Tear down the environment for operation of the module.
@@ -455,21 +451,21 @@ class AssetBase(object):
         return dict(data)
 
     def get_dict(self, id):
-        """Get a dictionary of entities.
+        """Get a dictionary of assets.
 
         The returned dictionary items will be polymorphic instances of the
-        entities specified by the list of entity id numbers.
+        assets specified by the list of asset id numbers.
 
         Parameters
         ----------
         id : list
-            A list if database session `Entity.id` id numbers of the required
-            database entities. See `.Entity`.
+            A list if database session `Asset.id` id numbers of the required
+            database assets. See `.Asset`.
 
         Return
         ------
         dict
-            A dictionary of entities with the specified id numbers. The id
+            A dictionary of assets with the specified id numbers. The id
             numbers are the keys of the dictionary.
 
         See also
@@ -478,12 +474,12 @@ class AssetBase(object):
         """
         if isinstance(id, list):
             # Get the list of matching funds and construct a new list.
-            entities = self.session.query(Entity).filter(Entity.id.in_(id))
-            return dict([(entity.id, entity) for entity in entities])
+            entities = self.session.query(Asset).filter(Asset.id.in_(id))
+            return dict([(asset.id, asset) for asset in entities])
         else:
-            raise Exception('Expected a list of entity id(s).')
+            raise Exception('Expected a list of asset id(s).')
 
-    def time_series(self, entity_list,
+    def time_series(self, asset_list,
                     series='price', price_item='close', return_type='price',
                     tidy=True, identifier='id', date_index=None):
         """Retrieve historic time-series for a list of entities.
@@ -495,9 +491,8 @@ class AssetBase(object):
 
         Parameters
         ----------
-        id_list : list
-            A list if database session ``.Entity.id`` id numbers of
-            the required database entities. See ``.Entity``.
+        asset_list : list of Asset (or polymorph class) instances
+            A list of securities or assets for which time series are required.
         series : str
             Which security series:
 
@@ -525,7 +520,7 @@ class AssetBase(object):
                 The original price series.
             'return':
                 The price period-on-period return series.
-            'total_price':
+            'total_return':
                 The price period-on-period return series including the extra
                 yield due to distribution paid.
             'total_price':
@@ -552,28 +547,28 @@ class AssetBase(object):
             Argument id_list must contain at least one non-cash security.
 
         """
-        if len(entity_list) == 0:
+        if len(asset_list) == 0:
             raise ValueError('Argument id_list may not be empty.')
 
         # Get a list of cash securities
-        cash = [item for item in entity_list if isinstance(item, Cash)]
+        cash = [item for item in asset_list if isinstance(item, Cash)]
 
         # Get a list of non-cash securities
-        non_cash = [item for item in entity_list if not isinstance(item, Cash)]
+        non_cash = [asset for asset in asset_list if not isinstance(asset, Cash)]
 
         #  A date-index must be provided to specify the cash data date range if
         #  there are no non-cash securities from which the date range may be
         #  derived.
         if len(non_cash) == 0 and date_index is None:
-            raise Exception('Expected non-cash securities in entity_list.')
+            raise Exception('Expected non-cash securities in asset_list.')
 
         data_list = list()
         if len(non_cash) > 0:
             # Create a pandas.DataFrame of non-cash securities
             data_list = list()
-            for entity in non_cash:
+            for asset in non_cash:
                 # For non-Cash entities
-                data = entity.time_series(series, price_item, return_type, tidy)
+                data = asset.time_series(series, price_item, return_type, tidy)
                 data_list.append(data)
             data = pd.concat(data_list, axis=1, sort=True)
             # Any data_index  argument is ignored as non-cash security data date
@@ -583,8 +578,8 @@ class AssetBase(object):
 
         # For all non-Cash entities. We need the previous data DatetimeIndex to
         # construct Cash time series. See docs.
-        for entity in cash:
-            data = entity.time_series(date_index, identifier)
+        for asset in cash:
+            data = asset.time_series(date_index, identifier)
             data_list.append(data)
         # Concatenate the separate data in the list into one pandas.DataFrame.
         data = pd.concat(data_list, axis=1, sort=True)

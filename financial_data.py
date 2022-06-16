@@ -26,10 +26,15 @@ import os
 # Abstract base class.
 import abc
 
+from asset_base.exceptions import _BaseException
+
 # Get module-named logger.
 import logging
 logger = logging.getLogger(__name__)
 
+
+class DumpReadError(_BaseException):
+    """Dump file not found or could not be read."""
 
 class _Feed(object, metaclass=abc.ABCMeta):
     """Generic financial data feed class.
@@ -149,8 +154,11 @@ class Dump(_Feed):
             path = self._path(file_name)
             try:
                 dump_dict[name] = pd.read_pickle(path)
-            except Exception:
-                logger.warning('Could not read dump file %s', path)
+            except FileNotFoundError:
+                raise DumpReadError(f'Could not read dump file {path}.')
+            except Exception as ex:
+                logger.exception(ex)
+                raise ex
             else:
                 logger.info('Read dump file %s', path)
 
@@ -167,8 +175,12 @@ class Dump(_Feed):
             content are deleted.
 
         """
-        # List all files in folder.
         path = self._path()
+        if not os.path.exists(path):
+            # Nothing to delete
+            return
+
+        # List all files in folder
         files = os.listdir(path)
 
         # First delete all the folder content files.
