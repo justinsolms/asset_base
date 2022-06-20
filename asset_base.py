@@ -80,6 +80,7 @@ from sqlalchemy_utils import database_exists
 from asset_base.common import Base
 from asset_base.entity import Domicile, Exchange
 from asset_base.asset import ListedEquity, Currency, Cash
+from asset_base.exceptions import TimeSeriesNoData
 
 import asset_base.financial_data as fd
 
@@ -264,8 +265,9 @@ class AssetBase(object):
         try:
             self.session.commit()
         except Exception as ex:
-            self.session.rollback()
             logger.error('Commit failed - rolling back.')
+            self.session.rollback()
+            logger.info('Rolled back.')
             raise ex
 
     def new_database(self):
@@ -340,7 +342,7 @@ class AssetBase(object):
             try:
                 cls.reuse(self.session, self.dumper)
             except fd.DumpReadError:
-                logger.info(f'Unavailable dump data for {cls._asset_class}')
+                logger.info(f'Unavailable dump data for {cls._class_name}')
 
     def delete_dumps(self, delete_folder=True):
         """Delete dumped data folder
@@ -566,10 +568,17 @@ class AssetBase(object):
         if len(non_cash) > 0:
             # Create a pandas.DataFrame of non-cash securities
             data_list = list()
+            # For non-Cash entities
             for asset in non_cash:
-                # For non-Cash entities
-                data = asset.time_series(series, price_item, return_type, tidy)
-                data_list.append(data)
+                # Slip and warn for absent time-series.
+                try:
+                    data = asset.time_series(
+                        series, price_item, return_type, tidy)
+                except TimeSeriesNoData:
+                    logger.warning(
+                        f'No time-series for security {asset.identity_code}')
+                else:
+                    data_list.append(data)
             data = pd.concat(data_list, axis=1, sort=True)
             # Any data_index  argument is ignored as non-cash security data date
             # range takes precedence.

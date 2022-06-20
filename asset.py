@@ -1177,7 +1177,7 @@ class Listed(Share):
         trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
         if len(trade_eod_dict_list) == 0:
             raise TimeSeriesNoData(
-                'No EOD trade data for  %s' % self.identity_code)
+                f'No EOD trade data for  security {self.identity_code}.')
         series = pd.DataFrame(trade_eod_dict_list)
         series['date_stamp'] = pd.to_datetime(series['date_stamp'])
         series.set_index('date_stamp', inplace=True)
@@ -1619,7 +1619,9 @@ class ListedEquity(Listed):
             try:
                 dividends = get_dividend_series()
             except TimeSeriesNoData:
-                pass  # There are not dividends to include
+                # New securities may not have dividends yet so warn.
+                logger.warning(
+                    f'No dividend data for security {self.identity_code}.')
             else:
                 total_price = price.add(dividends, fill_value=0.0)
             # Total one period returns

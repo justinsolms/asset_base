@@ -12,6 +12,7 @@ distributed without the express permission of Justin Solms.
 """
 import asyncio
 import unittest
+from aiohttp import ContentTypeError
 import aiounittest
 
 import pandas as pd
@@ -38,14 +39,17 @@ class TestAPI(aiounittest.AsyncTestCase):
         service = '/api/eod'
         ticker1 = 'AAPL'
         ticker2 = 'MCD'
+        ticker_bad = 'BADTICKER'
         exchange = 'US'
 
         # Path must append ticker and short exchange code to service
         path1 = '{}/{}.{}'.format(service, ticker1, exchange)
         path2 = '{}/{}.{}'.format(service, ticker2, exchange)
+        path_bad = '{}/{}.{}'.format(service, ticker_bad, exchange)
 
         cls.url1 = f'https://{domain}{path1}'
         cls.url2 = f'https://{domain}{path2}'
+        cls.url_bad = f'https://{domain}{path_bad}'
 
         from_date = '2022-01-01'
         to_date = '2022-01-07'
@@ -81,12 +85,12 @@ class TestAPI(aiounittest.AsyncTestCase):
         """ Get some data over the API. """
         index_names = ['date', 'open', 'high', 'low', 'close']
         async with _API() as api:
-            response = await api._get_response(self.url1, self.params)
+            json = await api._get_response(self.url1, self.params)
             # Unpack the response form the response_url.
-            response, _ = response
+            table = pd.DataFrame(json)
             # Check
-            self.assertIsInstance(response, pd.DataFrame)
-            self.assertEqual(index_names, response.columns.to_list()[0:5])
+            self.assertIsInstance(table, pd.DataFrame)
+            self.assertEqual(index_names, table.columns.to_list()[0:5])
 
     async def test__get_retries(self):
         """Get with the possibility of retries to the API."""
@@ -96,6 +100,13 @@ class TestAPI(aiounittest.AsyncTestCase):
             # Check
             self.assertIsInstance(response, pd.DataFrame)
             self.assertEqual(index_names, response.columns.to_list()[0:5])
+
+    async def test_bad_ticker(self):
+        """Fail with ticker not found."""
+        with self.assertRaises(ContentTypeError):
+            async with _API() as api:
+                _ = await api._get_response(self.url_bad, self.params)
+
 
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
@@ -320,6 +331,8 @@ class TestBulkHistorical(unittest.TestCase):
         cls.bulk = BulkHistorical()
         cls.symbol_list = (('AAPL', 'US'), ('MCD', 'US'), ('STX40', 'JSE'))
         cls.forex_list = ('USDEUR', 'USDGBP', 'USDUSD')
+        cls.symbol_list_bad = (
+            ('AAPL', 'US'), ('MCD', 'US'), ('BADONE', 'JSE'), ('STX40', 'JSE'))
 
     @classmethod
     def tearDownClass(cls):
@@ -399,7 +412,6 @@ class TestBulkHistorical(unittest.TestCase):
         # Test-rank columns
         df = df[columns]
         # Test
-        self.assertEqual(len(df), 12)
         self.assertEqual(set(df.index.names), set(index_names))
         self.assertEqual(set(df.columns), set(columns))
         df = df.loc[to_date]
@@ -414,7 +426,6 @@ class TestBulkHistorical(unittest.TestCase):
     def test_get_eod(self):
         """ Get historical data for a list of securities. """
         # Test data
-        n = 15
         to_date = '2020-12-31'
         index_names = ['date', 'ticker', 'exchange']
         columns = ['close', 'high', 'low', 'open', 'volume']
@@ -426,7 +437,7 @@ class TestBulkHistorical(unittest.TestCase):
 
         # Longer date range test causes a decision to use the EOD API service
         from_date1 = '2020-01-01'
-        df = self.bulk.get_eod(self.symbol_list, from_date1, to_date)
+        df = self.bulk.get_eod(self.symbol_list_bad, from_date1, to_date)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test-rank columns
@@ -455,7 +466,6 @@ class TestBulkHistorical(unittest.TestCase):
         df = df[columns]
         df2 = df.copy()
         # Test
-        self.assertEqual(len(df), 15)
         self.assertEqual(set(df.index.names), set(index_names))
         self.assertEqual(set(df.columns), set(columns))
         df = df.loc[to_date].droplevel('date')
@@ -468,7 +478,7 @@ class TestBulkHistorical(unittest.TestCase):
                 )
 
         # Test that results are the same across methods used
-        self.assertTrue(df1.iloc[-n:].equals(df2.iloc[-n:]))
+        self.assertTrue(df1.iloc[-3:].equals(df2.iloc[-3:]))
 
     def test_get_dividends(self):
         """ Get historical data for a list of securities. """
@@ -545,6 +555,9 @@ class TestBulkHistorical(unittest.TestCase):
             test_values,
             df.values.tolist(),
             )
+
+        def test_bad_ticker(self):
+            """Fail for bad ticker but get the rest."""
 
 
 class Suite(object):

@@ -7,16 +7,16 @@
 This module has different levels of abstraction classes:
 1. Direct API query, response and result checking.
 2. Generic classes for EOD and Bulk and Fundamental data.
-3. High level data retrival and management class.
+3. High level data retrieval and management class.
 
 End-of-day (EOD) data is historic daily data as of the end of the trading day.
-Bulk data is EOD data for a single day accross all, or a large set of
+Bulk data is EOD data for a single day across all, or a large set of
 securities, for a single exchange code.
 
 All tabular data are returned as a ``pandas.DataFrame``.
 
 The module uses the Python ``requests`` package. This also means we can use
-``datatime.datatime`` interchangably date ``str`` objects for dates.
+``datetime.datetime`` interchangeably date ``str`` objects for dates.
 
 Warning
 -------
@@ -33,12 +33,12 @@ import sys
 import datetime
 import pandas as pd
 
-from aiohttp import ClientConnectionError
-from aiohttp import ClientConnectorError
-from aiohttp import ServerConnectionError
+from aiohttp import ClientError, ContentTypeError
 
 from collections import defaultdict
 from fundmanage.utils import datepair_to_datetimes
+
+from asset_base.exceptions import _BaseException
 
 # Get module-named logger.
 import logging
@@ -82,6 +82,10 @@ class _API(aiohttp.ClientSession):
         """
         # Add API token to params
         params['api_token'] = self._api_token
+        # Default to JSON format at the request of the service provider. There
+        # is an issue that CSV includes a last line with the total number of
+        # bytes which causes pandas read problems. Use JSON for now.
+        params['fmt'] = 'json'
 
         # The API requires `from` and `to` as arguments.
         if 'from_date' in params:
@@ -89,24 +93,31 @@ class _API(aiohttp.ClientSession):
         if 'to_date' in params:
             params['to'] = params.pop('to_date')
 
-        async with self.get(url, params=params) as response:
-            # Interpret the data based on the format `fmt` param.
-            logger.info('Initiated:%s', response.url)
-            if 'fmt' not in params or params['fmt'] == 'csv':
-                # NOTE: There is an issue that CSV includes a last line with
-                # the total number of bytes which causes pandas read
-                # problems. Use JSON fo now.
-                table = pd.read_csv(await response.text())
-            elif params['fmt'] == 'json':
-                table = pd.DataFrame(await response.json())
-            else:
-                fmt = params['fmt']
-                raise ValueError(
-                    'Unexpected `fmt` argument value: `{}`'.format(fmt))
+        # async with self.get(url, params=params) as response:
+        #     # Interpret the data based on the format `fmt` param.
+        #     logger.info('Initiated:%s', response.url)
+        #     table = pd.DataFrame(await response.json())
 
-        logger.info('Completed:%s', response.url)
+        response = await self.get(url, params=params)
+        logger.info('Initiated:%s', response.url)
+        try:
+            json = await response.json()
+        except ContentTypeError as ex:
+            # Single out this child ClientError of error as unhandled
+            raise ex
+        except ClientError as ex:
+            # All other errors prompt a retry
+            return ex  # To prompt a retry
+        else:
+            logger.info('Completed:%s', response.url)
+        finally:
+            pass
 
-        return table, response.url
+        # response = await self.get(url, params=params)
+        # logger.info('Initiated:%s', response.url)
+        # json = await response.json()
+
+        return json
 
     async def _get_retries(self, path, params):
         """ Get and check a response form the API.
@@ -133,23 +144,22 @@ class _API(aiohttp.ClientSession):
         url = 'https://{}{}'.format(self._domain, path)
 
         retry_list = [1, 2, 'last']
-        for i, retries in enumerate(retry_list):
-            try:
-                table, response_url = await self._get_response(
-                    url, params=params)
-            except (ClientConnectionError,
-                    ServerConnectionError,
-                    ClientConnectorError,
-                    ) as ex:
-                logger.info(
-                    'Got %s with %s, parameter=%r',
-                    ex.__class__.__name__, url, params)
+        for retries in retry_list:
+            result = await self._get_response(url, params=params)
+            if isinstance(result, ClientError):
                 if retries == 'last':
-                    logger.exception('Too many retries, giving up!')
-                    raise ex
+                    the_exception = result
+                    logger.error('Too many retries, giving up!')
+                    raise the_exception
+                else:
+                    # Go around for a retry
+                    pass
             else:
                 # Success
                 break
+
+        # JSON to DataFrame
+        table = pd.DataFrame(result)
 
         return table
 
@@ -201,7 +211,6 @@ class Historical(_API):
         params = dict(
             from_date=from_date.strftime('%Y-%m-%d'),
             to_date=to_date.strftime('%Y-%m-%d'),
-            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
             period='d',  # Default to daily sampling period
             order='a',  # Default to ascending order
         )
@@ -300,7 +309,7 @@ class Bulk(_API):
         """ Generic getter, bulk EOD for the exchange for a particular day.
 
         This is a common bulk `get` method used to get eod, dividend and
-        splits accross an exchange on a particular day.
+        splits across an exchange on a particular day.
 
 
         Note
@@ -330,7 +339,7 @@ class Bulk(_API):
             date = datetime.date.today() - datetime.timedelta(days=1)
 
         if symbols is not None:
-            # Create comma seperated list after prepending with a `dot` and the
+            # Create comma separated list after prepending with a `dot` and the
             # exchange symbol.
             symbols = ','.join(
                 ['{}.{}'.format(sym, exchange) for sym in symbols]
@@ -475,7 +484,7 @@ class Fundamentals(_API):
 
 
 class BulkHistorical(object):
-    """ Get bulk histories accross exchanges, securities and date ranges.
+    """ Get bulk histories across exchanges, securities and date ranges.
 
     This class' public methods take a list of `(exchange, ticker)` tuples and
     generate a single call per `(exchange, ticker)` tuple from the appropriate
@@ -529,23 +538,31 @@ class BulkHistorical(object):
                 tasks.append(
                     historical._get(
                         path, exchange, ticker, from_date, to_date))
-            table_list = await asyncio.gather(*tasks)
+            result_list = await asyncio.gather(*tasks, return_exceptions=True)
             # Add ticker and exchange code to each table in the list. The API
             # does not return this data so it must be constructed and attached.
-            for i, item in enumerate(zip(symbol_list, table_list)):
-                symbol, table = item
-                ticker, exchange = symbol
-                table['ticker'] = ticker
-                table['exchange'] = exchange
-                table_list[i] = table
+            # Skip over exceptions.
+            table_list = list()
+            for i, result in enumerate(zip(symbol_list, result_list)):
+                symbol, unknown = result
+                if isinstance(unknown, ContentTypeError):
+                    logger.warning(
+                        f'Exception `ContentTypeError` for symbol {symbol}')
+                else:
+                    # Process table and add to list
+                    table = unknown
+                    ticker, exchange = symbol
+                    table['ticker'] = ticker
+                    table['exchange'] = exchange
+                    table_list.append(table)
         # Eliminate empty tables in the table list as these inadvertently erase
-        # the `date` index name.
+        # the `date` index name. This may be a `pandas` bug.
         table_list = [table for table in table_list if not table.empty]
         # Case management after elimination leaving zero, one or several tables
         if len(table_list) == 0:
             # Return an empty table
             return pd.DataFrame([])
-        # Concattendate all tables
+        # Concatenate all tables
         table = pd.concat(table_list, axis='index')
         # Set up full index by appending ticker and exchange to the date index
         table.set_index(
@@ -595,7 +612,7 @@ class BulkHistorical(object):
         for ticker, exchange in symbol_list:
             exchange_dict[exchange].append(ticker)
 
-        # Fetch securities accross all exchange.
+        # Fetch securities across all exchange.
         tasks = list()
         async with Bulk() as bulk:
             for exchange, ticker_list in exchange_dict.items():
@@ -605,13 +622,14 @@ class BulkHistorical(object):
                             exchange, date, ticker_list, type)
                     )
             table_list = await asyncio.gather(*tasks)
+
         # Contrary to _get_eod the API does return date, exchange and ticker
         # data so it not not be constructed and attached. Combine tables in to
         # one large table
         table = pd.concat(table_list, axis='index')
         table.sort_index(inplace=True)  # MultiIndex must be sorted for slicing.
         # Duplicates are caused by holidays. Querying the API on the evenings of
-        # Friday (which did return a non-trivail result), and Saturday and
+        # Friday (which did return a non-trivial result), and Saturday and
         # Sunday would produce 3 identical entries, all dated Friday. So we need
         # to drop these.
         table.drop_duplicates(inplace=True)
@@ -642,7 +660,7 @@ class BulkHistorical(object):
         columns_names = [
             'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
 
-        # Make any dates into datetime - a standardisation accross methods
+        # Make any dates into datetime - a standardisation across methods
         from_date, to_date = datepair_to_datetimes(from_date, to_date)
 
         # Test inclusive date range
@@ -699,7 +717,7 @@ class BulkHistorical(object):
             'currency', 'declarationDate', 'paymentDate', 'period',
             'recordDate', 'unadjustedValue', 'value']
 
-        # Make any dates into datetime - a standardisation accross methods
+        # Make any dates into datetime - a standardisation across methods
         from_date, to_date = datepair_to_datetimes(from_date, to_date)
 
         # Use EOD API
@@ -740,7 +758,7 @@ class BulkHistorical(object):
         columns_names = [
             'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
 
-        # Make any dates into datetime - a standardisation accross methods
+        # Make any dates into datetime - a standardisation across methods
         from_date, to_date = datepair_to_datetimes(from_date, to_date)
 
         # Construct a symbol list form the forex ticker list as (`exchange`,

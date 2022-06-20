@@ -65,7 +65,7 @@ def assert_no_index_duplicates(security, security1, security2):
                 pass  # No data, therefore no duplicates
             # Parameter `keep=False` actually means "keep duplicates"!!!
             index = data.index.duplicated(keep=False)
-            self.assertFalse(  # BUG:
+            self.assertFalse(  # BUG: We cannot use `self` here
                 index.any(),
                 f'The {series} series of {sec.identity_code} '
                 'has duplicates in it\'s index.')
@@ -161,7 +161,8 @@ class TestAssetBase(unittest.TestCase):
         fundamentals = fd.SecuritiesFundamentals()
         history = fd.SecuritiesHistory()
         securities_list = self.session.query(ListedEquity).all()
-        securities_test_data = fundamentals.get_securities(_test_isin_list=self.isin_list)
+        securities_test_data = fundamentals.get_securities(
+            _test_isin_list=self.isin_list)
         eod_test_data = history.get_eod(securities_list)
         dividend_test_data = history.get_dividends(securities_list)
         # Test - reused data should be same as feed data

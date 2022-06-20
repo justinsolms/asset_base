@@ -286,14 +286,24 @@ class TimeSeriesBase(Base):
         No object shall be destroyed, only updated, or missing object created.
 
         """
-
         # Assert that all time_series_last_date attributes are aligned
         # Determine date ranges.
         from_date = cls.assert_last_dates(session, asset_class)
         to_date = datetime.date.today()
 
-        # Get all Listed instances so we can fetch their EOD trade data
-        securities_list = session.query(asset_class).all()
+        # Skip data fetch and warn for all de-listed securities
+        securities_delisted = session.query(
+            asset_class).filter(asset_class.status == 'delisted').all()
+        for security in securities_delisted:
+            logger.warning(
+                f'Skipped {cls._class_name} data fetch for '
+                f'de-listed security {security.identity_code}.')
+
+
+        # Get ll actively listed Listed instances so we can fetch their
+        # EOD trade data
+        securities_list = session.query(
+            asset_class).filter(asset_class.status == 'listed').all()
         # Get all financial data from the from_date till today.
         data_frame = get_method(securities_list, from_date, to_date)
         # Bulk add/update data.
@@ -520,7 +530,7 @@ class TradeEOD(TimeSeriesBase):
     """
 
     __tablename__ = 'trade_eod'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
 
     id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
     """ Primary key."""
