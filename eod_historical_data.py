@@ -656,7 +656,8 @@ class BulkHistorical(object):
             is set to today.
 
         """
-        days_threshold = 7
+        # HACK: Issues with _get_bulk and NaNs warrant this value to be `0` forcing use of _get_eod in every case
+        days_threshold = 0
         columns_names = [
             'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
 
