@@ -76,6 +76,7 @@ from sqlalchemy import MetaData, Column
 from sqlalchemy_utils import drop_database
 from sqlalchemy_utils import create_database
 from sqlalchemy_utils import database_exists
+from sqlalchemy.orm.exc import NoResultFound
 
 from asset_base.common import Base
 from asset_base.entity import Domicile, Exchange
@@ -376,9 +377,18 @@ class AssetBase(object):
             logger.info('New database session created.')
             self.new_database()
 
-        # Record creation moment as a string (item, value) pair
-        self.session.add(
-            Meta('create_date', datetime.datetime.now().isoformat()))
+        # Record creation moment as a string (item, value) pair if it does not
+        # already exist.
+        try:
+            meta = self.session.query(Meta).filter(
+                Meta.name == 'set_up_date').one()
+        except NoResultFound:
+            set_up_date = datetime.datetime.now().isoformat()
+            self.session.add(Meta('set_up_date', set_up_date))
+        else:
+            set_up_date = meta.value
+        finally:
+            logger.info(f'Set-up date of database is {set_up_date}')
 
         # Set up static data
         static_obj = fd.Static()
