@@ -8,7 +8,6 @@
 from __future__ import annotations
 # Used to avoid ImportError (most likely due to a circular import)
 from typing import TYPE_CHECKING
-
 if TYPE_CHECKING:
     from asset_base.asset import Asset
 
@@ -19,6 +18,7 @@ import pandas as pd
 from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
+from sqlalchemy.orm.exc import NoResultFound
 
 from asset_base.financial_data import Dump
 
@@ -35,6 +35,107 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 # Pull in the meta data
 metadata = MetaData()
+
+
+class TimeSeriesMeta(Base):
+    """Meta data or information about the database.
+
+    Stored as string names with associated string values.
+
+    Parameters
+    ----------
+    name : string
+        The parameter by name.
+    value : string
+        The parameter value in string representation.
+
+    Attributes
+    ----------
+    name : string
+        The parameter by name.
+    value : string
+        The parameter value in string representation.
+
+
+    See Also
+    --------
+    .Model
+
+    """
+
+    __tablename__ = 'time_series_meta'
+
+    # Parameter name string.
+    name = Column(String(32), primary_key=True)
+
+    # Parameter value string.
+    value = Column(String(32), nullable=False)
+
+    def __init__(self, name, value):
+        """Instance initialization."""
+        self.name = name
+        self.value = value
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return f'TimeSeriesMeta name={self.name}, value={self.value}'
+
+    def __repr__(self):
+        """Return the official string output."""
+        return f'TimeSeriesMeta(name={self.name}, value={self.value})'
+
+    @classmethod
+    def set_value(cls, session, name, value):
+        """Set a named meta data value"""
+        try:
+            # Try to get the existing instance
+            obj = session.query(TimeSeriesMeta).filter(
+                TimeSeriesMeta.name == name).one()
+        except NoResultFound:
+            # Create and add the new instance
+            obj = TimeSeriesMeta(name, value)
+            session.add(obj)
+        else:
+            # Update existing instance
+            obj.value = value
+
+    @classmethod
+    def get_value(cls, session, name):
+        """Get a named meta data value"""
+        # Try to get the existing instance
+        obj = session.query(TimeSeriesMeta).filter(
+            TimeSeriesMeta.name == name).one()
+
+        return obj.value
+
+    @classmethod
+    def set_last_date(
+            cls, session,
+            asset_class: Asset, ts_class: TimeSeriesBase, date: datetime.date):
+        """Set the last date for an ``.asset`` class."""
+        asset_class_name = asset_class._class_name
+        ts_class_name = ts_class._class_name
+        cls.set_value(
+            session,
+            name=f'{asset_class_name}.{ts_class_name}.last_date',
+            value=date.strftime('%Y-%m-%d'))
+
+    @classmethod
+    def get_last_date(
+            cls, session, asset_class: Asset, ts_class: TimeSeriesBase
+    ) -> datetime.date:
+        """Get the last date for an ``.asset`` class."""
+        asset_class_name = asset_class._class_name
+        ts_class_name = ts_class._class_name
+        try:
+            value = cls.get_value(
+                session,
+                name=f'{asset_class_name}.{ts_class_name}.last_date',
+            )
+        except NoResultFound:
+            return datetime.date(1900, 1, 1)
+        else:
+            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
 
 
 class TimeSeriesBase(Base):
@@ -98,12 +199,6 @@ class TimeSeriesBase(Base):
         This method updates all of a specified time series aggregated by the
         ``Listed``  or it's child classes.
 
-        Warning
-        -------
-        The Listed.time_series_last_date attribute (or child class attribute) is
-        not updated by this method as it is the responsibility of the ``Listed``
-        class and its child classes to manage that attribute.
-
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -143,7 +238,7 @@ class TimeSeriesBase(Base):
         # financial data API services very often return which may include data
         # falling on a date that has already been stored. This may lead to
         # duplicate data which we wish to avoid.
-        last_date = cls.assert_last_dates(session, asset_class)
+        last_date = TimeSeriesMeta.get_last_date(session, asset_class, cls)
         if last_date is None:
             # No last_date has been set yet as the asset_base is still empty.
             pass
@@ -198,7 +293,6 @@ class TimeSeriesBase(Base):
                 cls(listed=security, **row) for index, row in series.iterrows()]
             instances_list.extend(instances)
 
-        # FIXME: Duplicated (entity_id, date_stamp) when returning to add more data form a new financial_data feed fetch.
         # The bulk_save_objects does not work with inherited objects. Use
         # add_all instead.
         session.add_all(instances_list)
@@ -210,7 +304,7 @@ class TimeSeriesBase(Base):
         # Make sure the date is a datetime.date instance to avoid a bug due to
         # SQLite allowing the SqlAlchemy `Date` column type to be stored as a
         # `DateTime` column type!!
-        cls.update_last_dates(session, asset_class, last_date.date())
+        TimeSeriesMeta.set_last_date(session, asset_class, cls, last_date)
 
     @classmethod
     def to_data_frame(cls, session, asset_class):
@@ -286,19 +380,17 @@ class TimeSeriesBase(Base):
         No object shall be destroyed, only updated, or missing object created.
 
         """
-        # Assert that all time_series_last_date attributes are aligned
         # Determine date ranges.
-        from_date = cls.assert_last_dates(session, asset_class)
+        from_date = TimeSeriesMeta.get_last_date(session, asset_class, cls)
         to_date = datetime.date.today()
 
         # Skip data fetch and warn for all de-listed securities
-        securities_delisted = session.query(
-            asset_class).filter(asset_class.status == 'delisted').all()
+        securities_delisted = session.query(asset_class).filter(
+            asset_class.status == 'delisted').all()
         for security in securities_delisted:
             logger.warning(
                 f'Skipped {cls._class_name} data fetch for '
                 f'de-listed security {security.identity_code}.')
-
 
         # Get ll actively listed Listed instances so we can fetch their
         # EOD trade data
@@ -308,8 +400,9 @@ class TimeSeriesBase(Base):
         data_frame = get_method(securities_list, from_date, to_date)
         # Bulk add/update data.
         cls.from_data_frame(session, asset_class, data_frame)
-        # Set all security last dates to today
-        cls.update_last_dates(session, asset_class, datetime.date.today())
+        # Set Asset class last dates to today
+        TimeSeriesMeta.set_last_date(
+            session, asset_class, cls, datetime.date.today())
 
     @classmethod
     def dump(cls, session, dumper: Dump, asset_class):
@@ -374,133 +467,6 @@ class TimeSeriesBase(Base):
         cls.from_data_frame(
             session, asset_class, data_frame_dict[class_name])
 
-    @classmethod
-    def assert_last_dates(cls, session, asset_class, date=None):
-        """Assert alignment of all security class instance time series last date
-        attributes.
-
-        Part of maintaining the time series batch updating mechanism whereby all
-        time series collections are considered and treated as equally up to
-        date.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        date : datetime.date, datetime.datetime, optional
-            If provided then it is asserted that all ``time_series_last_date``
-            attributes are equal to this date. If not provided then it is
-            asserted that all ``time_series_last_date`` attributes are simply
-            equal.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
-
-        Returns
-        -------
-        datetime.datetime.date
-            The common last common date across all the ``asset_class``
-            instances.
-
-        See also
-        --------
-        set_all_time_series_last_dates
-
-        """
-
-        # Get all securities instances in class
-        securities_list = session.query(asset_class).all()
-        # Edge case for no security instances
-        if len(securities_list) == 0:
-            return
-        # Get the securities last dates
-        date_list = cls._get_last_dates(securities_list)
-
-        if date is None:
-            date = date_list[0]
-        elif isinstance(date, datetime.date):
-            pass
-        elif isinstance(date, datetime.datetime):
-            date = date.date()
-        else:
-            raise ValueError(
-                'Expected a `datetime.date` for the `date` argument.')
-
-        # Truth that all dates are exactly the same
-        same = date_list.count(date) == len(date_list)
-
-        # Test assertion
-        if not same:
-            msg = ('Database corrupted!!!. Some Listed instances have '
-                   'their `time_series_last_date` attribute misaligned.')
-            logger.critical(msg)
-            raise Exception(msg)
-        else:
-            # Get common last date
-            last_date = date
-
-        logging.info(
-            'True: all security class `{}.time_series_last_date` = {}.'.format(
-                asset_class.__name__, date))
-
-        return last_date
-
-    @classmethod
-    def update_last_dates(cls, session, asset_class, date):
-        """Align all all security class instance time series last date
-        attributes.
-
-        Part of maintaining the time series batch updating mechanism whereby all
-        time series collections are considered and treated as equally up to
-        date.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
-        date : datetime.date, datetime.datetime
-            The date to set all ``time_series_last_date`` attributes to.
-
-        See also
-        --------
-        assert_all_time_series_last_dates
-
-        """
-
-        if isinstance(date, datetime.date):
-            pass
-        elif isinstance(date, datetime.datetime):
-            date = date.date()
-        else:
-            raise ValueError(
-                'Expected a `datetime.date` for the `date` argument.')
-
-        securities_list = session.query(asset_class).all()
-        # Edge case for no security instances
-        if len(securities_list) == 0:
-            return
-        # Synchronise dates across all security instances
-        cls._set_last_dates(securities_list, date)
-
-        logging.info(
-            'Set all security class `{}.time_series_last_date` = {}.'.format(
-                asset_class.__name__, date))
-
-    @classmethod
-    def _set_last_dates(cls, securities_list, date):
-        """Set the security class last date for all security instances. """
-        raise NotImplementedError('Pease override this method.')
-
-    @classmethod
-    def _get_last_dates(cls, securities_list):
-        """Get the security class last date for all security instances. """
-        raise NotImplementedError('Pease override this method.')
-
 
 class TradeEOD(TimeSeriesBase):
     """A single listed security's date-stamped EOD trade data.
@@ -516,7 +482,7 @@ class TradeEOD(TimeSeriesBase):
     close : float
         The EOD closing price for the day.
     high : float
-        High price fpr the day.
+        High price for the day.
     low : float
         Low price for the day.
     adjusted_close : float
@@ -587,22 +553,6 @@ class TradeEOD(TimeSeriesBase):
             "adjusted_close": self.adjusted_close,
             "volume": self.volume,
         }
-
-    @classmethod
-    def _set_last_dates(cls, securities_list, date):
-        """Set the security class last date for all security instances."""
-        # Some databases allow the `Date` class to store both `datetime.date`
-        # and `datetime.date` instances and we must ensure that only the latter
-        # is stored.
-        if isinstance(date, datetime.datetime):
-            date = date.date()
-        for s in securities_list:
-            s._eod_series_last_date = date
-
-    @classmethod
-    def _get_last_dates(cls, securities_list):
-        """Get the security class last date for all security instances. """
-        return [s._eod_series_last_date for s in securities_list]
 
 
 class Dividend(TimeSeriesBase):
@@ -691,17 +641,6 @@ class Dividend(TimeSeriesBase):
         }
 
         return data
-
-    @classmethod
-    def _set_last_dates(cls, securities_list, date):
-        """Set the security class last date for all security instances. """
-        for s in securities_list:
-            s._dividend_series_last_date = date
-
-    @classmethod
-    def _get_last_dates(cls, securities_list):
-        """Get the security class last date for all security instances. """
-        return [s._dividend_series_last_date for s in securities_list]
 
 
 class LivePrices(Base):

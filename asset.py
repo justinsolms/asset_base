@@ -783,9 +783,6 @@ class Listed(Share):
 
     # Historical TradeEOD end-of-day (EOD) time-series collection
     _eod_series = relationship('TradeEOD', backref='listed')
-    # The date of the last update of all time-series instances related to this
-    # class. Must be maintained by update logic.
-    _eod_series_last_date = Column(Date)
 
     # Listing status.
     status = Column(Enum('listed', 'delisted'), nullable=False)
@@ -1316,9 +1313,6 @@ class ListedEquity(Listed):
 
     # Historical Dividend end-of-day (EOD) time-series collection
     _dividend_series = relationship('Dividend', backref='listed_equity')
-    # The date of the last update of all time-series instances related to this
-    # class. Must be maintained by update logic.
-    _dividend_series_last_date = Column(Date)
 
     # Industry classification
     industry_class = Column(String(16), nullable=True)
@@ -1453,6 +1447,10 @@ class ListedEquity(Listed):
         No object shall be destroyed, only updated, or missing object created.
 
         """
+        # TODO: Make more intelligent behaviour for new securities fetching.
+        # This can be done at the level of the common module where action for
+        # new and unseen securities can be taken.
+
         # Get securities
         super().update_all(
             session, get_meta_method, get_eod_method, **kwargs)

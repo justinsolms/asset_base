@@ -7,7 +7,7 @@ from asset_base.financial_data import Dump, SecuritiesFundamentals, SecuritiesHi
 
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Listed, ListedEquity
-from asset_base.time_series import Dividend, TimeSeriesBase, TradeEOD
+from asset_base.time_series import Dividend, TimeSeriesBase, TimeSeriesMeta, TradeEOD
 from fundmanage.utils import date_to_str
 
 
@@ -193,7 +193,7 @@ class TestTradeEOD(TestTimeSeriesBase):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
         # Test security `time_series_last_date` attributes
-        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
+        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
         self.assertEqual(ts_last_date, df_last_date.date())
 
     def test_to_data_frame(self):
@@ -288,7 +288,7 @@ class TestTradeEOD(TestTimeSeriesBase):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
         # Test security `time_series_last_date` attributes
-        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
+        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
         self.assertEqual(ts_last_date, df_last_date.date())
 
 
@@ -428,7 +428,7 @@ class TestDividend(TestTimeSeriesBase):
             df.sort_index(axis='columns'),
             )
         # Test security `time_series_last_date` attributes
-        ts_last_date = Dividend.assert_last_dates(self.session, ListedEquity)
+        ts_last_date = TimeSeriesMeta.get_last_date(self.session, ListedEquity, Dividend)
         self.assertEqual(ts_last_date, df_last_date.date())
 
     def test_to_data_frame(self):
@@ -472,6 +472,7 @@ class TestDividend(TestTimeSeriesBase):
         self.date_to_str(df)  # Convert Timestamps
         self.date_to_str(test_df)  # Convert Timestamps
         test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
         # Test
         pd.testing.assert_frame_equal(test_df, df)
 
@@ -526,6 +527,7 @@ class TestDividend(TestTimeSeriesBase):
         self.date_to_str(df)  # Convert Timestamps
         self.date_to_str(test_df)  # Convert Timestamps
         test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
         # Test
         pd.testing.assert_frame_equal(test_df, df)
 
