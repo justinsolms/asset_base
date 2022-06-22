@@ -203,11 +203,11 @@ class Meta(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return 'Meta data "%s" = "%s"' % (self.name, self.value)
+        return f'Meta name={self.name}, value={self.value}'
 
     def __repr__(self):
         """Return the official string output."""
-        return '<Meta data:"%s"="%s">' % (self.name, self.value)
+        return f'Meta(name={self.name}, value={self.value})'
 
 
 # TODO: Consider converting flush commands to try-commit-exception-rollback
@@ -266,9 +266,10 @@ class AssetBase(object):
         try:
             self.session.commit()
         except Exception as ex:
-            logger.error('Commit failed - rolling back.')
+            logger.critical('Commit failed - rolling back.')
             self.session.rollback()
             logger.info('Rolled back.')
+            # Rethrow the exception
             raise ex
 
     def new_database(self):
@@ -307,6 +308,104 @@ class AssetBase(object):
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
         logger.info('New database, engine and tables with URL "%s"' % db_url)
+
+    def set_up(self, reuse=True, update=True, _test_isin_list=None):
+        """Set up the database for operations.
+
+        Parameters
+        ----------
+        reuse : bool
+            When `True` then previous dumped database content will be reused to
+            initialise the database.
+        update : bool
+            When `True` then feeds will be checked for newer data.
+
+        """
+        # Create a new database and engine if not existing
+        if not hasattr(self, 'session'):
+            logger.info('New database session created.')
+            self.new_database()
+
+        # Record creation moment as a string (item, value) pair if it does not
+        # already exist.
+        try:
+            meta = self.session.query(Meta).filter(
+                Meta.name == 'set_up_date').one()
+        except NoResultFound:
+            set_up_date = datetime.datetime.now().isoformat()
+            self.session.add(Meta('set_up_date', set_up_date))
+        else:
+            set_up_date = meta.value
+        finally:
+            logger.info(f'Set-up date of database is {set_up_date}')
+
+        # Set up static data
+        static_obj = fd.Static()
+        Currency.update_all(self.session, get_method=static_obj.get_currency)
+        Domicile.update_all(self.session, get_method=static_obj.get_domicile)
+        Exchange.update_all(self.session, get_method=static_obj.get_exchange)
+
+        # Create all cash currency instances for every domicile
+        Cash.update_all(self.session)
+
+        # Reuse old dumped/cached data
+        if reuse:
+            self.reuse()
+
+        self.update(_test_isin_list=_test_isin_list)
+
+    def tear_down(self, delete_dump_data=False):
+        """Tear down the environment for operation of the module.
+
+        Parameters
+        ----------
+        delete_dump_data : bool, optional
+            If `True` then data is not dumped and the dump folder and its
+            contents are deleted. Warning: do not use this unless you are really
+            sure you wish to delete all your reusable data sources.
+        """
+        # Dump reusable data. Abort with CRITICAL logging if failed.
+        if delete_dump_data:
+            logger.info('Deleted dump files and folder.')
+            self.delete_dumps(delete_folder=True)
+        else:
+            try:
+                self.dump()
+            except Exception as ex:
+                logger.critical('Dump asset_base failed. Tear-down aborted!!!')
+                raise ex
+            else:
+                logger.info('Dump important asset_base data for re-use.')
+
+        # Delete database
+        if database_exists(self.engine.url):
+            self.session.close()
+            self.engine.dispose()
+            drop_database(self.engine.url)
+            # Delete specific attributes
+            del self.db_url
+            del self.engine
+            del self.session
+            logger.info(
+                'Dropped database and closed session and engine')
+
+    def update(self, _test_isin_list=None):
+        """Update all non-static data.
+
+        Uses the ``.financial_data`` module as the data source.
+        """
+
+        # Check for newer securities data and update the database
+        fundamentals = fd.SecuritiesFundamentals()
+        history = fd.SecuritiesHistory()
+        # NOTE: Future security classes place their update_all() methods here.
+        ListedEquity.update_all(
+            self.session,
+            get_meta_method=fundamentals.get_securities,
+            get_eod_method=history.get_eod,
+            get_dividends_method=history.get_dividends,
+            _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
+            )
 
     def dump(self):
         """Dump re-usable content to disk files.
@@ -359,96 +458,6 @@ class AssetBase(object):
             content are deleted.
         """
         self.dumper.delete(delete_folder=delete_folder)
-
-    def set_up(self, reuse=True, update=True, _test_isin_list=None):
-        """Set up the database for operations.
-
-        Parameters
-        ----------
-        reuse : bool
-            When `True` then previous dumped database content will be reused to
-            initialise the database.
-        update : bool
-            When `True` then feeds will be checked for newer data.
-
-        """
-        # Create a new database and engine if not existing
-        if not hasattr(self, 'session'):
-            logger.info('New database session created.')
-            self.new_database()
-
-        # Record creation moment as a string (item, value) pair if it does not
-        # already exist.
-        try:
-            meta = self.session.query(Meta).filter(
-                Meta.name == 'set_up_date').one()
-        except NoResultFound:
-            set_up_date = datetime.datetime.now().isoformat()
-            self.session.add(Meta('set_up_date', set_up_date))
-        else:
-            set_up_date = meta.value
-        finally:
-            logger.info(f'Set-up date of database is {set_up_date}')
-
-        # Set up static data
-        static_obj = fd.Static()
-        Currency.update_all(self.session, get_method=static_obj.get_currency)
-        Domicile.update_all(self.session, get_method=static_obj.get_domicile)
-        Exchange.update_all(self.session, get_method=static_obj.get_exchange)
-
-        # Create all cash currency instances for every domicile
-        Cash.update_all(self.session)
-
-        # Reuse old dumped/cached data
-        if reuse:
-            self.reuse()
-
-        # Check for newer securities data and update the database
-        fundamentals = fd.SecuritiesFundamentals()
-        history = fd.SecuritiesHistory()
-        ListedEquity.update_all(
-            self.session,
-            get_meta_method=fundamentals.get_securities,
-            get_eod_method=history.get_eod,
-            get_dividends_method=history.get_dividends,
-            _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
-            )
-        # NOTE: Future security classes place their update_all() methods here.
-
-    def tear_down(self, delete_dump_data=False):
-        """Tear down the environment for operation of the module.
-
-        Parameters
-        ----------
-        delete_dump_data : bool, optional
-            If `True` then data is not dumped and the dump folder and its
-            contents are deleted. Warning: do not use this unless you are really
-            sure you wish to delete all your reusable data sources.
-        """
-        # Dump reusable data. Abort with CRITICAL logging if failed.
-        if delete_dump_data:
-            logger.info('Deleted dump files and folder.')
-            self.delete_dumps(delete_folder=True)
-        else:
-            try:
-                self.dump()
-            except Exception as ex:
-                logger.critical('Dump asset_base failed. Tear-down aborted!!!')
-                raise ex
-            else:
-                logger.critical('Dump important asset_base data for re-use.')
-
-        # Delete database
-        if database_exists(self.engine.url):
-            self.session.close()
-            self.engine.dispose()
-            drop_database(self.engine.url)
-            # Delete specific attributes
-            del self.db_url
-            del self.engine
-            del self.session
-            logger.info(
-                'Dropped database and closed session and engine')
 
     def get_meta(self):
         """Get a dictionary of asset_base meta-data.
@@ -510,7 +519,7 @@ class AssetBase(object):
 
             'price':
                 The security's periodic trade price.
-            'distribution':
+            'dividend':
                 The annualized distribution yield.
             'volume':
                 The volume of trade (total value of trade) in the period.
