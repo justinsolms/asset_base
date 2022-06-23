@@ -395,11 +395,6 @@ class Cash(Asset):
     def factory(cls, session, ticker, create=True, **kwargs):
         """Manufacture/retrieve an instance from the given parameters.
 
-        Note
-        ----
-        An existing domicile instead of currency is uses to create a ``Cash``
-        instance.
-
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
@@ -429,7 +424,6 @@ class Cash(Asset):
             obj = session.query(cls).filter(cls.ticker == ticker).one()
         except NoResultFound:
             # Raise exception if the currency is not found
-
             if not create:
                 raise FactoryError(f'Currency with ticker `{ticker}` not found.')
             else:
@@ -537,6 +531,201 @@ class Cash(Asset):
         series.name = self
 
         return series
+
+
+class Forex(Cash):
+    """Currency exchange rates.
+
+    A currency - the `base_currency` has it's price expressed in the
+    `price_currency`. For example: The United Stated Dollar (USD) has its
+    price in Japanese Yen (JPY) and in 2022/06/22 the price of 1 USD was 135
+    JPY. USD may be considered the primary currency. JPY may be considered the
+    secondary currency. As such the code for this exchange rate shall be USDJPY
+    and may be read as USD to JPY, i.e., 1 USD to 135 JPY.
+
+    Parameters
+    ----------
+    base_currency : .asset.Currency
+        The currency that is priced in the `price_currency`. In the example
+        above this is USD. It may be considered the primary currency. It may
+        also be considered the asset-to-be-priced.
+    price_currency : .asset.Currency
+        The pricing currency. In the example above this is JPY. It may be
+        considered the secondary currency. It may also be considered the foreign
+        currency price of the asset-to-be-priced.
+
+
+    """
+
+    __tablename__ = 'cash'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    id = Column(Integer, ForeignKey('cash.id'), primary_key=True)
+
+    key_code_name = 'forex_code'
+    """str: The name to attach to the ``key_code`` attribute (@property method).
+    Override in  sub-classes. This is used for example as the column name in
+    tables of key codes."""
+
+    _asset_class = 'forex'
+
+    #  A short class name for use in the alt_name method.
+    _name_appendix = 'Forex'
+
+    # Priced currency, or base currency
+    _currency_id2 = Column(Integer, ForeignKey('currency.id'), nullable=True)
+    base_currency = relationship(Currency, foreign_keys=[_currency_id2])
+
+    # The reference or root ticker. Its price will always be 1.0.
+    root_currency = 'USD'
+
+    # List of top foreign currencies. Their time series are maintained as the
+    # price of 1 unit of the root currency. South African ZAR is included for
+    # domestic reasons.
+    foreign_currencies = [
+        'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'HKD',
+        'NZD', 'SEK', 'KRW', 'SGD', 'NOK', 'MXN', 'INR', 'RUB', 'ZAR']
+
+    def __init__(self, base_currency, price_currency, **kwargs):
+        """Instance initialization."""
+
+        # The name is constrained to that of the currency.
+        name = f'{base_currency.name} priced in {price_currency.name}'
+        # Note that we set the pricing currency of the cash asset here.
+        super().__init__(name, price_currency, **kwargs)
+
+        self.currency = price_currency
+        self.base_currency = base_currency
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return 'Forex: {} priced in {}'.format(
+            self.base_currency.ticker, self.currency.ticker)
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '<{}(base_currency={!r}, price_currency={!r})>'.format(
+            self._class_name, self.base_currency.ticker, self.currency.ticker)
+
+    @property
+    def ticker(self):
+        """Currency ticker."""
+        return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
+
+    @property
+    def key_code(self):
+        """A key string unique to the class instance."""
+        return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
+
+    @property
+    def identity_code(self):
+        """A human readable string unique to the class instance."""
+        return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
+
+    @classmethod
+    def factory(cls, session, base_ticker, price_ticker, create=True, **kwargs):
+        """Manufacture/retrieve an instance from the given parameters.
+
+        If a record of the specified class instance does not exist then add it,
+        else do nothing. Then return the instance.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        base_ticker : str(3)
+            ISO 4217 3-letter currency codes. The priced or base currency.
+        price_ticker : str(3)
+            ISO 4217 3-letter currency codes. The price currency.
+        create : bool, optional
+            If `False` then the factory shall expect the specified `Entity` to
+            already exist in the session or it shall raise an exception instead
+            of creating a first instance.
+
+        Return
+        ------
+        asset_base.Cash
+            The single instance that is in the session.
+
+        See also
+        --------
+        .Asset.factory,
+
+        """
+        # Get the base currency if it exits
+        try:
+            base_currency = Currency.factory(session, base_ticker)
+        except NoResultFound:
+            raise FactoryError('Base currency %s not found', base_ticker)
+        # Get the pricing currency if it exits
+        try:
+            price_currency = Currency.factory(session, price_ticker)
+        except NoResultFound:
+            raise FactoryError('Base currency %s not found', price_ticker)
+
+        # Check if entity exists in the session and if not then add it.
+        try:
+            obj = session.query(cls).filter(
+                cls.base_currency == base_currency,
+                cls.currency == price_currency,
+                ).one()
+        except NoResultFound:
+            # Raise exception if the currency is not found
+            if not create:
+                ticker = '{}{}'.format(base_ticker, price_ticker)
+                raise FactoryError(f'Forex {ticker} not found.')
+            else:
+                # Create a new instance, fetch pre-existing currency
+                obj = cls(base_currency, price_currency, **kwargs)
+                session.add(obj)
+        else:
+            # There would never be changes to Cash to reconcile so just pass
+            pass
+
+        return obj
+
+    @classmethod
+    def update_all(cls, session, get_forex_method=None):
+        """Update/create all the objects in the asset_base session.
+
+        The existing records of the ``Currency`` instances in
+        the session are used to build a ``Cash`` instance for each
+        ``Currency`` instance.
+
+        Warning
+        -------
+        Please run ``Currency.update_all`` before running this current method to
+        avoid an Exception.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            The database session.
+        get_forex_method : financial_data module class method, optional
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all the ``ForexEOD.factory`` method arguments. This is
+            for the securities time series trade end of day data form which the
+            ``ForexEOD`` instances shall be created. If this argument is omitted
+            then the ``ForexEOD`` will not be created.
+
+        """
+        foreign_currencies = session.query(Currency).filter(
+            Currency.ticker.in_(cls.foreign_currencies),
+            ).all()
+        if len(foreign_currencies) == 0:
+            raise Exception(
+                'No Currency instances found. '
+                'Please run `Currency.update_all`.')
+        if len(cls.foreign_currencies) != len(foreign_currencies):
+            raise FactoryError('Not all foreign currencies were found.')
+        for price_currency in foreign_currencies:
+            Forex.factory(
+                session, cls.root_currency, price_currency.ticker)
+
+        # Get EOD trade data.
+        # TODO: Write ForexEOD
+        if get_forex_method is not None:
+            ForexEOD.update_all(session, cls, get_forex_method)
 
 
 class Share(Asset):

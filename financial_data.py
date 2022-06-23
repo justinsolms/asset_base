@@ -506,7 +506,7 @@ class SecuritiesHistory(_Feed):
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
                 return pd.DataFrame
-            #  Reset the index as we need to form here on treat the index as
+            #  Reset the index as we need to from here on treat the index as
             # column data.
             data.reset_index(inplace=True)
             # Extract by columns name and rename to a standard. This is also
@@ -541,8 +541,11 @@ class ForexHistory(_Feed):
 
     """
 
-    _data_path = None
-    _sub_path = None
+    def __init__(self):
+        """Instance initialization."""
+        super().__init__()
+        self._data_path = None
+        self._sub_path = None
 
     forex_list = [
         'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'HKD',
@@ -590,7 +593,7 @@ class ForexHistory(_Feed):
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
                 return pd.DataFrame
-            #  Reset the index as we need to form here on treat the index as
+            #  Reset the index as we need to from here on treat the index as
             # column data.
             data.reset_index(inplace=True)
             # Extract by columns name and rename to a standard. This is also

@@ -262,7 +262,7 @@ class TimeSeriesBase(Base):
         return data_table
 
     @classmethod
-    def update_all(cls, session, asset_class, get_method):
+    def update_all(cls, session, asset_class, get_method, asset_list):
         """ Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -282,6 +282,8 @@ class TimeSeriesBase(Base):
             The ``Asset`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
+        asset_list : list of .Asset instances (or child instances)
+            The list of assets which must be updated with time series data.
 
         No object shall be destroyed, only updated, or missing object created.
 
@@ -299,8 +301,7 @@ class TimeSeriesBase(Base):
                 f'Skipped {cls._class_name} data fetch for '
                 f'de-listed security {security.identity_code}.')
 
-
-        # Get ll actively listed Listed instances so we can fetch their
+        # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
         securities_list = session.query(
             asset_class).filter(asset_class.status == 'listed').all()
@@ -603,6 +604,47 @@ class TradeEOD(TimeSeriesBase):
     def _get_last_dates(cls, securities_list):
         """Get the security class last date for all security instances. """
         return [s._eod_series_last_date for s in securities_list]
+
+
+class ForexEOD(TradeEOD):
+    """A single forex date-stamped EOD trade data.
+
+    Parameters
+    ----------
+    listed : .Listed
+        The ``Listed`` instance the EOD data belongs to.
+    date_stamp : datetime.date
+        The end-of-day (EOD) data date stamp.
+    open : float
+        Open price for the day.
+    close : float
+        The EOD closing price for the day.
+    high : float
+        High price fpr the day.
+    low : float
+        Low price for the day.
+    adjusted_close : float
+        Adjusted close price for the day. The closing price is the raw price,
+        which is just the cash value of the last transacted price before the
+        market closes. The adjusted closing price factors in anything that might
+        affect the stock price after the market closes.
+    volume : float
+        Number of shares traded in the day.
+
+    """
+
+    __tablename__ = 'tra_eod'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
+    """ Primary key."""
+
+    def __init__(
+            self, forex, date_stamp,
+            open, close, high, low, adjusted_close, volume):
+        """Instance initialization."""
+        super().__init__(forex, date_stamp,
+            open, close, high, low, adjusted_close, volume)
 
 
 class Dividend(TimeSeriesBase):
