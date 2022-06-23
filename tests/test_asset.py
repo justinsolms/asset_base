@@ -10,7 +10,7 @@ from asset_base.common import TestSession
 from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Asset, Cash, Listed, ListedEquity, Share
-from asset_base.time_series import Dividend, TradeEOD
+from asset_base.time_series import Dividend, TimeSeriesMeta, TradeEOD
 from fundmanage.utils import date_to_str
 
 
@@ -650,7 +650,7 @@ class TestListed(TestShare):
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
         # Test security `time_series_last_date` attributes
-        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
+        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
         self.assertEqual(
             ts_last_date, df_last_date,
             'The TradeEOD time series dates do not seem correct.'
@@ -691,7 +691,7 @@ class TestListed(TestShare):
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
         # Test security `time_series_last_date` attributes
-        ts_last_date = TradeEOD.assert_last_dates(self.session, Listed)
+        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
         self.assertEqual(ts_last_date, datetime.date.today())
 
     def test_get_eod_trade_series(self):
@@ -1229,7 +1229,7 @@ class TestListedEquity(TestListed):
         # NOTE: These values may change as EOD historical data gets corrected
         # FIXME: Check total_returns/total_prices are accurate!!!
         self.assertEqual(df[self.to_date], 54.60)
-        df = listed.time_series(series='distribution')
+        df = listed.time_series(series='dividend')
         self.assertEqual(df[self.from_date:self.to_date][-1], 0.091925)
         df = listed.time_series(series='volume')
         self.assertEqual(df[self.to_date], 112700)
