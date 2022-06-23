@@ -34,6 +34,7 @@ import datetime
 import pandas as pd
 
 from aiohttp import ClientError, ContentTypeError
+from asyncio import TimeoutError
 
 from collections import defaultdict
 from fundmanage.utils import datepair_to_datetimes
@@ -59,66 +60,6 @@ class _API(aiohttp.ClientSession):
     _domain = 'eodhistoricaldata.com'
     _api_token = '60802039419943.54316578'
 
-    async def _get_response(self, url, params):
-        """ Get and check a response form the API.
-
-        Note
-        ----
-        No retries are implemented here.
-
-        Parameters
-        ----------
-        url : str
-            The full service path in the domain including the full
-            https://... part.
-        params : dict
-            Additional (key: value) pair parameters such as date range. The API
-            token _must_ not be included.
-
-        Returns
-        -------
-        pandas.DataFrame
-            Response tabular data.
-        """
-        # Add API token to params
-        params['api_token'] = self._api_token
-        # Default to JSON format at the request of the service provider. There
-        # is an issue that CSV includes a last line with the total number of
-        # bytes which causes pandas read problems. Use JSON for now.
-        params['fmt'] = 'json'
-
-        # The API requires `from` and `to` as arguments.
-        if 'from_date' in params:
-            params['from'] = params.pop('from_date')
-        if 'to_date' in params:
-            params['to'] = params.pop('to_date')
-
-        # async with self.get(url, params=params) as response:
-        #     # Interpret the data based on the format `fmt` param.
-        #     logger.info('Initiated:%s', response.url)
-        #     table = pd.DataFrame(await response.json())
-
-        response = await self.get(url, params=params)
-        logger.info('Initiated:%s', response.url)
-        try:
-            json = await response.json()
-        except ContentTypeError as ex:
-            # Single out this child ClientError of error as unhandled
-            raise ex
-        except ClientError as ex:
-            # All other errors prompt a retry
-            return ex  # To prompt a retry
-        else:
-            logger.info('Completed:%s', response.url)
-        finally:
-            pass
-
-        # response = await self.get(url, params=params)
-        # logger.info('Initiated:%s', response.url)
-        # json = await response.json()
-
-        return json
-
     async def _get_retries(self, path, params):
         """ Get and check a response form the API.
 
@@ -133,7 +74,7 @@ class _API(aiohttp.ClientSession):
             the end.
         params : dict
             Additional (key: value) pair parameters such as date range. The API
-            token _must_ not be included.
+            token _must not_ be included.
 
         Returns
         -------
@@ -143,23 +84,49 @@ class _API(aiohttp.ClientSession):
         # Prepare the URL
         url = 'https://{}{}'.format(self._domain, path)
 
+        # Add API token to params
+        params['api_token'] = self._api_token
+        # Default to JSON format at the request of the service provider. There
+        # is an issue that CSV includes a last line with the total number of
+        # bytes which causes pandas read problems. Use JSON for now.
+        params['fmt'] = 'json'
+
+        # The API requires `from` and `to` as arguments.
+        if 'from_date' in params:
+            params['from'] = params.pop('from_date')
+        if 'to_date' in params:
+            params['to'] = params.pop('to_date')
+
+        # Retry loop
         retry_list = [1, 2, 'last']
-        for retries in retry_list:
-            result = await self._get_response(url, params=params)
-            if isinstance(result, ClientError):
-                if retries == 'last':
-                    the_exception = result
-                    logger.error('Too many retries, giving up!')
-                    raise the_exception
+        for retry in retry_list:
+            try:
+                response = await self.get(url, params=params, timeout=20)
+            except TimeoutError as ex:
+                # Test for retries
+                if retry == 'last':
+                    logger.info('Timeout (try-%s): %s', retry, url)
+                    raise ex
                 else:
                     # Go around for a retry
-                    pass
+                    logger.info('Timeout (try-%s): %s', retry, url)
+                    continue
             else:
-                # Success
-                break
+                logger.info('Initiated (try-%s): %s', retry, response.url)
+                if response.ok:
+                    json = await response.json()
+                    # Success - break out of retry loop
+                    logger.info('Success: %s', response.url)
+                    break
+                else:
+                    text = await response.text()
+                    status = response.status
+                    url = response.url
+                    raise Exception(
+                        'Failed response %s:%s for %s', status, text, url)
 
         # JSON to DataFrame
-        table = pd.DataFrame(result)
+        table = pd.DataFrame(json)
 
         return table
 
@@ -545,9 +512,9 @@ class BulkHistorical(object):
             table_list = list()
             for i, result in enumerate(zip(symbol_list, result_list)):
                 symbol, unknown = result
-                if isinstance(unknown, ContentTypeError):
+                if isinstance(unknown, Exception):
                     logger.warning(
-                        f'Exception `ContentTypeError` for symbol {symbol}')
+                        'Exception %s for symbol %s', unknown, symbol)
                 else:
                     # Process table and add to list
                     table = unknown
