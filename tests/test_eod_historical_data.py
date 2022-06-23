@@ -12,7 +12,7 @@ distributed without the express permission of Justin Solms.
 """
 import asyncio
 import unittest
-from aiohttp import ContentTypeError
+from aiohttp import ClientConnectorError, ContentTypeError
 import aiounittest
 
 import pandas as pd
@@ -62,6 +62,7 @@ class TestAPI(aiounittest.AsyncTestCase):
         )
         cls.path1 = path1
         cls.path2 = path2
+        cls.path_bad = path_bad
 
     @classmethod
     def tearDownClass(cls):
@@ -81,17 +82,6 @@ class TestAPI(aiounittest.AsyncTestCase):
         async with _API() as api:
             self.assertIsInstance(api, _API)
 
-    async def test__get_response(self):
-        """ Get some data over the API. """
-        index_names = ['date', 'open', 'high', 'low', 'close']
-        async with _API() as api:
-            json = await api._get_response(self.url1, self.params)
-            # Unpack the response form the response_url.
-            table = pd.DataFrame(json)
-            # Check
-            self.assertIsInstance(table, pd.DataFrame)
-            self.assertEqual(index_names, table.columns.to_list()[0:5])
-
     async def test__get_retries(self):
         """Get with the possibility of retries to the API."""
         index_names = ['date', 'open', 'high', 'low', 'close']
@@ -103,10 +93,9 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     async def test_bad_ticker(self):
         """Fail with ticker not found."""
-        with self.assertRaises(ContentTypeError):
+        with self.assertRaises(Exception) as ex:
             async with _API() as api:
-                _ = await api._get_response(self.url_bad, self.params)
-
+                await api._get_retries(self.path_bad, self.params)
 
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
@@ -116,16 +105,13 @@ class TestAPI(aiounittest.AsyncTestCase):
         async def get_results():
             tasks_list = list()
             async with _API() as api:
-                tasks_list.append(api._get_response(self.url1, self.params))
-                tasks_list.append(api._get_response(self.url2, self.params))
-                results = await asyncio.gather(*tasks_list)
+                tasks_list.append(api._get_retries(self.path1, self.params))
+                tasks_list.append(api._get_retries(self.path2, self.params))
+                results = await asyncio.gather(*tasks_list, return_exceptions=True)
             return results
 
         # Run all tasks
         response1, response2 = asyncio.run(get_results())
-        # Unpack the response form the response_url.
-        response1, _ = response1
-        response2, _ = response2
         # Check
         self.assertIsInstance(response1, pd.DataFrame)
         self.assertEqual(index_names, response1.columns.to_list()[0:5])
