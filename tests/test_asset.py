@@ -23,6 +23,9 @@ class TestAsset(unittest.TestCase):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = Asset
+        # Fixed date window for time series tests
+        cls.from_date = '2020-01-01'
+        cls.to_date = '2020-12-31'
         # Currency data
         cls.get_method = Static().get_currency
         cls.currency_dataframe = cls.get_method()
@@ -190,7 +193,8 @@ class TestForex(TestAsset):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = Forex
-        # Reduce the number of forex for shorter testing
+        # Lessen the number of forex tickers for shorter testing.
+        # NOTE: Remember to use `self.Cls` instead of `Forex` for less tickers.
         cls.Cls.foreign_currencies = ['USD', 'EUR', 'ZAR']
         # Currency data
         cls.get_method = ForexHistory().get_eod
@@ -199,21 +203,30 @@ class TestForex(TestAsset):
         cls.test_str = 'One USD priced in ZAR'
         cls.key_code = 'USDZAR'
         cls.identity_code = 'USDZAR'
+        # Test values
+        cls.columns = [
+            'date_stamp', 'ticker', 'close', 'high', 'low', 'open',
+            'adjusted_close', 'volume']
+        cls.test_columns = ['close', 'high', 'low', 'open', 'volume']
+        # Exclude adjusted_close as it varies
+        # NOTE: These values may change as EOD historical data gets corrected
+        cls.test_values = pd.DataFrame([  # Last date data
+            [ 0.8215,  0.8216,  0.8128,  0.8139, 3575],
+            [ 1.0000,  1.0000,  1.0000,  1.0000,    0],
+            [14.6878, 14.7204, 14.5707, 14.6078,    0],
+        ], columns=cls.test_columns)
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean sqlite in-memory database
-        self.session = TestSession().session
-        # Add all Currency objects to asset_base
-        Currency.update_all(self.session, get_method=Static().get_currency)
+        super().setUp()
         # Test currencies
         self.base_currency = Currency.factory(
             self.session, Forex.root_currency)
         self.price_currency = Currency.factory(
             self.session, Forex.foreign_currencies[-1])  # Pick last one
         # Tickers
-        self.base_currency_ticker = self.base_currency.ticker
-        self.price_currency_ticker = self.price_currency.ticker
+        self.base_ticker = self.base_currency.ticker
+        self.price_ticker = self.price_currency.ticker
 
     def test___init__(self):
         forex = Forex(self.base_currency, self.price_currency)
@@ -235,9 +248,9 @@ class TestForex(TestAsset):
 
     def test_factory(self):
         forex = Forex.factory(
-            self.session, self.base_currency_ticker, self.price_currency_ticker)
+            self.session, self.base_ticker, self.price_ticker)
         forex = Forex.factory(
-            self.session, self.base_currency_ticker, self.price_currency_ticker)
+            self.session, self.base_ticker, self.price_ticker)
         # Despite using factory twice there should be only one instance
         self.assertEqual(len(self.session.query(Asset).all()), 1)
         # Verify strings
@@ -253,7 +266,39 @@ class TestForex(TestAsset):
         self.assertEqual(set(Forex.foreign_currencies), set(ticker_list))
         # TODO: Test forex time series
 
-
+    def test_get_eod(self):
+        """Return the EOD time series for the asset."""
+        self.Cls.update_all(self.session, self.get_method)
+        # Test AAPL Inc.
+        forex = self.Cls.factory(
+            self.session, self.base_ticker, self.Cls.foreign_currencies[0])
+        forex1 = self.Cls.factory(
+            self.session, self.base_ticker, self.Cls.foreign_currencies[1])
+        forex2 = self.Cls.factory(
+            self.session, self.base_ticker, self.Cls.foreign_currencies[2])
+        # Method to be tested
+        df = forex.get_eod()
+        df1 = forex1.get_eod()
+        df2 = forex2.get_eod()
+        # Make to-test data
+        df.reset_index(inplace=True)
+        df1.reset_index(inplace=True)
+        df2.reset_index(inplace=True)
+        df['ticker'] = forex.ticker
+        df1['ticker'] = forex1.ticker
+        df2['ticker'] = forex2.ticker
+        df = pd.concat([df, df1, df2], axis='index')
+        # Test
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df.sort_values(['date_stamp', 'ticker'], inplace=True)
+        # Test against last date test_values data
+        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d')
+        df = df[df['date_stamp'] == last_date]
+        self.assertFalse(df.empty)
+        # Exclude adjusted_close as it changes
+        df = df[self.test_columns]  # Column select and rank for testing
+        df.reset_index(drop=True, inplace=True)
+        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
 
 class TestShare(TestAsset):
     """Tests to be implemented by child classes
@@ -378,9 +423,7 @@ class TestListed(TestShare):
         data_frame = cls.securities_dataframe
         cls.selected_securities_dataframe = data_frame[data_frame['isin'].isin(
             isins)]
-        # Test ListedEOD data
-        cls.from_date = '2020-01-01'
-        cls.to_date = '2020-12-31'
+        # NOTE: The `from_date` and `to_date` are inherited from  TestAsset
         cls.columns = [
             'date_stamp', 'ticker', 'mic', 'isin',
             'close', 'high', 'low', 'open', 'volume']
@@ -775,8 +818,8 @@ class TestListed(TestShare):
             self.session, Listed, ListedEOD)
         self.assertEqual(ts_last_date, datetime.date.today())
 
-    def test_get_eod_trade_series(self):
-        """Return the EOD trade pd.DataFrame series for the security."""
+    def test_get_eod(self):
+        """Return the EOD time series for the asset."""
         # Insert only selected subset of Listed instances from meta-data
         # Listed.from_data_frame(
         #     self.session, data_frame=self.selected_securities_dataframe)
@@ -791,9 +834,9 @@ class TestListed(TestShare):
         listed1 = Listed.factory(self.session, self.isin1)
         listed2 = Listed.factory(self.session, self.isin2)
         # Method to be tested
-        df = listed.get_eod_trade_series()
-        df1 = listed1.get_eod_trade_series()
-        df2 = listed2.get_eod_trade_series()
+        df = listed.get_eod()
+        df1 = listed1.get_eod()
+        df2 = listed2.get_eod()
         # Make to-test data
         df.reset_index(inplace=True)
         df1.reset_index(inplace=True)
@@ -814,8 +857,8 @@ class TestListed(TestShare):
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
 
-    def test_get_last_eod_trades(self):
-        """Return the last EOD trade data for the security.
+    def test_get_last_eod(self):
+        """Return the EOD last date, data dict, for the asset.
 
         Note
         ----
@@ -830,9 +873,13 @@ class TestListed(TestShare):
         # Test for AAPL Inc.
         listed = Listed.factory(self.session, self.isin)
         # Method to be tested
-        last_dict = listed.get_last_eod_trades()
+        last_dict = listed.get_last_eod()
         # Test values
-        last_dict_test = listed.get_eod_trade_series().iloc[-1].to_dict()
+        eod = listed.get_eod()
+        eod.reset_index(inplace=True)
+        last_eod = eod.iloc[-1]
+        last_eod['date_stamp'] = last_eod['date_stamp'].to_pydatetime().date()
+        last_dict_test = last_eod.to_dict()
         self.assertIsInstance(last_dict, dict)
         self.assertIsInstance(last_dict_test, dict)
         self.assertEqual(last_dict, last_dict_test)
