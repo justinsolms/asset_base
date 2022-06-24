@@ -623,7 +623,9 @@ class BulkHistorical(object):
             is set to today.
 
         """
-        # HACK: Issues with _get_bulk and NaNs warrant this value to be `0` forcing use of _get_eod in every case
+        # HACK: Issues with _get_bulk and NaNs warrant this value to be `0`
+        # forcing use of _get_eod in every case. The NaNs is as we looking only
+        # 1-day deep and there are most often no dividends on th day.
         days_threshold = 0
         columns_names = [
             'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
@@ -657,6 +659,7 @@ class BulkHistorical(object):
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
         else:
+            # The security and date info is in the index
             table = table[columns_names]
 
         return table
@@ -702,6 +705,7 @@ class BulkHistorical(object):
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
         else:
+            # The security and date info is in the index
             table = table[columns_names]
 
         return table
@@ -751,6 +755,7 @@ class BulkHistorical(object):
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
         else:
+            # The security and date info is in the index
             table = table[columns_names]
 
         return table

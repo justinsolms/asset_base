@@ -132,7 +132,7 @@ class Common(Base):
         instances_list = session.query(cls).all()
         return pd.DataFrame(
             [(item.id, item.key_code) for item in instances_list],
-            columns=['entity_id', cls.key_code_name])
+            columns=['id', cls.key_code_name])
 
     @classmethod
     def factory(cls, session, **kwargs):

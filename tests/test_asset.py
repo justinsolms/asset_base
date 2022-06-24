@@ -1,16 +1,16 @@
-from ast import Div
 import unittest
 import datetime
 import pandas as pd
 import pandas
 
-from asset_base.financial_data import Dump, SecuritiesFundamentals, SecuritiesHistory, Static
+from asset_base.financial_data import Dump, ForexHistory, SecuritiesFundamentals
+from asset_base.financial_data import SecuritiesHistory, Static
 
 from asset_base.common import TestSession
 from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
-from asset_base.asset import Asset, Cash, Listed, ListedEquity, Share
-from asset_base.time_series import Dividend, TimeSeriesMeta, TradeEOD
+from asset_base.asset import Asset, Cash, Forex, Listed, ListedEquity, Share
+from asset_base.time_series import Dividend, TimeSeriesMeta, ListedEOD
 from fundmanage.utils import date_to_str
 
 
@@ -181,6 +181,80 @@ class TestCash(TestAsset):
         self.assertEqual(time_series.name.identity_code, cash.identity_code)
 
 
+class TestForex(TestAsset):
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up test class fixtures."""
+        super().setUpClass()
+        # Specify which class is being tested. Apply when tests are meant to be
+        # inherited.
+        cls.Cls = Forex
+        # Reduce the number of forex for shorter testing
+        cls.Cls.foreign_currencies = ['USD', 'EUR', 'ZAR']
+        # Currency data
+        cls.get_method = ForexHistory().get_eod
+        # Test strings
+        cls.name = 'USDZAR'
+        cls.test_str = 'One USD priced in ZAR'
+        cls.key_code = 'USDZAR'
+        cls.identity_code = 'USDZAR'
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Each test with a clean sqlite in-memory database
+        self.session = TestSession().session
+        # Add all Currency objects to asset_base
+        Currency.update_all(self.session, get_method=Static().get_currency)
+        # Test currencies
+        self.base_currency = Currency.factory(
+            self.session, Forex.root_currency)
+        self.price_currency = Currency.factory(
+            self.session, Forex.foreign_currencies[-1])  # Pick last one
+        # Tickers
+        self.base_currency_ticker = self.base_currency.ticker
+        self.price_currency_ticker = self.price_currency.ticker
+
+    def test___init__(self):
+        forex = Forex(self.base_currency, self.price_currency)
+        self.assertIsInstance(forex, Forex)
+        self.assertEqual(self.name, forex.name)
+        self.assertEqual(self.identity_code, forex.identity_code)
+
+    def test___str__(self):
+        forex = Forex(self.base_currency, self.price_currency)
+        self.assertEqual(self.test_str, forex.__str__())
+
+    def test_key_code(self):
+        forex = Forex(self.base_currency, self.price_currency)
+        self.assertEqual(self.key_code, forex.key_code)
+
+    def test_identity_code(self):
+        forex = Forex(self.base_currency, self.price_currency)
+        self.assertEqual(self.identity_code, forex.identity_code)
+
+    def test_factory(self):
+        forex = Forex.factory(
+            self.session, self.base_currency_ticker, self.price_currency_ticker)
+        forex = Forex.factory(
+            self.session, self.base_currency_ticker, self.price_currency_ticker)
+        # Despite using factory twice there should be only one instance
+        self.assertEqual(len(self.session.query(Asset).all()), 1)
+        # Verify strings
+        self.assertEqual(self.name, forex.name)
+        self.assertEqual(self.test_str, forex.__str__())
+        self.assertEqual(self.key_code, forex.key_code)
+        self.assertEqual(self.identity_code, forex.identity_code)
+
+    def test_update_all(self):
+        self.Cls.update_all(self.session, self.get_method)
+        forex_list = self.session.query(Forex).all()
+        ticker_list = [forex.price_currency_ticker for forex in forex_list]
+        self.assertEqual(set(Forex.foreign_currencies), set(ticker_list))
+        # TODO: Test forex time series
+
+
+
 class TestShare(TestAsset):
     """Tests to be implemented by child classes
 
@@ -304,7 +378,7 @@ class TestListed(TestShare):
         data_frame = cls.securities_dataframe
         cls.selected_securities_dataframe = data_frame[data_frame['isin'].isin(
             isins)]
-        # Test TradeEOD data
+        # Test ListedEOD data
         cls.from_date = '2020-01-01'
         cls.to_date = '2020-12-31'
         cls.columns = [
@@ -366,7 +440,8 @@ class TestListed(TestShare):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -432,7 +507,8 @@ class TestListed(TestShare):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN country code, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -538,7 +614,8 @@ class TestListed(TestShare):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -577,7 +654,8 @@ class TestListed(TestShare):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -590,7 +668,7 @@ class TestListed(TestShare):
         dumper.delete(delete_folder=True)  # Delete dump folder and contents
         dumper.makedir()
         # Insert only selected subset of securities meta-data
-        # Update all data instances: Listed & TradeEOD. Force a limited set of 3
+        # Update all data instances: Listed & ListedEOD. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         Listed.update_all(  # Method to be tested
             self.session, self.get_meta_method,
@@ -602,7 +680,7 @@ class TestListed(TestShare):
         self.assertTrue(
             dumper.exists(Listed), 'Listed dump file not found.')
         self.assertTrue(
-            dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+            dumper.exists(ListedEOD), 'ListedEOD dump file not found.')
 
     def test_1_reuse(self):
         """Reuse dumped data as a database initialization resource.
@@ -629,14 +707,15 @@ class TestListed(TestShare):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
 
-        # Retrieve the submitted TradeEOD data from asset_base
+        # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame([self.to_eod_dict(item)
-                           for item in self.session.query(TradeEOD).all()])
+                           for item in self.session.query(ListedEOD).all()])
         # Test
         df['date_stamp'] = pd.to_datetime(df['date_stamp'])
         df_last_date = df['date_stamp'].iloc[-1].to_pydatetime().date()
@@ -650,10 +729,11 @@ class TestListed(TestShare):
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
         # Test security `time_series_last_date` attributes
-        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
+        ts_last_date = TimeSeriesMeta.get_last_date(
+            self.session, Listed, ListedEOD)
         self.assertEqual(
             ts_last_date, df_last_date,
-            'The TradeEOD time series dates do not seem correct.'
+            'The ListedEOD time series dates do not seem correct.'
             'Please run `testListed.test_0_dump` first.')
 
     def test_key_code_id_table(self):
@@ -663,22 +743,22 @@ class TestListed(TestShare):
         instances_list = self.session.query(Listed).all()
         test_df = pd.DataFrame(
             [(item.id, item.key_code) for item in instances_list],
-            columns=['entity_id', 'isin'])
+            columns=['id', 'isin'])
         df = Listed.key_code_id_table(self.session)
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all_trade_eod(self):
-        """Update all Listed and TradeEOD objs from their getter methods."""
+        """Update all Listed and ListedEOD objs from their getter methods."""
         # Insert only selected subset of securities meta-data
-        # Update all data instances: Listed & TradeEOD. Force a limited set of 3
+        # Update all data instances: Listed & ListedEOD. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         Listed.update_all(  # Method to be tested
             self.session, self.get_meta_method,
             get_eod_method=self.get_eod_method,
             _test_isin_list=[self.isin, self.isin1, self.isin2])
-        # Retrieve the submitted TradeEOD data from asset_base
+        # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame([self.to_eod_dict(item)
-                           for item in self.session.query(TradeEOD).all()])
+                           for item in self.session.query(ListedEOD).all()])
         # Test
         df['date_stamp'] = pd.to_datetime(df['date_stamp'])
         df.sort_values(['date_stamp', 'ticker'], inplace=True)
@@ -691,7 +771,8 @@ class TestListed(TestShare):
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
         # Test security `time_series_last_date` attributes
-        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
+        ts_last_date = TimeSeriesMeta.get_last_date(
+            self.session, Listed, ListedEOD)
         self.assertEqual(ts_last_date, datetime.date.today())
 
     def test_get_eod_trade_series(self):
@@ -699,7 +780,7 @@ class TestListed(TestShare):
         # Insert only selected subset of Listed instances from meta-data
         # Listed.from_data_frame(
         #     self.session, data_frame=self.selected_securities_dataframe)
-        # Update all data instances: Listed & TradeEOD. Force a limited set of 3
+        # Update all data instances: Listed & ListedEOD. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         Listed.update_all(
             self.session, self.get_meta_method,
@@ -740,7 +821,7 @@ class TestListed(TestShare):
         ----
         This test relies heavily on ``test_get_eod_trade_series`` passing.
         """
-        # Update all data instances: Listed & TradeEOD. Force a limited set of 3
+        # Update all data instances: Listed & ListedEOD. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         Listed.update_all(
             self.session, self.get_meta_method,
@@ -865,7 +946,8 @@ class TestListedEquity(TestListed):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -891,7 +973,8 @@ class TestListedEquity(TestListed):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -943,7 +1026,8 @@ class TestListedEquity(TestListed):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN country code, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -977,7 +1061,8 @@ class TestListedEquity(TestListed):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -1027,7 +1112,8 @@ class TestListedEquity(TestListed):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
@@ -1051,7 +1137,7 @@ class TestListedEquity(TestListed):
         dumper.delete(delete_folder=True)  # Delete dump folder and contents
         dumper.makedir()
         # Insert only selected subset of securities meta-data. Update all data
-        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         ListedEquity.update_all(  # Method to be tested
             self.session, self.get_meta_method,
@@ -1064,7 +1150,7 @@ class TestListedEquity(TestListed):
         self.assertTrue(
             dumper.exists(ListedEquity), 'Listed dump file not found.')
         self.assertTrue(
-            dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+            dumper.exists(ListedEOD), 'ListedEOD dump file not found.')
         self.assertTrue(
             dumper.exists(Dividend), 'Dividend dump file not found.')
 
@@ -1093,14 +1179,15 @@ class TestListedEquity(TestListed):
         self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
         self.assertEqual(listed.domicile.country_code, self.isin[0:2])
-        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile.country_code,
+                         self.issuer_domicile_code)
         self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
         self.assertEqual(listed.status, listed.status)
 
-        # Retrieve the submitted TradeEOD data from asset_base
+        # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame([self.to_eod_dict(item)
-                           for item in self.session.query(TradeEOD).all()])
+                           for item in self.session.query(ListedEOD).all()])
         # Test
         df['date_stamp'] = pd.to_datetime(df['date_stamp'])
         df.sort_values(['date_stamp', 'ticker'], inplace=True)
@@ -1135,9 +1222,9 @@ class TestListedEquity(TestListed):
             'Dividend test data mismatch')
 
     def test_update_all_trade_eod_and_dividends(self):
-        """Update all Listed, TradeEOD, Dividend objs from getter methods."""
+        """Update all Listed, ListedEOD, Dividend objs from getter methods."""
         # Insert only selected subset of securities meta-data. Update all data
-        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         ListedEquity.update_all(  # Method to be tested
             self.session, self.get_meta_method,
@@ -1145,9 +1232,9 @@ class TestListedEquity(TestListed):
             get_dividends_method=self.get_dividends_method,
             _test_isin_list=[self.isin, self.isin1, self.isin2])
 
-        # Retrieve the submitted TradeEOD data from asset_base
+        # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame([self.to_eod_dict(item)
-                           for item in self.session.query(TradeEOD).all()])
+                           for item in self.session.query(ListedEOD).all()])
         # Test
         df['date_stamp'] = pd.to_datetime(df['date_stamp'])
         df.sort_values(['date_stamp', 'ticker'], inplace=True)
@@ -1184,7 +1271,7 @@ class TestListedEquity(TestListed):
     def test_get_dividend_series(self):
         """Return the EOD trade data series for the security."""
         # Insert only selected subset of securities meta-data. Update all data
-        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         ListedEquity.update_all(  # Method to be tested
             self.session, self.get_meta_method,
@@ -1214,7 +1301,7 @@ class TestListedEquity(TestListed):
     def test_time_series(self):
         """Retrieve historic time-series"""
         # Insert only selected subset of securities meta-data. Update all data
-        # instances: ListedEquity, TradeEOD & Dividend. Force a limited set of 3
+        # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
         ListedEquity.update_all(  # Method to be tested
             self.session, self.get_meta_method,
@@ -1250,6 +1337,7 @@ class Suite(object):
         test_classes = [
             TestAsset,
             TestCash,
+            TestForex,
             TestShare,
             TestListed,
             TestListedEquity,

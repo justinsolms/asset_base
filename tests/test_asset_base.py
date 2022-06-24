@@ -35,7 +35,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from asset_base.asset_base import AssetBase, replace_time_series_labels
-from asset_base.time_series import Dividend, TradeEOD
+from asset_base.time_series import Dividend, ListedEOD
 import asset_base.financial_data as fd
 
 # Get module-named logger.
@@ -135,10 +135,10 @@ class TestAssetBase(unittest.TestCase):
         self.asset_base.dump()
         # Must have dumped ListedEquity data for this test to work!
         dumper = Dump(testing=True)
-        data = dumper.read(['ListedEquity', 'TradeEOD', 'Dividend'])
+        data = dumper.read(['ListedEquity', 'ListedEOD', 'Dividend'])
         self.assertIsInstance(data, dict)
         self.assertIn('ListedEquity', data.keys())
-        self.assertIn('TradeEOD', data.keys())
+        self.assertIn('ListedEOD', data.keys())
         self.assertIn('Dividend', data.keys())
 
     def test_reuse(self):
@@ -155,7 +155,7 @@ class TestAssetBase(unittest.TestCase):
 
         # Get database data
         securities_data = ListedEquity.to_data_frame(self.session)
-        eod_data = TradeEOD.to_data_frame(self.session, ListedEquity)
+        eod_data = ListedEOD.to_data_frame(self.session, ListedEquity)
         dividend_data = Dividend.to_data_frame(self.session, ListedEquity)
         # Get test data from feed
         fundamentals = fd.SecuritiesFundamentals()

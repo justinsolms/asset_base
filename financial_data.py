@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 class DumpReadError(_BaseException):
     """Dump file not found or could not be read."""
 
+
 class _Feed(object, metaclass=abc.ABCMeta):
     """Generic financial data feed class.
 
@@ -439,7 +440,7 @@ class SecuritiesHistory(_Feed):
             if data.empty:
                 return pd.DataFrame
             #  Reset the index as we need to form here on treat the index as
-            # column data.
+            # column data. The security and date info is in the index
             data.reset_index(inplace=True)
             # Extract by columns name and rename to a standard. This is also
             # then a check for expected columns.
@@ -507,7 +508,7 @@ class SecuritiesHistory(_Feed):
             if data.empty:
                 return pd.DataFrame
             #  Reset the index as we need to from here on treat the index as
-            # column data.
+            # column data. The security and date info is in the index
             data.reset_index(inplace=True)
             # Extract by columns name and rename to a standard. This is also
             # then a check for expected columns.
@@ -547,18 +548,14 @@ class ForexHistory(_Feed):
         self._data_path = None
         self._sub_path = None
 
-    forex_list = [
-        'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'HKD',
-        'NZD', 'SEK', 'KRW', 'SGD', 'NOK', 'MXN', 'INR', 'RUB', 'ZAR']
-
     def get_eod(
             self, forex_list, from_date=None, to_date=None, feed='EOD'):
         """ Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
 
-        forex_list : list of .asset_base.Listed or child classes
-            A list of securities that are listed and traded.
+        forex_list : list of .asset_base.Forex instances
+            A list of forex for which data are required.
         from_date : datetime.date
             Inclusive start date of historical data. If not provided then the
             date is set to 1900-01-01.
@@ -570,9 +567,6 @@ class ForexHistory(_Feed):
                 'EOD' - eod_historical_data
 
         """
-        if forex_list is None:
-            forex_list = self.forex_list
-
         if feed == 'EOD':
             column_dict = {
                 'date': 'date_stamp',
@@ -584,9 +578,12 @@ class ForexHistory(_Feed):
                 'open': 'open',
                 'volume': 'volume',
             }
-
+            symbol_list = [(
+                s.base_currency_ticker + s.price_currency_ticker
+                ) for s in forex_list]
+            feed = eod.BulkHistorical()
             try:
-                data = feed.get_forex(forex_list, from_date, to_date)
+                data = feed.get_forex(symbol_list, from_date, to_date)
             except Exception as ex:
                 logger.error('Failed to get Forex data.')
                 raise ex
@@ -594,7 +591,7 @@ class ForexHistory(_Feed):
             if data.empty:
                 return pd.DataFrame
             #  Reset the index as we need to from here on treat the index as
-            # column data.
+            # column data. The security and date info is in the index
             data.reset_index(inplace=True)
             # Extract by columns name and rename to a standard. This is also
             # then a check for expected columns.

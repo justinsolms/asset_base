@@ -32,7 +32,7 @@ from asset_base.financial_data import Dump
 from asset_base.common import Common
 from asset_base.entity import Currency, Exchange, Issuer
 from asset_base.industry_class import IndustryClassICB
-from asset_base.time_series import Dividend, TradeEOD
+from asset_base.time_series import Dividend, ForexEOD, ListedEOD
 
 # Get module-named logger.
 import logging
@@ -143,6 +143,9 @@ class Asset(Common):
     _owner_id = Column(Integer, ForeignKey('entity.id'))
     owner = relationship(
         'Entity', backref='asset_list', foreign_keys=[_owner_id])
+
+    # Historical ListedEOD end-of-day (EOD) time-series collection
+    _eod_series = relationship('SimpleEOD', backref='asset')
 
     # TODO: This where we would add asset prices
     # TODO: This is were we would add asset fundamental data relationships
@@ -378,7 +381,7 @@ class Cash(Asset):
 
     @property
     def ticker(self):
-        """Currency ticker."""
+        """ISO 4217 3-letter currency code."""
         return self.currency.ticker
 
     @property
@@ -557,12 +560,12 @@ class Forex(Cash):
 
     """
 
-    __tablename__ = 'cash'
+    __tablename__ = 'forex'
     __mapper_args__ = {'polymorphic_identity': __tablename__}
 
     id = Column(Integer, ForeignKey('cash.id'), primary_key=True)
 
-    key_code_name = 'forex_code'
+    key_code_name = 'ticker'
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -590,16 +593,16 @@ class Forex(Cash):
         """Instance initialization."""
 
         # The name is constrained to that of the currency.
-        name = f'{base_currency.name} priced in {price_currency.name}'
         # Note that we set the pricing currency of the cash asset here.
-        super().__init__(name, price_currency, **kwargs)
+        super().__init__(price_currency, **kwargs)
+        self.name = f'{base_currency.ticker}{price_currency.ticker}'
 
         self.currency = price_currency
         self.base_currency = base_currency
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return 'Forex: {} priced in {}'.format(
+        return 'One {} priced in {}'.format(
             self.base_currency.ticker, self.currency.ticker)
 
     def __repr__(self):
@@ -608,8 +611,18 @@ class Forex(Cash):
             self._class_name, self.base_currency.ticker, self.currency.ticker)
 
     @property
+    def base_currency_ticker(self):
+        """ISO 4217 3-letter base currency code."""
+        return self.base_currency.ticker
+
+    @property
+    def price_currency_ticker(self):
+        """ISO 4217 3-letter price currency (foreign currency) code."""
+        return self.currency.ticker
+
+    @property
     def ticker(self):
-        """Currency ticker."""
+        """ISO 4217 3-letter currency code."""
         return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
 
     @property
@@ -709,6 +722,8 @@ class Forex(Cash):
             then the ``ForexEOD`` will not be created.
 
         """
+        # Create Forex instances as per the Forex.foreign_currencies list
+        # attribute
         foreign_currencies = session.query(Currency).filter(
             Currency.ticker.in_(cls.foreign_currencies),
             ).all()
@@ -722,7 +737,7 @@ class Forex(Cash):
             Forex.factory(
                 session, cls.root_currency, price_currency.ticker)
 
-        # Get EOD trade data.
+        # Get EOD trade data for Forex.
         # TODO: Write ForexEOD
         if get_forex_method is not None:
             ForexEOD.update_all(session, cls, get_forex_method)
@@ -1022,9 +1037,6 @@ class Listed(Share):
         else:
             self.status = 'listed'
 
-        # Set last time series update to distant past
-        self.time_series_last_date = datetime.date(1900, 1, 1)
-
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return (
@@ -1194,7 +1206,8 @@ class Listed(Share):
                         Exchange.mic == mic, cls.ticker == ticker).one()
             else:
                 raise FactoryError(
-                    'Expected either `isin` or `ticker` and `mic` arguments.')
+                    'Expected arguments, single `isin` or `ticker`-`mic` pair.',
+                    action='Retrieve Failed')
         except NoResultFound:
             # Create and add a new instance below if allowed
             if not create:
@@ -1204,13 +1217,13 @@ class Listed(Share):
             # None
             if not all([listed_name, isin, ticker]):
                 raise FactoryError(
-                    'Expected valid listed_name, isin and ticker arguments. '
-                    'Some are None.')
+                    'Expected  arguments `listed_name`, `isin`, `ticker`. '
+                    'Some are None.', action='Create Failed')
             if not all([issuer_name, issuer_domicile_code]):
                 raise FactoryError(
-                    'Expected valid issuer_name, issuer_domicile_code '
+                    'Expected valid `issuer_name`, `issuer_domicile_code` '
                     'arguments. Some are None.',
-                    action='Creation failed')
+                    action='Create failed')
             if mic is None:
                 raise FactoryError(
                     'Expect valid exchange MIC argument. Got None.')
@@ -1219,13 +1232,15 @@ class Listed(Share):
                 exchange = Exchange.factory(session, mic=mic)
             except FactoryError:
                 # The exchange must already exist.
-                raise FactoryError(f'Exchange {mic} not found.')
+                raise FactoryError(
+                    f'Exchange {mic} not found.', action='Create Failed')
             try:
                 issuer = Issuer.factory(
                     session, issuer_name, issuer_domicile_code)
             except FactoryError:
                 raise FactoryError(
-                    'Could not create or retrieve the Issuer')
+                    'Could not create or retrieve the Issuer. '
+                    'Check Issuer arguments.', action='Create Failed')
             # Now we have all required arguments to create
             obj = cls(listed_name, issuer, isin, exchange, ticker, **kwargs)
             session.add(obj)
@@ -1252,11 +1267,15 @@ class Listed(Share):
             **kwargs):
         """ Update/create all the objects in the asset_base session.
 
-        This method updates its class collection of ``TradeEOD`` instances from
+        Note
+        ----
+        ``ListedEOD`` may mean a polymorph or child class such as ``ListedEOD``.
+
+        This method updates its class collection of ``ListedEOD`` instances from
         the ``financial_data`` module.
 
         This method sets the ``Listed.time_series_last_date`` attribute to
-        ``datetime.datetime.today()`` for its collection of  ``TradeEOD``
+        ``datetime.datetime.today()`` for its collection of  ``ListedEOD``
         instances. This is conditional to the ``last_update`` argument.
 
         Parameters
@@ -1270,10 +1289,10 @@ class Listed(Share):
             created.
         get_eod_method : financial_data module class method, optional
             The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the ``TradeEOD.factory`` method arguments. This is
+            same name as all the ``ListedEOD.factory`` method arguments. This is
             for the securities time series trade end of day data form which the
-            ``TradeEOD`` instances shall be created. If this argument is omitted
-            then the ``TradeEOD`` will not be created.
+            ``ListedEOD`` instances shall be created. If this argument is omitted
+            then the ``ListedEOD`` will not be created.
 
         No object shall be destroyed, only updated, or missing object created.
 
@@ -1283,7 +1302,7 @@ class Listed(Share):
 
         # Get EOD trade data.
         if get_eod_method is not None:
-            TradeEOD.update_all(session, cls, get_eod_method)
+            ListedEOD.update_all(session, cls, get_eod_method)
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -1312,7 +1331,7 @@ class Listed(Share):
 
         # For all class instances in the database get a table for their
         # time-series
-        TradeEOD.dump(session, dumper, Listed)
+        ListedEOD.dump(session, dumper, Listed)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
@@ -1345,7 +1364,7 @@ class Listed(Share):
 
         # For all class instances in the database get a table for their
         # time-series
-        TradeEOD.reuse(session, dumper, Listed)
+        ListedEOD.reuse(session, dumper, Listed)
 
     def get_eod_trade_series(self):
         """Return the EOD trade data series for the security.
@@ -1364,12 +1383,12 @@ class Listed(Share):
         if len(trade_eod_dict_list) == 0:
             raise TimeSeriesNoData(
                 f'No EOD trade data for  security {self.identity_code}.')
-        series = pd.DataFrame(trade_eod_dict_list)
-        series['date_stamp'] = pd.to_datetime(series['date_stamp'])
-        series.set_index('date_stamp', inplace=True)
-        series.sort_index(inplace=True)  # Assure ascending
-        series.name = self
-        return series
+        data_frame = pd.DataFrame(trade_eod_dict_list)
+        data_frame['date_stamp'] = pd.to_datetime(data_frame['date_stamp'])
+        data_frame.set_index('date_stamp', inplace=True)
+        data_frame.sort_index(inplace=True)  # Assure ascending
+        data_frame.name = self
+        return data_frame
 
     def get_last_eod_trades(self):
         """Return the last EOD trade data for the security.
@@ -1378,7 +1397,7 @@ class Listed(Share):
         -------
         dict
             An End-Of-Day (EOD) price data dictionary with keys from the
-            ``TradeEOD.to_dict()`` method.
+            ``ListedEOD.to_dict()`` method.
         """
         # TODO: There must be a more efficient algo to fetch the last price set.
         last_eod_dict = self.get_eod_trade_series().iloc[-1].to_dict()
@@ -1520,6 +1539,9 @@ class ListedEquity(Listed):
     #  A short class name for use in the alt_name method.
     _name_appendix = 'Equity'
 
+    # FIXME: The __repr__ string is printing Currency.__str__ instead of
+    # Currency.__repr__
+
     def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
         super().__init__(
@@ -1602,11 +1624,11 @@ class ListedEquity(Listed):
             **kwargs):
         """ Update/create all the objects in the asset_base session.
 
-        This method updates its class collection of ``TradeEOD`` and
+        This method updates its class collection of ``ListedEOD`` and
         ``Dividend`` instances from the ``financial_data`` module.
 
         This method sets the ``Listed.time_series_last_date`` attribute to
-        ``datetime.datetime.today()`` for its collection of  ``TradeEOD`` and
+        ``datetime.datetime.today()`` for its collection of  ``ListedEOD`` and
         ``Dividend`` instances. This is conditional to the ``last_update``
         argument.
 
@@ -1621,10 +1643,10 @@ class ListedEquity(Listed):
             shall be created.
         get_eod_method : financial_data module class method, optional
             The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to the ``TradeEOD`` ``factory`` method.
+            in columns named according to the ``ListedEOD`` ``factory`` method.
             This is for the securities time series trade end of day data form
-            which the ``TradeEOD`` instances shall be created. If this argument
-            is omitted then the ``TradeEOD`` will not be created.
+            which the ``ListedEOD`` instances shall be created. If this argument
+            is omitted then the ``ListedEOD`` will not be created.
         get_dividend_method : financial_data module class method, optional
             The method that returns a ``pandas.DataFrame`` with the data items
             in columns named according to the ``Dividend`` ``factory``
@@ -1702,7 +1724,7 @@ class ListedEquity(Listed):
 
         # For all class instances in the database get a table for their
         # time-series
-        Dividend.reuse(session, dumper, Listed)
+        Dividend.reuse(session, dumper, ListedEquity)
 
     def get_dividend_series(self):
         """Return the dividends data series for the security.

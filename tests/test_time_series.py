@@ -7,7 +7,7 @@ from asset_base.financial_data import Dump, SecuritiesFundamentals, SecuritiesHi
 
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Listed, ListedEquity
-from asset_base.time_series import Dividend, TimeSeriesBase, TimeSeriesMeta, TradeEOD
+from asset_base.time_series import Dividend, TimeSeriesBase, TimeSeriesMeta, ListedEOD
 from fundmanage.utils import date_to_str
 
 
@@ -87,7 +87,7 @@ class TestTimeSeriesBase(unittest.TestCase):
             self.session.flush()
 
 
-class TestTradeEOD(TestTimeSeriesBase):
+class TestListedEOD(TestTimeSeriesBase):
     """A single listed security's date-stamped EOD trade data."""
 
     def to_dict(self, item):
@@ -110,7 +110,7 @@ class TestTradeEOD(TestTimeSeriesBase):
         super().setUpClass()
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
-        cls.Cls = TradeEOD
+        cls.Cls = ListedEOD
         # Test data
         cls.from_date = '2020-01-01'
         cls.to_date = '2020-12-31'
@@ -141,11 +141,11 @@ class TestTradeEOD(TestTimeSeriesBase):
         # `setUp` as this risk mix-ups in the child test classes.
         listed = Listed.factory(self.session, isin=self.isin)
         # Test for AAPL Inc.
-        ts_item = TradeEOD(
+        ts_item = ListedEOD(
             listed, date_stamp=datetime.date.today(),
             open=1.0, close=2.0, high=3.0, low=4.0,
             adjusted_close=5.0, volume=6.0)
-        self.assertIsInstance(ts_item, TradeEOD)
+        self.assertIsInstance(ts_item, ListedEOD)
         self.assertEqual(ts_item._asset_id, listed.id)
         self.assertEqual(ts_item.date_stamp, datetime.date.today())
         self.assertEqual(ts_item.open, 1.0)
@@ -161,7 +161,7 @@ class TestTradeEOD(TestTimeSeriesBase):
         # `setUp` as this risk mix-ups in the child test classes.
         listed = Listed.factory(self.session, isin=self.isin)
         # Test for AAPL Inc.
-        ts_item = TradeEOD(
+        ts_item = ListedEOD(
             listed, date_stamp=datetime.date.today(),
             open=1.0, close=2.0, high=3.0, low=4.0,
             adjusted_close=5.0, volume=6.0)
@@ -179,10 +179,10 @@ class TestTradeEOD(TestTimeSeriesBase):
         date_stamp = df['date_stamp']
         df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
         # Call the tested method.
-        TradeEOD.from_data_frame(self.session, Listed, data_frame=df)
+        ListedEOD.from_data_frame(self.session, Listed, data_frame=df)
         # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(TradeEOD).all()])
+            [self.to_dict(item) for item in self.session.query(ListedEOD).all()])
         # Test against last date data
         last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d').date()
         df = df[df['date_stamp'] == last_date][self.test_columns]
@@ -193,7 +193,7 @@ class TestTradeEOD(TestTimeSeriesBase):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
         # Test security `time_series_last_date` attributes
-        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
+        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, ListedEOD)
         self.assertEqual(ts_last_date, df_last_date.date())
 
     def test_to_data_frame(self):
@@ -203,9 +203,9 @@ class TestTradeEOD(TestTimeSeriesBase):
         test_df = self.feed.get_eod(
             self.securities_list, self.from_date, self.to_date)
         # Call the tested method.
-        TradeEOD.from_data_frame(self.session, Listed, data_frame=test_df)
+        ListedEOD.from_data_frame(self.session, Listed, data_frame=test_df)
         # Method to be tested
-        df = TradeEOD.to_data_frame(self.session, Listed)
+        df = ListedEOD.to_data_frame(self.session, Listed)
         # Test - first aligning rows and columns
         df.sort_values(by=['isin', 'date_stamp'], inplace=True)
         test_df.sort_values(by=['isin', 'date_stamp'], inplace=True)
@@ -218,10 +218,10 @@ class TestTradeEOD(TestTimeSeriesBase):
         """ Update/create all the objects in the asset_base session."""
         # This test is stolen from test_financial_data
         # Call the tested method.
-        TradeEOD.update_all(self.session, Listed, self.feed.get_eod)
+        ListedEOD.update_all(self.session, Listed, self.feed.get_eod)
         # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(TradeEOD).all()])
+            [self.to_dict(item) for item in self.session.query(ListedEOD).all()])
         # Test over test-date-range
         df['date_stamp'] = pd.to_datetime(df['date_stamp'])
         df.set_index('date_stamp', inplace=True)
@@ -249,12 +249,12 @@ class TestTradeEOD(TestTimeSeriesBase):
         test_df = self.feed.get_eod(
             self.securities_list, self.from_date, self.to_date)
         # Call the tested method.
-        TradeEOD.from_data_frame(self.session, Listed, data_frame=test_df)
+        ListedEOD.from_data_frame(self.session, Listed, data_frame=test_df)
         # Dump methods to be tested
-        TradeEOD.dump(self.session, dumper, Listed)
+        ListedEOD.dump(self.session, dumper, Listed)
         # Verify dump file exists.
         self.assertTrue(
-            dumper.exists(TradeEOD), 'TradeEOD dump file not found.')
+            dumper.exists(ListedEOD), 'ListedEOD dump file not found.')
 
     def test_1_reuse(self):
         """Reuse dumped data as a database initialization resource.
@@ -267,14 +267,14 @@ class TestTradeEOD(TestTimeSeriesBase):
         dumper = Dump(testing=True)
         # Verify dump file exists.
         self.assertTrue(
-            dumper.exists(TradeEOD),
-            'TradeEOD dump file not found. '
-            'Please run `TestTradeEOD.test_0_dump` first.')
+            dumper.exists(ListedEOD),
+            'ListedEOD dump file not found. '
+            'Please run `TestListedEOD.test_0_dump` first.')
         # Reuse
-        TradeEOD.reuse(self.session, dumper, Listed)
+        ListedEOD.reuse(self.session, dumper, Listed)
         # Retrieve the reused/restored date stamped data from asset_base
         df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(TradeEOD).all()])
+            [self.to_dict(item) for item in self.session.query(ListedEOD).all()])
         # Keep last date for testing later
         date_stamp = pd.to_datetime(df['date_stamp'])
         df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
@@ -288,7 +288,7 @@ class TestTradeEOD(TestTimeSeriesBase):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
         # Test security `time_series_last_date` attributes
-        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, TradeEOD)
+        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, ListedEOD)
         self.assertEqual(ts_last_date, df_last_date.date())
 
 
@@ -542,7 +542,7 @@ class Suite(object):
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
             TestTimeSeriesBase,
-            TestTradeEOD,
+            TestListedEOD,
             TestDividend,
         ]
 

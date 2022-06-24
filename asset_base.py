@@ -418,7 +418,7 @@ class AssetBase(object):
         data download form feeds.
 
         The dump shall include data from the classes:
-        - ListedEquity (and its time series data: TradeEOD and Dividend)
+        - ListedEquity (and its time series data: ListedEOD and Dividend)
 
         This excludes the following data items which are always available as
         static data through the ``financial_data.Static`` class or as

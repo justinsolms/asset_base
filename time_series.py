@@ -153,8 +153,8 @@ class TimeSeriesBase(Base):
 
     Parameters
     ----------
-    listed : .Listed
-        The ``Listed`` instance the EOD data belongs to.
+    asset : .Asset (or polymorph child class)
+        The ``Asset`` instance the EOD data belongs to.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     """
@@ -182,9 +182,9 @@ class TimeSeriesBase(Base):
     date_column_names = ['date_stamp']
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
-    def __init__(self, listed, date_stamp):
+    def __init__(self, asset, date_stamp):
         """Instance initialization."""
-        self._asset_id = listed.id
+        self._asset_id = asset.id
         self.date_stamp = date_stamp
 
     @classmethod
@@ -210,7 +210,8 @@ class TimeSeriesBase(Base):
         data_frame : pandas.DataFrame
             A ``pandas.DataFrame`` with columns of the same name as this
             class' constructor method arguments, with the exception that instead
-            of a column named ``listed``, instead there must be an ``isin``
+            of a column named ``asset``,
+            FIXME: instead there must be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
 
         """
@@ -261,20 +262,20 @@ class TimeSeriesBase(Base):
 
         instances_list = list()
         data_table.set_index(
-            ['entity_id', 'date_stamp'], inplace=True, drop=True)
+            ['id', 'date_stamp'], inplace=True, drop=True)
         # Iterate over all Asset polymorph instances
 
         # Determine which, if any, security id's are present in the data.
-        entity_id_list = data_table.index.to_frame(
-            index=False).entity_id.drop_duplicates().to_list()
+        id_list = data_table.index.to_frame(
+            index=False).id.drop_duplicates().to_list()
         # Avoid empty data edge case - with certain date ranges in a data fetch,
         # there may be no new data to be found
-        if len(entity_id_list) == 0:
+        if len(id_list) == 0:
             # Nothing to process so just return
             return
         # Fetch the relevant securities
         security_list = session.query(
-            asset_class).filter(asset_class.id.in_(entity_id_list)).all()
+            asset_class).filter(asset_class.id.in_(id_list)).all()
         # Add data to each security's time series' asset_class
         for security in security_list:
             # Get the security's time series.
@@ -290,7 +291,7 @@ class TimeSeriesBase(Base):
             # Create the security's series list of class instances and extend
             # onto the instances list
             instances = [
-                cls(listed=security, **row) for index, row in series.iterrows()]
+                cls(asset=security, **row) for index, row in series.iterrows()]
             instances_list.extend(instances)
 
         # The bulk_save_objects does not work with inherited objects. Use
@@ -338,15 +339,17 @@ class TimeSeriesBase(Base):
         for instance in session.query(cls).all():
             # Get instance data dictionary and add the `Listed` ISIN number
             instance_dict = instance.to_dict()
-            instance_dict['entity_id'] = instance._asset_id
+            # Reference to the class primary key attribute Asset.id (or
+            # polymorph child class)
+            instance_dict['id'] = instance._asset_id
             record_list.append(instance_dict)
         instance_table = pd.DataFrame(record_list)
 
-        # Join in the `entity_id` column. Only for time series instances (left
+        # Join in the `id` column. Only for time series instances (left
         # join).
         data_table = instance_table.merge(
-            key_code_id_table, on='entity_id', how='left')
-        data_table.drop(columns='entity_id', inplace=True)
+            key_code_id_table, on='id', how='left')
+        data_table.drop(columns='id', inplace=True)
 
         # The date_stamp must be pandas.TimeStamp. Note that child classes may
         # redefine the `date_column_names` list.
@@ -386,20 +389,8 @@ class TimeSeriesBase(Base):
         from_date = TimeSeriesMeta.get_last_date(session, asset_class, cls)
         to_date = datetime.date.today()
 
-        # Skip data fetch and warn for all de-listed securities
-        securities_delisted = session.query(asset_class).filter(
-            asset_class.status == 'delisted').all()
-        for security in securities_delisted:
-            logger.warning(
-                f'Skipped {cls._class_name} data fetch for '
-                f'de-listed security {security.identity_code}.')
-
-        # Get all actively listed Listed instances so we can fetch their
-        # EOD trade data
-        securities_list = session.query(
-            asset_class).filter(asset_class.status == 'listed').all()
         # Get all financial data from the from_date till today.
-        data_frame = get_method(securities_list, from_date, to_date)
+        data_frame = get_method(asset_list, from_date, to_date)
         # Bulk add/update data.
         cls.from_data_frame(session, asset_class, data_frame)
         # Set Asset class last dates to today
@@ -470,13 +461,50 @@ class TimeSeriesBase(Base):
             session, asset_class, data_frame_dict[class_name])
 
 
+class SimpleEOD(TimeSeriesBase):
+    """A single listed security's date-stamped EOD trade data.
+
+    Parameters
+    ----------
+    asset : .Asset or child instance
+        The ``.Asset`` instance the EOD data belongs to.
+    date_stamp : datetime.date
+        The end-of-day (EOD) data date stamp.
+    price : float
+        Price for the day.
+
+    """
+
+    __tablename__ = 'simple_eod'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
+    """ Primary key."""
+
+    price = Column(Float, nullable=False)
+    """float: Price for the day."""
+
+    def __init__(
+            self, asset, date_stamp, price):
+        """Instance initialization."""
+        super().__init__(asset, date_stamp)
+        self.price = price
+
+    def to_dict(self):
+        """Convert all class price attributes to a dictionary."""
+        return {
+            "date_stamp": self.date_stamp,
+            "price": self.open,
+        }
+
+
 class TradeEOD(TimeSeriesBase):
     """A single listed security's date-stamped EOD trade data.
 
     Parameters
     ----------
-    listed : .Listed
-        The ``Listed`` instance the EOD data belongs to.
+    asset : .Asset or child instance
+        The ``.Asset`` instance the EOD data belongs to.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     open : float
@@ -533,10 +561,10 @@ class TradeEOD(TimeSeriesBase):
         return self.close
 
     def __init__(
-            self, listed, date_stamp,
+            self, asset, date_stamp,
             open, close, high, low, adjusted_close, volume):
         """Instance initialization."""
-        super().__init__(listed, date_stamp)
+        super().__init__(asset, date_stamp)
         self.open = open
         self.close = close
         self.high = high
@@ -555,6 +583,83 @@ class TradeEOD(TimeSeriesBase):
             "adjusted_close": self.adjusted_close,
             "volume": self.volume,
         }
+
+
+class ListedEOD(TradeEOD):
+    """A single listed security's date-stamped EOD trade data.
+
+    Parameters
+    ----------
+    asset : .Asset or child instance
+        The ``.Asset`` instance the EOD data belongs to.
+    date_stamp : datetime.date
+        The end-of-day (EOD) data date stamp.
+    open : float
+        Open price for the day.
+    close : float
+        The EOD closing price for the day.
+    high : float
+        High price for the day.
+    low : float
+        Low price for the day.
+    adjusted_close : float
+        Adjusted close price for the day. The closing price is the raw price,
+        which is just the cash value of the last transacted price before the
+        market closes. The adjusted closing price factors in anything that might
+        affect the stock price after the market closes.
+    volume : float
+        Number of shares traded in the day.
+
+    """
+
+    __tablename__ = 'listed_eod'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
+    """ Primary key."""
+
+    @classmethod
+    def update_all(cls, session, asset_class, get_method):
+        """ Update/create the eod trade data of all the Listed instances.
+
+        Warning
+        -------
+        The Listed.time_series_last_date attribute (or child class attribute) is
+        not updated by this method as it is the responsibility of the ``Listed``
+        class and its child classes to manage that attribute.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all this class' constructor method arguments.
+        asset_class : .asset.Asset (or child class)
+            The ``Asset`` class which has this time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
+
+        No object shall be destroyed, only updated, or missing object created.
+
+        """
+        # TODO: Find a way to get the financial_data module to look for delisted
+        # data. Then skipping de-listed securities below can be avoided
+
+        # Skip data fetch and warn for all de-listed securities
+        securities_delisted = session.query(asset_class).filter(
+            asset_class.status == 'delisted').all()
+        for security in securities_delisted:
+            logger.warning(
+                f'Skipped {cls._class_name} data fetch for '
+                f'de-listed security {security.identity_code}.')
+
+        # Get all actively listed Listed instances so we can fetch their
+        # EOD trade data
+        securities_list = session.query(
+            asset_class).filter(asset_class.status == 'listed').all()
+
+        super().update_all(session, asset_class, get_method, securities_list)
 
 
 class ForexEOD(TradeEOD):
@@ -584,18 +689,51 @@ class ForexEOD(TradeEOD):
 
     """
 
-    __tablename__ = 'tra_eod'
+    __tablename__ = 'forex_eod'
     __mapper_args__ = {'polymorphic_identity': __tablename__}
 
-    id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
     """ Primary key."""
 
     def __init__(
-            self, forex, date_stamp,
+            self, asset, date_stamp,
             open, close, high, low, adjusted_close, volume):
         """Instance initialization."""
-        super().__init__(forex, date_stamp,
+        super().__init__(
+            asset, date_stamp,
             open, close, high, low, adjusted_close, volume)
+
+    @classmethod
+    def update_all(cls, session, asset_class, get_method):
+        """ Update/create the eod trade data of all the Listed instances.
+
+        Warning
+        -------
+        The Listed.time_series_last_date attribute (or child class attribute) is
+        not updated by this method as it is the responsibility of the ``Listed``
+        class and its child classes to manage that attribute.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all this class' constructor method arguments.
+        asset_class : .asset.Asset (or child class)
+            The ``Asset`` class which has this time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
+
+        No object shall be destroyed, only updated, or missing object created.
+
+        """
+
+        # Get all actively listed Listed instances so we can fetch their
+        # EOD trade data
+        forex_list = session.query(asset_class).all()
+
+        super().update_all(session, asset_class, get_method, forex_list)
 
 
 class Dividend(TimeSeriesBase):
@@ -657,11 +795,11 @@ class Dividend(TimeSeriesBase):
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
     def __init__(
-            self, listed, date_stamp,
+            self, asset, date_stamp,
             currency, declaration_date, payment_date,
             period, record_date, unadjusted_value, adjusted_value, **kwargs):
         """Instance initialization."""
-        super().__init__(listed, date_stamp)
+        super().__init__(asset, date_stamp)
         self.currency = currency
         self.declaration_date = declaration_date
         self.payment_date = payment_date
@@ -684,6 +822,49 @@ class Dividend(TimeSeriesBase):
         }
 
         return data
+
+    @classmethod
+    def update_all(cls, session, asset_class, get_method):
+        """ Update/create the eod trade data of all the Listed instances.
+
+        Warning
+        -------
+        The Listed.time_series_last_date attribute (or child class attribute) is
+        not updated by this method as it is the responsibility of the ``Listed``
+        class and its child classes to manage that attribute.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all this class' constructor method arguments.
+        asset_class : .asset.Asset (or child class)
+            The ``Asset`` class which has this time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
+
+        No object shall be destroyed, only updated, or missing object created.
+
+        """
+        # TODO: Find a way to get the financial_data module to look for delisted
+        # data. Then skipping de-listed securities below can be avoided
+
+        # Skip data fetch and warn for all de-listed securities
+        securities_delisted = session.query(asset_class).filter(
+            asset_class.status == 'delisted').all()
+        for security in securities_delisted:
+            logger.warning(
+                f'Skipped {cls._class_name} data fetch for '
+                f'de-listed security {security.identity_code}.')
+
+        # Get all actively listed Listed instances so we can fetch their
+        # EOD trade data
+        securities_list = session.query(
+            asset_class).filter(asset_class.status == 'listed').all()
+
+        super().update_all(session, asset_class, get_method, securities_list)
 
 
 class LivePrices(Base):
