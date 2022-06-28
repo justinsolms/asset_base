@@ -18,7 +18,6 @@ import pandas as pd
 from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
-from sqlalchemy.orm.exc import NoResultFound
 
 from asset_base.financial_data import Dump
 
@@ -35,107 +34,6 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 # Pull in the meta data
 metadata = MetaData()
-
-
-class TimeSeriesMeta(Base):
-    """Meta data or information about the database.
-
-    Stored as string names with associated string values.
-
-    Parameters
-    ----------
-    name : string
-        The parameter by name.
-    value : string
-        The parameter value in string representation.
-
-    Attributes
-    ----------
-    name : string
-        The parameter by name.
-    value : string
-        The parameter value in string representation.
-
-
-    See Also
-    --------
-    .Model
-
-    """
-
-    __tablename__ = 'time_series_meta'
-
-    # Parameter name string.
-    name = Column(String(32), primary_key=True)
-
-    # Parameter value string.
-    value = Column(String(32), nullable=False)
-
-    def __init__(self, name, value):
-        """Instance initialization."""
-        self.name = name
-        self.value = value
-
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return f'TimeSeriesMeta name={self.name}, value={self.value}'
-
-    def __repr__(self):
-        """Return the official string output."""
-        return f'TimeSeriesMeta(name={self.name}, value={self.value})'
-
-    @classmethod
-    def set_value(cls, session, name, value):
-        """Set a named meta data value"""
-        try:
-            # Try to get the existing instance
-            obj = session.query(TimeSeriesMeta).filter(
-                TimeSeriesMeta.name == name).one()
-        except NoResultFound:
-            # Create and add the new instance
-            obj = TimeSeriesMeta(name, value)
-            session.add(obj)
-        else:
-            # Update existing instance
-            obj.value = value
-
-    @classmethod
-    def get_value(cls, session, name):
-        """Get a named meta data value"""
-        # Try to get the existing instance
-        obj = session.query(TimeSeriesMeta).filter(
-            TimeSeriesMeta.name == name).one()
-
-        return obj.value
-
-    @classmethod
-    def set_last_date(
-            cls, session,
-            asset_class: Asset, ts_class: TimeSeriesBase, date: datetime.date):
-        """Set the last date for an ``.asset`` class."""
-        asset_class_name = asset_class._class_name
-        ts_class_name = ts_class._class_name
-        cls.set_value(
-            session,
-            name=f'{asset_class_name}.{ts_class_name}.last_date',
-            value=date.strftime('%Y-%m-%d'))
-
-    @classmethod
-    def get_last_date(
-            cls, session, asset_class: Asset, ts_class: TimeSeriesBase
-    ) -> datetime.date:
-        """Get the last date for an ``.asset`` class."""
-        asset_class_name = asset_class._class_name
-        ts_class_name = ts_class._class_name
-        try:
-            value = cls.get_value(
-                session,
-                name=f'{asset_class_name}.{ts_class_name}.last_date',
-            )
-        except NoResultFound:
-            return datetime.date(1900, 1, 1)
-        else:
-            return datetime.datetime.strptime(value, '%Y-%m-%d').date()
 
 
 class TimeSeriesBase(Base):
@@ -385,12 +283,14 @@ class TimeSeriesBase(Base):
         No object shall be destroyed, only updated, or missing object created.
 
         """
-        # Determine date ranges.
-        from_date = TimeSeriesMeta.get_last_date(session, asset_class, cls)
-        to_date = datetime.date.today()
+        # FIXME: Modify the next two lines to individually take the `from_date`
+        # and `to_date` per asset and package them into the `asset_list` as
+        # required by the financial_data module  `SecuritiesHistory`  or
+        # `ForexHistory` `get_method`. Consider merging `SecuritiesHistory` and
+        # `ForexHistory`. Requires `Asset.get_last_date` method.
 
-        # Get all financial data from the from_date till today.
-        data_frame = get_method(asset_list, from_date, to_date)
+        # Get all financial data from- the from_date till today.
+        data_frame = get_method(asset_list)
         # Bulk add/update data.
         cls.from_data_frame(session, asset_class, data_frame)
         # Set Asset class last dates to today
