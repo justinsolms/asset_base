@@ -3,11 +3,11 @@ import datetime
 import pandas as pd
 from asset_base.common import TestSession
 
-from asset_base.financial_data import Dump, SecuritiesFundamentals, SecuritiesHistory, Static
+from asset_base.financial_data import Dump, AssetFundamentals, AssetHistory, Static
 
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Listed, ListedEquity
-from asset_base.time_series import Dividend, TimeSeriesBase, TimeSeriesMeta, ListedEOD
+from asset_base.time_series import Dividend, SimpleEOD, TimeSeriesBase, ListedEOD
 from fundmanage.utils import date_to_str
 
 
@@ -22,10 +22,10 @@ class TestTimeSeriesBase(unittest.TestCase):
         cls.Cls = TimeSeriesBase
         # Similar set up to test_financial_data
         # Securities meta-data
-        cls.get_method = SecuritiesFundamentals().get_securities
+        cls.get_method = AssetFundamentals().get_securities
         cls.securities_dataframe = cls.get_method()
         # Securities feed
-        cls.feed = SecuritiesHistory()
+        cls.feed = AssetHistory()
         # Select Test security symbol identities subset
         symbols = [('AAPL', 'XNYS'), ('MCD', 'XNYS'), ('STX40', 'XJSE')]
         cls.securities_dataframe.set_index(['ticker', 'mic'], inplace=True)
@@ -87,6 +87,25 @@ class TestTimeSeriesBase(unittest.TestCase):
             self.session.flush()
 
 
+class TestSimpleEOD(TestTimeSeriesBase):
+    """A simple time series with a price."""
+
+    def test___init__(self):
+        """Test class polymorphism functionality."""
+        # Create a Cash instance and add it to the session
+        listed = Listed(
+            self.name,  self.issuer, self.isin, self.exchange, self.ticker,
+            status=self.status)
+        ts_item = SimpleEOD(
+            listed, date_stamp=datetime.date.today(), price=123.45)
+        self.session.add(ts_item)
+        # Query the superclass Asset which should produce a Cash polymorphic
+        # instance
+        instance = self.session.query(TimeSeriesBase).one()
+        self.assertEqual(instance._class_name, 'SimpleEOD')
+        self.assertEqual(instance._discriminator, 'simple_eod')
+
+
 class TestListedEOD(TestTimeSeriesBase):
     """A single listed security's date-stamped EOD trade data."""
 
@@ -94,9 +113,9 @@ class TestListedEOD(TestTimeSeriesBase):
         """Convert all class price attributes to a dictionary."""
         return {
             "date_stamp": item.date_stamp,
-            "isin": item.listed.isin,
-            "ticker": item.listed.ticker,
-            "mic": item.listed.exchange.mic,
+            "isin": item.asset.isin,
+            "ticker": item.asset.ticker,
+            "mic": item.asset.exchange.mic,
             "open": item.open,
             "close": item.close,
             "high": item.high,
@@ -112,8 +131,8 @@ class TestListedEOD(TestTimeSeriesBase):
         # inherited.
         cls.Cls = ListedEOD
         # Test data
-        cls.from_date = '2020-01-01'
-        cls.to_date = '2020-12-31'
+        cls.from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d').date()
+        cls.to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d').date()
         cls.columns = [
             'date_stamp', 'ticker', 'mic', 'isin',
             'adjusted_close', 'close', 'high', 'low', 'open']
@@ -146,14 +165,22 @@ class TestListedEOD(TestTimeSeriesBase):
             open=1.0, close=2.0, high=3.0, low=4.0,
             adjusted_close=5.0, volume=6.0)
         self.assertIsInstance(ts_item, ListedEOD)
-        self.assertEqual(ts_item._asset_id, listed.id)
+        # test the inherited Asset backref
+        self.assertEqual(ts_item.asset, listed)
         self.assertEqual(ts_item.date_stamp, datetime.date.today())
+        self.assertEqual(ts_item.price, ts_item.close)
         self.assertEqual(ts_item.open, 1.0)
         self.assertEqual(ts_item.close, 2.0)
         self.assertEqual(ts_item.high, 3.0)
         self.assertEqual(ts_item.low, 4.0)
         self.assertEqual(ts_item.adjusted_close, 5.0)
         self.assertEqual(ts_item.volume, 6.0)
+
+        # Test polymorphism functionality by query of the superclass
+        # TimeSeriesBase which should produce a Listed_EOD polymorphic instance
+        instance = self.session.query(TimeSeriesBase).one()
+        self.assertEqual(instance._class_name, 'ListedEOD')
+        self.assertEqual(instance._discriminator, 'listed_eod')
 
     def test_session_commit(self):
         """Committing to the database."""
@@ -167,7 +194,7 @@ class TestListedEOD(TestTimeSeriesBase):
             adjusted_close=5.0, volume=6.0)
         self.session.add(ts_item)
         self.session.commit()
-        self.assertEqual(ts_item.listed, listed)
+        self.assertEqual(ts_item.asset, listed)
 
     def test_from_data_frame(self):
         """Get historical EOD for a specified list of securities."""
@@ -176,15 +203,13 @@ class TestListedEOD(TestTimeSeriesBase):
         df = self.feed.get_eod(
             self.securities_list, self.from_date, self.to_date)
         # Keep last date for testing later
-        date_stamp = df['date_stamp']
-        df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
         # Call the tested method.
         ListedEOD.from_data_frame(self.session, Listed, data_frame=df)
         # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(ListedEOD).all()])
         # Test against last date data
-        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d').date()
+        last_date = pd.to_datetime(self.to_date)
         df = df[df['date_stamp'] == last_date][self.test_columns]
         # Exclude adjusted_close as it changes
         df.drop(columns='adjusted_close', inplace=True)
@@ -192,9 +217,9 @@ class TestListedEOD(TestTimeSeriesBase):
         for i, item in enumerate(df.iterrows()):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
-        # Test security `time_series_last_date` attributes
-        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, ListedEOD)
-        self.assertEqual(ts_last_date, df_last_date.date())
+        # Test security time series last date
+        self.assertTrue(
+            all(x.get_last_eod_date() == last_date for x in self.securities_list))
 
     def test_to_data_frame(self):
         """Convert all instances to a single data table."""
@@ -212,6 +237,7 @@ class TestListedEOD(TestTimeSeriesBase):
         df.reset_index(drop=True, inplace=True)
         test_df.reset_index(drop=True, inplace=True)
         test_df = test_df[df.columns]  # Align columns rank
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all(self):
@@ -224,11 +250,7 @@ class TestListedEOD(TestTimeSeriesBase):
             [self.to_dict(item) for item in self.session.query(ListedEOD).all()])
         # Test over test-date-range
         df['date_stamp'] = pd.to_datetime(df['date_stamp'])
-        df.set_index('date_stamp', inplace=True)
-        df = df.loc[self.from_date:self.to_date]
-        df.reset_index(inplace=True)
-        # Test against last date data
-        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d')
+        last_date = pd.to_datetime(self.to_date)
         df = df[df['date_stamp'] == last_date][self.test_columns]
         # Exclude adjusted_close as it changes
         df.drop(columns='adjusted_close', inplace=True)
@@ -275,11 +297,8 @@ class TestListedEOD(TestTimeSeriesBase):
         # Retrieve the reused/restored date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(ListedEOD).all()])
-        # Keep last date for testing later
-        date_stamp = pd.to_datetime(df['date_stamp'])
-        df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
         # Test against last date data
-        last_date = datetime.datetime.strptime(self.to_date, '%Y-%m-%d').date()
+        last_date = pd.to_datetime(self.to_date)
         df = df[df['date_stamp'] == last_date][self.test_columns]
         # Exclude adjusted_close as it changes
         df.drop(columns='adjusted_close', inplace=True)
@@ -287,9 +306,9 @@ class TestListedEOD(TestTimeSeriesBase):
         for i, item in enumerate(df.iterrows()):
             symbol, series = item
             self.assertEqual(series.tolist(), self.test_values[i])
-        # Test security `time_series_last_date` attributes
-        ts_last_date = TimeSeriesMeta.get_last_date(self.session, Listed, ListedEOD)
-        self.assertEqual(ts_last_date, df_last_date.date())
+        # Test security time series last date
+        self.assertTrue(
+            all(x.get_last_eod_date() == last_date for x in self.securities_list))
 
 
 class TestDividend(TestTimeSeriesBase):
@@ -331,8 +350,8 @@ class TestDividend(TestTimeSeriesBase):
         # inherited.
         cls.Cls = Dividend
         # Test data
-        cls.from_date = '2020-01-01'
-        cls.to_date = '2020-12-31'
+        cls.from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d').date()
+        cls.to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d').date()
         cls.columns = [
             'date_stamp', 'ticker', 'mic', 'isin',
             'currency', 'declaration_date', 'payment_date', 'period',
@@ -372,7 +391,7 @@ class TestDividend(TestTimeSeriesBase):
             record_date=datetime.date.today(),
             unadjusted_value=1.0, adjusted_value=1.01)
         self.assertIsInstance(ts_item, Dividend)
-        self.assertEqual(ts_item._asset_id, listed_equity.id)
+        self.assertEqual(ts_item.asset, listed_equity)
         self.assertEqual(ts_item.date_stamp, datetime.date.today())
         self.assertEqual(ts_item.currency, 'ZAR')
         self.assertEqual(ts_item.declaration_date, datetime.date.today())
@@ -397,7 +416,8 @@ class TestDividend(TestTimeSeriesBase):
             unadjusted_value=1.0, adjusted_value=1.01)
         self.session.add(ts_item)
         self.session.commit()
-        self.assertEqual(ts_item.listed_equity, self.listed_equity)
+        self.assertEqual(ts_item.asset, self.listed_equity)
+        self.assertEqual(ts_item._asset_id, self.listed_equity.id)
 
     def test_from_data_frame(self):
         """Get historical dividends for a specified list of securities."""
@@ -406,8 +426,6 @@ class TestDividend(TestTimeSeriesBase):
         df = self.feed.get_dividends(
             self.securities_list, self.from_date, self.to_date)
         # Keep last date for testing later
-        date_stamp = df['date_stamp']
-        df_last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
         # Call the tested method.
         Dividend.from_data_frame(self.session, ListedEquity, data_frame=df)
         # Retrieve the submitted date stamped data from asset_base
@@ -427,9 +445,16 @@ class TestDividend(TestTimeSeriesBase):
             self.test_df.sort_index(axis='columns'),
             df.sort_index(axis='columns'),
             )
-        # Test security `time_series_last_date` attributes
-        ts_last_date = TimeSeriesMeta.get_last_date(self.session, ListedEquity, Dividend)
-        self.assertEqual(ts_last_date, df_last_date.date())
+        # Test security dividend time series last date
+        date_dict = dict(
+            (s.ticker, s.get_last_dividend_date().strftime('%Y-%m-%d'))
+            for s in self.securities_list)
+        test_date_dict = {
+            'STX40': '2020-10-21',
+            'AAPL': '2020-11-06',
+            'MCD': '2020-11-30',
+        }
+        self.assertEqual(test_date_dict, date_dict)
 
     def test_to_data_frame(self):
         """Convert all instances to a single data table."""
@@ -542,6 +567,7 @@ class Suite(object):
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
             TestTimeSeriesBase,
+            TestSimpleEOD,
             TestListedEOD,
             TestDividend,
         ]

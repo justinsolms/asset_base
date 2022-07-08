@@ -17,7 +17,7 @@ import stdnum.isin as stdisin
 from numpy import abs
 from scipy.signal import filtfilt
 
-from sqlalchemy import Float, Integer, String, Enum, Date, Boolean
+from sqlalchemy import Float, Integer, String, Enum, Boolean
 from sqlalchemy import MetaData, Column, ForeignKey
 
 from sqlalchemy.orm import relationship
@@ -31,7 +31,7 @@ from asset_base.financial_data import Dump
 from asset_base.common import Common
 from asset_base.entity import Currency, Exchange, Issuer
 from asset_base.industry_class import IndustryClassICB
-from asset_base.time_series import Dividend, ForexEOD, ListedEOD, SimpleEOD
+from asset_base.time_series import Dividend, ForexEOD, ListedEOD, SimpleEOD, TimeSeriesBase
 
 # Get module-named logger.
 import logging
@@ -143,10 +143,11 @@ class Asset(Common):
     owner = relationship(
         'Entity', backref='asset_list', foreign_keys=[_owner_id])
 
-    # Historical SimpleEOD end-of-day (EOD) time-series collection ranked by
-    # SimpleEOD.date_stamp
-    _eod_series = relationship(
-        SimpleEOD, order_by=SimpleEOD.date_stamp, backref='asset')
+    # All historical time-series collection ranked by date_stamp
+    _series = relationship(
+        TimeSeriesBase,
+        order_by=TimeSeriesBase.date_stamp,
+        back_populates='asset')
 
     # TODO: This where we would add asset prices
     # TODO: This is were we would add asset fundamental data relationships
@@ -316,7 +317,10 @@ class Asset(Common):
             data frame `date_stamp` index.
 
         """
-        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
+
+        trade_eod_dict_list = [
+            s.to_dict() for s in self._listed_eod_series]
+        import ipdb; ipdb.set_trace()
         if len(trade_eod_dict_list) == 0:
             raise TimeSeriesNoData(
                 f'No EOD trade data for asset {self.identity_code}.')
@@ -338,10 +342,30 @@ class Asset(Common):
             ``ListedEOD.to_dict()`` method.
         """
         # Note that _eod_series is ordered by ListedEOD.last_date
-        last_eod = self._eod_series[-1]
+        try:
+            last_eod = self._eod_series[-1]
+        except IndexError:
+            last_eod = None
 
-        # Return the dictionary of price items
         return last_eod.to_dict()
+
+    def get_last_eod_date(self):
+        """Return the EOD last date for the asset.
+
+        Returns
+        -------
+        datetime.date
+            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
+            time series .
+        """
+        # Note that _eod_series is ordered by ListedEOD.last_date
+        try:
+            last_eod = self._eod_series[-1]
+            last_eod_date = last_eod.date_stamp
+        except IndexError:
+            last_eod_date = None
+
+        return last_eod_date
 
     def time_series(self):
         """Return the EOD time series for the asset.
@@ -641,10 +665,13 @@ class Forex(Cash):
     _currency_id2 = Column(Integer, ForeignKey('currency.id'), nullable=True)
     base_currency = relationship(Currency, foreign_keys=[_currency_id2])
 
+    # Currency ticker is redundant information, but very useful and inexpensive
+    ticker = Column(String(6))
+
     # Historical ForexEOD end-of-day (EOD) time-series collection ranked by
     # ForexEOD.date_stamp
-    _eod_series = relationship(
-        ForexEOD, order_by=ForexEOD.date_stamp, backref='asset')
+    # _eod_series = relationship(
+    #     ForexEOD, order_by=ForexEOD.date_stamp, backref='asset')
 
     # The reference or root ticker. Its price will always be 1.0.
     root_currency = 'USD'
@@ -667,6 +694,10 @@ class Forex(Cash):
         self.currency = price_currency
         self.base_currency = base_currency
 
+        # Ticker is Joined ISO 4217 3-letter currency codes
+        self.ticker = '{}{}'.format(
+            self.base_currency.ticker, self.currency.ticker)
+
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return 'One {} priced in {}'.format(
@@ -686,11 +717,6 @@ class Forex(Cash):
     def price_currency_ticker(self):
         """ISO 4217 3-letter price currency (foreign currency) code."""
         return self.currency.ticker
-
-    @property
-    def ticker(self):
-        """ISO 4217 3-letter currency code."""
-        return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
 
     @property
     def key_code(self):
@@ -786,7 +812,7 @@ class Forex(Cash):
             same name as all the ``ForexEOD.factory`` method arguments. This is
             for the securities time series trade end of day data form which the
             ``ForexEOD`` instances shall be created. If this argument is omitted
-            then the ``ForexEOD`` will not be created.
+            then the ``ForexEOD`` time_series will not be created.
 
         """
         # Create Forex instances as per the Forex.foreign_currencies list
@@ -1042,6 +1068,13 @@ class Listed(Share):
     _exchange_id = Column(Integer, ForeignKey('exchange.id'), nullable=False)
     exchange = relationship('Exchange', backref='securities_list')
 
+    # Historical SimpleEOD end-of-day (EOD) time-series collection ranked by
+    # SimpleEOD.date_stamp
+    _listed_eod_series = relationship(
+        ListedEOD,
+        order_by=ListedEOD.date_stamp,
+        back_populates='listed')
+
     # Ticker on the listing exchange.
     ticker = Column(String(12), nullable=False)
     # National Securities Identifying Number
@@ -1054,8 +1087,8 @@ class Listed(Share):
 
     # Historical TradeEOD end-of-day (EOD) time-series collection ranked by
     # ListedEOD.date_stamp
-    _eod_series = relationship(
-        ListedEOD, order_by=ListedEOD.date_stamp, backref='listed')
+    # _eod_series = relationship(
+    #     ListedEOD, order_by=ListedEOD.date_stamp, backref='listed')
 
     # Listing status.
     status = Column(Enum('listed', 'delisted'), nullable=False)
@@ -1550,7 +1583,10 @@ class ListedEquity(Listed):
     """ Primary key."""
 
     # Historical Dividend end-of-day (EOD) time-series collection
-    _dividend_series = relationship('Dividend', backref='listed_equity')
+    _dividend_series = relationship(
+        'Dividend',
+        order_by=TimeSeriesBase.date_stamp,
+        back_populates='listed_equity')
 
     # Industry classification
     industry_class = Column(String(16), nullable=True)
@@ -1770,7 +1806,25 @@ class ListedEquity(Listed):
         series.name = self
         return series
 
-    # FIXME: Maybe supposed to be with Listed (where the _time_series attr is)
+    def get_last_dividend_date(self):
+        """Return the dividend last date for the listed asset.
+
+        Returns
+        -------
+        datetime.date
+            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
+            time series .
+        """
+        # Note that _dividend_series is ordered by Dividend.last_date
+        try:
+            last_dividend = self._dividend_series[-1]
+            last_dividend_date = last_dividend.date_stamp
+        except IndexError:
+            last_dividend_date = None
+
+        # Return the dictionary of price items
+        return last_dividend_date
+
     def time_series(self,
                     series='price', price_item='close', return_type='price',
                     tidy=False):
@@ -1831,8 +1885,9 @@ class ListedEquity(Listed):
             eod = self.get_eod()
             try:
                 price_series = eod[price_item]
-            except pd.KeyError:
-                raise ValueError('Unexpected `price_item` argument.')
+            except KeyError:
+                raise ValueError(
+                    'Unexpected `price_item` argument {price_item}.')
             # Adjust for quotes that are in cents
             if self.quote_units == 'cents':
                 price_series /= 100.0
@@ -1845,7 +1900,7 @@ class ListedEquity(Listed):
 
         def get_dividend_series():
             dividends = self.get_dividend_series()
-            dividend_series = dividends['adjusted_value']
+            dividend_series = dividends['unadjusted_value']
             # Adjust for quotes that are in cents
             if self.quote_units == 'cents':
                 dividend_series /= 100.0
@@ -1856,16 +1911,18 @@ class ListedEquity(Listed):
             price_shift = price.shift(1)
             # Try to get dividends if any
             try:
-                dividends = get_dividend_series()
+                dividend = get_dividend_series()
             except TimeSeriesNoData:
                 # New securities may not have dividends yet so warn.
-                logger.warning(
-                    f'No dividend data for security {self.identity_code}.')
+                logger.warning(f'No dividend data for {self.identity_code}.')
+                # No dividends
+                numerator = price
             else:
-                total_price = price.add(dividends, fill_value=0.0)
+                # With dividends
+                numerator = price.add(dividend, fill_value=0.0)
             # Total one period returns
-            total_returns = total_price / price_shift
-            # First return will NaN. Set to unity return.
+            total_returns = numerator / price_shift
+            # First return will be NaN. Default to unity return.
             total_returns.iloc[0] = 1.0
             return total_returns, price
 
@@ -1937,7 +1994,7 @@ class ListedEquity(Listed):
             elif return_type == 'total_price':
                 # FIXME: What about multiple dividends on the same day?
                 total_returns, price = get_total_returns(price_item)
-                total_returns.iloc[0] = price.iloc[0]
+                total_returns.iloc[0] = price.iloc[0]  # Normalise to start price
                 result = total_returns.cumprod()
             elif return_type == 'total_return':
                 total_returns, price = get_total_returns(price_item)

@@ -12,12 +12,13 @@ if TYPE_CHECKING:
     from asset_base.asset import Asset
 
 import sys
-import datetime
 import pandas as pd
 
 from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
+
+from sqlalchemy.orm import relationship
 
 from asset_base.financial_data import Dump
 
@@ -56,39 +57,65 @@ class TimeSeriesBase(Base):
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     """
+
+    __tablename__ = 'time_series_base'
+
     # Polymorphism discriminator.
     _discriminator = Column(String(32))
+
+    __mapper_args__ = {
+        'polymorphic_identity': __tablename__,
+        'polymorphic_on': _discriminator,
+    }
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     """int: Primary key."""
 
+    __table_args__ = (UniqueConstraint('_discriminator', '_asset_id', 'date_stamp'), )
+
+    # Foreign key giving ``Asset`` a time series capability
     _asset_id = Column(Integer, ForeignKey('asset.id'), nullable=False)
-    """int: Foreign key giving ``Asset`` a time series capability."""
+    asset = relationship('Asset', back_populates='_series')
 
     date_stamp = Column(Date, nullable=False)
     """datetime: EOD date."""
-
-    __tablename__ = 'time_series_base'
-    __mapper_largs__ = {
-        'polymorphic_identity': __tablename__,
-        'polymorphic_on': _discriminator,
-    }
-    __table_args__ = (
-        UniqueConstraint('_discriminator', '_asset_id', 'date_stamp'),
-    )
 
     date_column_names = ['date_stamp']
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
     def __init__(self, asset, date_stamp):
         """Instance initialization."""
-        self._asset_id = asset.id
+        self.asset = asset
         self.date_stamp = date_stamp
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        name = self._class_name
+        date = self.date_stamp
+        id_code = self.asset.identity_code
+
+        return f'Time series:{name}, date stamp:{date}, asset:{id_code}'
+
+    def __repr__(self):
+        """Return the official string output."""
+        name = self._class_name
+        asset = self.asset
+        date = self.date_stamp
+
+        return f'<{name}(asset={asset!r}, date_stamp={date})>'
 
     @classmethod
     @property
     def _class_name(cls):
         return cls.__name__
+
+    @classmethod
+    def _get_last_date(cls, security):
+        """Get the time series last date maintained by the security.
+
+        Override for other time series as needed.
+        """
+        return security.get_last_eod_date()
 
     @classmethod
     def from_data_frame(cls, session, asset_class: Asset, data_frame):
@@ -133,19 +160,6 @@ class TimeSeriesBase(Base):
         # Guarantee date ranking of the data
         data_table.sort_values(by='date_stamp')
 
-        # Keep only new dated data in the data_table. Due to the behaviour of
-        # financial data API services very often return which may include data
-        # falling on a date that has already been stored. This may lead to
-        # duplicate data which we wish to avoid.
-        last_date = TimeSeriesMeta.get_last_date(session, asset_class, cls)
-        if last_date is None:
-            # No last_date has been set yet as the asset_base is still empty.
-            pass
-        else:
-            last_date = pd.to_datetime(last_date)
-            keep_index = pd.to_datetime(last_date) < data_table['date_stamp']
-            data_table = data_table.loc[keep_index]
-
         # Replace pesky pd.NaT with None. Else SqlAlchemy DateTime columns
         # throw (exceptions.TypeError) %d format: a number is required, not
         # float
@@ -178,6 +192,21 @@ class TimeSeriesBase(Base):
         for security in security_list:
             # Get the security's time series.
             series = data_table.loc[security.id]
+
+            # Keep only new dated data in the data_table. Due to the behaviour
+            # of financial data API services very often returns data which may
+            # include data falling on a date that has already been stored. This
+            # may lead to duplicate data which we wish to avoid.
+            # TODO: Make changes to avoid this overhead
+            last_date = cls._get_last_date(security)
+            if last_date is None:
+                # No last_date has been set yet as the asset_base is still empty.
+                pass
+            else:
+                last_date = pd.to_datetime(last_date)
+                keep_index = pd.to_datetime(last_date) < series['date_stamp']
+                series = series.loc[keep_index]
+
             # Avoid empty series edge case
             if series.empty:
                 continue
@@ -196,14 +225,16 @@ class TimeSeriesBase(Base):
         # add_all instead.
         session.add_all(instances_list)
 
-        # Update the all securities last_date to the latest data_frame
-        # date_stamp
-        date_stamp = data_frame['date_stamp']
-        last_date = date_stamp.sort_values().iloc[-1].to_pydatetime()
-        # Make sure the date is a datetime.date instance to avoid a bug due to
-        # SQLite allowing the SqlAlchemy `Date` column type to be stored as a
-        # `DateTime` column type!!
-        TimeSeriesMeta.set_last_date(session, asset_class, cls, last_date)
+        # Commit here or time series wont be available for other essential
+        # operations such as Asset.get_last_dates(), etc.
+        # try:
+        #     session.commit()
+        # except Exception as ex:
+        #     logger.critical('Commit failed - rolling back.')
+        #     session.rollback()
+        #     logger.info('Rolled back.')
+        #     # Rethrow the exception
+        #     raise ex
 
     @classmethod
     def to_data_frame(cls, session, asset_class):
@@ -293,9 +324,6 @@ class TimeSeriesBase(Base):
         data_frame = get_method(asset_list)
         # Bulk add/update data.
         cls.from_data_frame(session, asset_class, data_frame)
-        # Set Asset class last dates to today
-        TimeSeriesMeta.set_last_date(
-            session, asset_class, cls, datetime.date.today())
 
     @classmethod
     def dump(cls, session, dumper: Dump, asset_class):
@@ -376,7 +404,7 @@ class SimpleEOD(TimeSeriesBase):
     """
 
     __tablename__ = 'simple_eod'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __mapper_args__ = {'polymorphic_identity': __tablename__, }
 
     id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
     """ Primary key."""
@@ -394,11 +422,11 @@ class SimpleEOD(TimeSeriesBase):
         """Convert all class price attributes to a dictionary."""
         return {
             "date_stamp": self.date_stamp,
-            "price": self.open,
+            "price": self.price,
         }
 
 
-class TradeEOD(TimeSeriesBase):
+class TradeEOD(SimpleEOD):
     """A single listed security's date-stamped EOD trade data.
 
     Parameters
@@ -428,7 +456,7 @@ class TradeEOD(TimeSeriesBase):
     __tablename__ = 'trade_eod'
     __mapper_args__ = {'polymorphic_identity': __tablename__}
 
-    id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('simple_eod.id'), primary_key=True)
     """ Primary key."""
 
     open = Column(Float, nullable=False)
@@ -455,16 +483,14 @@ class TradeEOD(TimeSeriesBase):
     volume = Column(Integer, nullable=False)
     """float: Number of shares traded in the day."""
 
-    @property
-    def price(self):
-        """float: The default price is the close price for EOD prices"""
-        return self.close
-
     def __init__(
             self, asset, date_stamp,
             open, close, high, low, adjusted_close, volume):
         """Instance initialization."""
-        super().__init__(asset, date_stamp)
+        super().__init__(
+            asset, date_stamp,
+            price=close,  # Convention that price=close price
+            )
         self.open = open
         self.close = close
         self.high = high
@@ -517,6 +543,16 @@ class ListedEOD(TradeEOD):
 
     id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
     """ Primary key."""
+
+    # Foreign key giving ``ListedEquity`` a Dividend series capability. Note:
+    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
+    # for the relationships with ``.asset.Asset._eod_series`` and
+    # ``.asset.ListedEquity._dividend_series`` to work and avoids the
+    # "SAWarning: relationship" warning for the relationship below.
+    _listed_equity_id = Column(
+        Integer, ForeignKey('listed_equity.id'), nullable=False)
+    listed = relationship(
+        'Listed', back_populates='_listed_eod_series')
 
     @classmethod
     def update_all(cls, session, asset_class, get_method):
@@ -669,6 +705,16 @@ class Dividend(TimeSeriesBase):
     """ Primary key."""
     # NOTE: Inherited _asset_id backrefs to the polymorphic ListedEquity
 
+    # Foreign key giving ``ListedEquity`` a Dividend series capability. Note:
+    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
+    # for the relationships with ``.asset.Asset._eod_series`` and
+    # ``.asset.ListedEquity._dividend_series`` to work and avoids the
+    # "SAWarning: relationship" warning for the relationship below.
+    _listed_equity_id = Column(
+        Integer, ForeignKey('listed_equity.id'), nullable=False)
+    listed_equity = relationship(
+        'ListedEquity', back_populates='_dividend_series')
+
     currency = Column(String, nullable=False)
     """str: 3-Letter currency symbol for the dividend currency. """
 
@@ -700,6 +746,7 @@ class Dividend(TimeSeriesBase):
             period, record_date, unadjusted_value, adjusted_value, **kwargs):
         """Instance initialization."""
         super().__init__(asset, date_stamp)
+        self.listed_equity = asset  # See .asset.ListedEquity._dividend_series
         self.currency = currency
         self.declaration_date = declaration_date
         self.payment_date = payment_date
@@ -707,6 +754,14 @@ class Dividend(TimeSeriesBase):
         self.record_date = record_date
         self.unadjusted_value = unadjusted_value
         self.adjusted_value = adjusted_value
+
+        assert self.asset == self.listed_equity, \
+            'The Asset and ListedEquity ust be the same.'
+
+    @classmethod
+    def _get_last_date(cls, security):
+        """Get the time series last date maintained by the security."""
+        return security.get_last_dividend_date()
 
     def to_dict(self):
         """Convert all class dividend attributes to a dictionary."""
