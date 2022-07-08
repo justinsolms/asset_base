@@ -18,6 +18,7 @@ dictionaries for ease of maintenance.
 
 
 """
+import datetime
 import asset_base.eod_historical_data as eod
 
 import pandas as pd
@@ -315,7 +316,7 @@ class Static(_Feed):
         return data
 
 
-class SecuritiesFundamentals(_Feed):
+class AssetFundamentals(_Feed):
     """Provide fundamental and meta-data of the working universe securities."""
 
     def __init__(self):
@@ -387,9 +388,10 @@ class SecuritiesFundamentals(_Feed):
         return data
 
 
-class SecuritiesHistory(_Feed):
+class AssetHistory(_Feed):
     """Provide securities historical data from data feeds.
 
+    This class manages
     """
     def __init__(self):
         """Instance initialization."""
@@ -397,17 +399,44 @@ class SecuritiesHistory(_Feed):
         self._data_path = None
         self._sub_path = None
 
+    @staticmethod
+    def _preprocessor(asset_list, from_date, to_date, series='eod'):
+        """ Generate date list with date ranges for each asset."""
+        # From date list, one per Asset instance
+        if from_date is None:
+            # One asset, one date
+            # FIXME: For dividends we must use the get_last_dividend_date
+            if series == 'eod':
+                from_date_list = [s.get_last_eod_date() for s in asset_list]
+            elif series == 'dividend':
+                from_date_list = [s.get_last_dividend_date() for s in asset_list]
+            else:
+                raise Exception('Unexpected `series` argument.')
+        else:
+            from_date_list = [from_date for s in asset_list]
+        # To date list, one per Asset instance. As such to future accommodate
+        # one asset, one date, mixed to_date(s) lists, as seen in the from_date
+        # above.
+        if to_date is None:
+            # Default to today
+            to_date_list = [datetime.date.today() for s in asset_list]
+        else:
+            to_date_list = [to_date for s in asset_list]
+
+        return from_date_list, to_date_list
+
     def get_eod(
-            self, securities_list, from_date=None, to_date=None, feed='EOD'):
+            self, asset_list, from_date=None, to_date=None, feed='EOD'):
         """ Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
 
-        securities_list : list of .asset_base.Listed or child classes
+        asset_list : list of .asset_base.Listed or child classes
             A list of securities that are listed and traded.
-        from_date : datetime.date
+        from_date : datetime.date, optional
             Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
+            date is set to the ``asset.Asset.get_last_eod_date()`` date for each
+            asset in the ``asset_list`` argument.
         to_date : datetime.date, optional
             Inclusive end date of historical data. If not provide then the date
             is set to today.
@@ -416,7 +445,20 @@ class SecuritiesHistory(_Feed):
                 'EOD' - eod_historical_data
 
         """
+        # Generate date list with date ranges for each asset.
+        from_date_list, to_date_list = self._preprocessor(
+            asset_list, from_date, to_date)
+
+        # Assemble symbol list
+        symbol_list = list()
+        for sec, from_date, to_date in zip(
+                asset_list, from_date_list, to_date_list):
+            symbol_list.append(
+                (sec.ticker, sec.exchange.eod_code, from_date, to_date))
+
+        # Pick feed
         if feed == 'EOD':
+            feed = eod.MultiHistorical()
             column_dict = {
                 'date': 'date_stamp',
                 'ticker': 'ticker',
@@ -428,11 +470,8 @@ class SecuritiesHistory(_Feed):
                 'open': 'open',
                 'volume': 'volume',
             }
-            symbol_list = [
-                (s.ticker, s.exchange.eod_code) for s in securities_list]
-            feed = eod.BulkHistorical()
             try:
-                data = feed.get_eod(symbol_list, from_date, to_date)
+                data = feed.get_eod(symbol_list)
             except Exception as ex:
                 logger.error('Failed to get EOD data.')
                 raise ex
@@ -449,11 +488,11 @@ class SecuritiesHistory(_Feed):
             # Replace EODHistoricalData.com's exchange codes (the mic column)
             # with exchange MICs
             eod_to_mic_dict = dict([
-                (s.exchange.eod_code, s.exchange.mic) for s in securities_list])
+                (s.exchange.eod_code, s.exchange.mic) for s in asset_list])
             data.replace({'mic': eod_to_mic_dict}, inplace=True)
             # Augment the ticker-mic with the matching ISIN code
             mic_ticker_to_isin_dict = dict([
-                ((s.exchange.mic, s.ticker), s.isin) for s in securities_list])
+                ((s.exchange.mic, s.ticker), s.isin) for s in asset_list])
             data['_key'] = data[['mic', 'ticker']
                                 ].to_records(index=False).tolist()
             data['isin'] = data['_key'].map(mic_ticker_to_isin_dict)
@@ -467,21 +506,39 @@ class SecuritiesHistory(_Feed):
         return data
 
     def get_dividends(
-            self, securities_list, from_date=None, to_date=None, feed='EOD'):
+            self, asset_list, from_date=None, to_date=None, feed='EOD'):
         """ Get historical dividends for a list of securities.
 
         This method fetches the data from the specified feed.
 
-        securities_list : list of .asset_base.Listed or child classes A list of
-            securities that are listed and traded. from_date : datetime.date
+        asset_list : list of .asset_base.Listed or child classes A list of
+            securities that are listed and traded.
+        from_date : datetime.date, optional
             Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01. to_date : datetime.date, optional
+            date is set to the ``asset.Asset.get_last_dividend_date()`` date for
+            each asset in the ``asset_list`` argument.
+        to_date : datetime.date, optional
             Inclusive end date of historical data. If not provide then the date
-            is set to today. feed : str The data feed module to use: 'EOD' -
-            eod_historical_data
+            is set to today.
+        feed : str
+            The data feed module to use:
+                'EOD' - eod_historical_data
 
         """
+        # Generate date list with date ranges for each asset.
+        from_date_list, to_date_list = self._preprocessor(
+            asset_list, from_date, to_date, series='dividend')
+
+        # Assemble symbol list
+        symbol_list = list()
+        for sec, from_date, to_date in zip(
+                asset_list, from_date_list, to_date_list):
+            symbol_list.append(
+                (sec.ticker, sec.exchange.eod_code, from_date, to_date))
+
+        # Pick feed
         if feed == 'EOD':
+            feed = eod.MultiHistorical()
             column_dict = {
                 'date': 'date_stamp',
                 'ticker': 'ticker',
@@ -496,11 +553,8 @@ class SecuritiesHistory(_Feed):
             }
             date_columns_list = [
                 'date_stamp', 'declaration_date', 'payment_date', 'record_date']
-            symbol_list = [
-                (s.ticker, s.exchange.eod_code) for s in securities_list]
-            feed = eod.BulkHistorical()
             try:
-                data = feed.get_dividends(symbol_list, from_date, to_date)
+                data = feed.get_dividends(symbol_list)
             except Exception() as ex:
                 logger.error('Failed to get dividend data.')
                 raise ex
@@ -517,12 +571,12 @@ class SecuritiesHistory(_Feed):
             # Replace EODHistoricalData.com's exchange codes (the mic column)
             # with exchange MICs
             eod_to_mic_dict = dict([
-                (s.exchange.eod_code, s.exchange.mic) for s in securities_list])
+                (s.exchange.eod_code, s.exchange.mic) for s in asset_list])
             data.replace({'mic': eod_to_mic_dict}, inplace=True)
             # Augment the ticker-mic with the matching ISIN code using a mapping
             # dictionary
             mic_ticker_to_isin_dict = dict([
-                ((s.exchange.mic, s.ticker), s.isin) for s in securities_list])
+                ((s.exchange.mic, s.ticker), s.isin) for s in asset_list])
             data['_key'] = data[['mic', 'ticker']
                                 ].to_records(index=False).tolist()
             data['isin'] = data['_key'].map(mic_ticker_to_isin_dict)
@@ -536,19 +590,7 @@ class SecuritiesHistory(_Feed):
 
         return data
 
-
-class ForexHistory(_Feed):
-    """Provide Forex historical data from data feeds.
-
-    """
-
-    def __init__(self):
-        """Instance initialization."""
-        super().__init__()
-        self._data_path = None
-        self._sub_path = None
-
-    def get_eod(
+    def get_forex(
             self, forex_list, from_date=None, to_date=None, feed='EOD'):
         """ Get historical EOD for a specified list of securities.
 
@@ -556,9 +598,10 @@ class ForexHistory(_Feed):
 
         forex_list : list of .asset_base.Forex instances
             A list of forex for which data are required.
-        from_date : datetime.date
+        from_date : datetime.date, optional
             Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
+            date is set to the ``asset.Asset.get_last_eod_date()`` date for each
+            asset in the ``asset_list`` argument.
         to_date : datetime.date, optional
             Inclusive end date of historical data. If not provide then the date
             is set to today.
@@ -567,7 +610,20 @@ class ForexHistory(_Feed):
                 'EOD' - eod_historical_data
 
         """
+        # Generate date list with date ranges for each asset.
+        from_date_list, to_date_list = self._preprocessor(
+            forex_list, from_date, to_date)
+
+        # Assemble symbol list
+        symbol_list = list()
+        for sec, from_date, to_date in zip(
+                forex_list, from_date_list, to_date_list):
+            symbol_list.append(
+                (sec.ticker, from_date, to_date))
+
+        # Pick feed
         if feed == 'EOD':
+            feed = eod.MultiHistorical()
             column_dict = {
                 'date': 'date_stamp',
                 'ticker': 'ticker',
@@ -578,12 +634,8 @@ class ForexHistory(_Feed):
                 'open': 'open',
                 'volume': 'volume',
             }
-            symbol_list = [(
-                s.base_currency_ticker + s.price_currency_ticker
-                ) for s in forex_list]
-            feed = eod.BulkHistorical()
             try:
-                data = feed.get_forex(symbol_list, from_date, to_date)
+                data = feed.get_forex(symbol_list)
             except Exception as ex:
                 logger.error('Failed to get Forex data.')
                 raise ex

@@ -10,17 +10,17 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
+import datetime
 import unittest
 import os
 import pandas as pd
 from asset_base.common import TestSession
 
 from asset_base.financial_data import Dump, DumpReadError, Static
-from asset_base.financial_data import SecuritiesFundamentals
-from asset_base.financial_data import SecuritiesHistory
-from asset_base.financial_data import ForexHistory
+from asset_base.financial_data import AssetFundamentals
+from asset_base.financial_data import AssetHistory
 from asset_base.entity import Currency, Domicile, Exchange
-from asset_base.asset import Listed
+from asset_base.asset import Forex, Listed
 from asset_base.asset_base import AssetBase
 from fundmanage.utils import date_to_str
 
@@ -91,7 +91,7 @@ class TestSecuritiesFundamentals(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test class fixtures."""
-        cls.feed = SecuritiesFundamentals()
+        cls.feed = AssetFundamentals()
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -99,7 +99,7 @@ class TestSecuritiesFundamentals(unittest.TestCase):
 
     def test___init__(self):
         """Initialization."""
-        self.assertIsInstance(self.feed, SecuritiesFundamentals)
+        self.assertIsInstance(self.feed, AssetFundamentals)
         self.assertEqual(self.feed._data_path, 'data')
         self.assertEqual(self.feed._sub_path, 'static')
 
@@ -124,15 +124,18 @@ class TestSecuritiesHistory(unittest.TestCase):
     def setUpClass(cls):
         """Set up test class fixtures."""
         # Securities meta-data
-        cls.get_method = SecuritiesFundamentals().get_securities
+        cls.get_method = AssetFundamentals().get_securities
         securities_dataframe = cls.get_method()
         # Securities feed
-        cls.feed = SecuritiesHistory()
+        cls.feed = AssetHistory()
         # Select Test security symbol identities subset
         symbols = [('AAPL', 'XNYS'), ('MCD', 'XNYS'), ('STX40', 'XJSE')]
         securities_dataframe.set_index(['ticker', 'mic'], inplace=True)
         cls.securities_dataframe = securities_dataframe.loc[symbols]
         cls.securities_dataframe.reset_index(drop=False, inplace=True)
+        # Forex tickers
+        cls.forex_tickers = ('USDEUR', 'USDGBP', 'USDUSD')
+
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -143,21 +146,28 @@ class TestSecuritiesHistory(unittest.TestCase):
         Currency.update_all(self.session, get_method=static_obj.get_currency)
         Domicile.update_all(self.session, get_method=static_obj.get_domicile)
         Exchange.update_all(self.session, get_method=static_obj.get_exchange)
+        # Create Forex instances from Currency instances. do not populate Forex
+        # time series yet as that is for the tests.
+        Forex.update_all(self.session)
+        # Listed test instances
         Listed.from_data_frame(self.session, self.securities_dataframe)
-        # Securities asset_base instances list
+        # Securities test instances list
         self.securities_list = self.session.query(Listed).all()
+        # Forex test instances list
+        self.forex_list = self.session.query(
+            Forex).filter(Forex.ticker.in_(self.forex_tickers)).all()
 
     def test___init__(self):
         """Initialization."""
-        self.assertIsInstance(self.feed, SecuritiesHistory)
+        self.assertIsInstance(self.feed, AssetHistory)
         self.assertEqual(self.feed._data_path, None)
         self.assertEqual(self.feed._sub_path, None)
 
     def test_get_eod(self):
         """Get historical EOD for a specified list of securities."""
         # Test data
-        from_date = '2020-01-01'
-        to_date = '2020-12-31'
+        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
         columns = ['date_stamp', 'close', 'high', 'low', 'open', 'volume',
                    'isin']
         # NOTE: This data may change as EOD historical make corrections
@@ -168,6 +178,7 @@ class TestSecuritiesHistory(unittest.TestCase):
         ], columns=columns)
         test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         # Call
+        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
         df = self.feed.get_eod(self.securities_list, from_date, to_date)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
@@ -181,7 +192,10 @@ class TestSecuritiesHistory(unittest.TestCase):
     def test_get_dividends(self):
         """Get historical dividends for a specified list of securities."""
         # Test data
-        to_date = '2020-12-31'
+        # Longer date range test causes a decision to use the EOD API service
+        # NOTE: This decision is currently depreciated due to issues.
+        from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
         columns = ['date_stamp', 'currency',
                    'declaration_date', 'payment_date', 'period', 'record_date',
                    'unadjusted_value', 'adjusted_value', 'isin']
@@ -190,8 +204,8 @@ class TestSecuritiesHistory(unittest.TestCase):
             ['2020-11-06', 'USD', '2020-10-29', '2020-11-12', 'Quarterly', '2020-11-09', 0.2050, 0.2050, 'US0378331005'],
             ['2020-11-30', 'USD', '2020-10-08', '2020-12-15', 'Quarterly', '2020-12-01', 1.2900, 1.2900, 'US5801351017'],
         ], columns=columns)
-        # Longer date range test causes a decision to use the EOD API service
-        from_date1 = '2020-01-01'
+
+        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
         df = self.feed.get_dividends(self.securities_list, from_date1, to_date)
         # Test
         self.assertEqual(len(df), 12)
@@ -202,71 +216,32 @@ class TestSecuritiesHistory(unittest.TestCase):
         date_to_str(test_df)  # Convert Timestamps
         pd.testing.assert_frame_equal(df, test_df)
 
-
-class TestForexHistory(unittest.TestCase):
-    @unittest.skip('Skip tests, development to be fully completed.')
-
-    @classmethod
-    def setUpClass(cls):
-        """Set up test class fixtures."""
-        # Securities meta-data
-        cls.get_meta_method = SecuritiesFundamentals().get_securities
-        cls.securities_dataframe = cls.get_meta_method()
-        # Securities meta-data
-        cls.get_method = SecuritiesFundamentals().get_securities
-        # Securities feed
-        cls.feed = ForexHistory()
-        # Select Test security symbol identities subset
-        cls.forex_list = ('USDEUR', 'USDGBP', 'USDUSD')
-
-    def setUp(self):
-        """Set up test case fixtures."""
-        # Each test with a clean sqlite in-memory database
-        self.session = TestSession().session
-        # Add all initialization objects to asset_base
-        static_obj = Static()
-        Currency.update_all(self.session, get_method=static_obj.get_currency)
-        Domicile.update_all(self.session, get_method=static_obj.get_domicile)
-        Exchange.update_all(self.session, get_method=static_obj.get_exchange)
-        Listed.from_data_frame(self.session, data_frame=self.securities_dataframe)
-        # Securities asset_base instances list
-        self.securities_list = self.session.query(Listed).all()
-
-    def test___init__(self):
-        """Initialization."""
-        self.assertIsInstance(self.feed, ForexHistory)
-        self.assertEqual(self.feed._data_path, None)
-        self.assertEqual(self.feed._sub_path, None)
-
-    def test_get_eod(self):
+    def test_get_forex(self):
         """Get historical EOD for a specified list of securities."""
-        # FIXME: This is not a Forex test but a copied EOD test!!!!!
         # Test data
-        from_date = '2020-01-01'
-        to_date = '2020-12-31'
-        columns = [
-            'date_stamp', 'ticker', 'mic', 'isin',
-            'close', 'high', 'low', 'open', 'volume']
-        test_columns = ['close', 'high', 'low', 'open', 'volume']
+        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        columns = ['date_stamp', 'ticker', 'close', 'high', 'low', 'open', 'volume']
         # NOTE: This data may change as EOD historical make corrections
-        test_values = [  # Last date data
-            [132.69, 134.74, 131.72, 134.08, 99116594.0],
-            [214.58, 214.93, 210.78, 211.25, 2610914.0],
-            [5460.0, 5511.0, 5403.0, 5492.0, 112700.0]
-        ]
+        test_df = pd.DataFrame([  # Last date data
+            ['2020-12-31', 'USDEUR', 0.8215, 0.8216, 0.8128, 0.8139, 3575],
+            ['2020-12-31', 'USDGBP', 0.7336, 0.7348, 0.7308, 0.7337,    0],
+            ['2020-12-31', 'USDUSD', 1.0000, 1.0000, 1.0000, 1.0000,    0],
+        ], columns=columns)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         # Call
-        df = self.feed.get_eod(self.securities_list, from_date, to_date)
+        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
+        df = self.feed.get_forex(self.forex_list, from_date, to_date)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test
-        self.assertEqual(len(df), 756)
-        self.assertEqual(set(df.columns), set(columns))
+        self.assertEqual(len(df), 890)
         # Test against last date data
-        df = df[df['date_stamp'] == to_date][test_columns]
         self.assertFalse(df.empty)
-        for i, item in enumerate(df.iterrows()):
-            symbol, series = item
-            self.assertEqual(series.tolist(), test_values[i])
+        # Condition columns for testing
+        df = df[columns]
+        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
+        pd.testing.assert_frame_equal(df, test_df)
 
 
 class TestDump(unittest.TestCase):

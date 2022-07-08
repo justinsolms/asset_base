@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-"""Package initialization.
+"""Testing the asset_base package.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
 This file is part of the fundmanage module.

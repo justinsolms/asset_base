@@ -22,7 +22,7 @@ import datetime
 from asset_base.eod_historical_data import _API
 from asset_base.eod_historical_data import Historical
 from asset_base.eod_historical_data import Bulk
-from asset_base.eod_historical_data import BulkHistorical
+from asset_base.eod_historical_data import MultiHistorical
 from fundmanage.utils import date_to_str
 
 import warnings
@@ -150,7 +150,7 @@ class TestHistorical(aiounittest.AsyncTestCase):
         columns = ['open', 'high', 'low', 'close', 'volume']
         index = ['date']
         # NOTE: This data may change as EOD historical make corrections
-        values = [134.08, 134.74, 131.72, 132.69, 99116594.0]
+        values = [134.08, 134.74, 131.72, 132.69, 99116600.0]
         # Get
         async with Historical() as historical:
             df = await historical.get_eod('US', 'AAPL', from_date, to_date)
@@ -248,7 +248,7 @@ class TestBulk(aiounittest.AsyncTestCase):
         date = datetime.datetime.strptime('2021-01-03', '%Y-%m-%d')
         # NOTE: This data may change as EOD historical make corrections
         data = [134.08, 134.74, 131.72, 132.69, 131.516,
-                99116594.0, 133.72, -1.03, -0.7703]
+                99116600.0, 133.72, -1.03, -0.7703]
         async with Bulk() as bulk:
             df = await bulk.get_eod('US', date=date, symbols=['AAPL', 'MCD'])
         # Test DataFame structure
@@ -308,13 +308,13 @@ class TestBulk(aiounittest.AsyncTestCase):
         )
 
 
-class TestBulkHistorical(unittest.TestCase):
+class TestMultiHistorical(unittest.TestCase):
     """ Get bulk histories across exchanges, securities and date ranges."""
 
     @classmethod
     def setUpClass(cls):
         """ Set up class test fixtures. """
-        cls.bulk = BulkHistorical()
+        cls.bulk = MultiHistorical()
         cls.symbol_list = (('AAPL', 'US'), ('MCD', 'US'), ('STX40', 'JSE'))
         cls.forex_list = ('USDEUR', 'USDGBP', 'USDUSD')
         cls.symbol_list_bad = (
@@ -331,7 +331,7 @@ class TestBulkHistorical(unittest.TestCase):
 
     def test___init__(self):
         """ Test Initialization. """
-        self.assertIsInstance(self.bulk, BulkHistorical)
+        self.assertIsInstance(self.bulk, MultiHistorical)
 
     def test__get_eod(self):
         """ Get historical data for a list of securities. """
@@ -342,17 +342,16 @@ class TestBulkHistorical(unittest.TestCase):
         columns = ['close', 'high', 'low', 'open', 'volume']
         # NOTE: This data may change as EOD historical make corrections
         test_values = [
-            [132.69, 134.74, 131.72, 134.08, 99116594.0],
-            [214.58, 214.93, 210.78, 211.25, 2610914.0],
+            [132.69, 134.74, 131.72, 134.08, 99116600.0],
+            [214.58, 214.93, 210.78, 211.25, 2610900.0],
             [5460.0, 5511.0, 5403.0, 5492.0, 112700.0]
         ]
         # Get
         # Use EOD API
+        symbol_list = [
+            (s[0], s[1], from_date, to_date) for s in self.symbol_list]
         df = asyncio.run(
-            self.bulk._get_eod(
-                Historical._historical_eod, self.symbol_list,
-                from_date, to_date,
-                )
+            self.bulk._get_eod(Historical._historical_eod, symbol_list)
         )
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
@@ -381,8 +380,8 @@ class TestBulkHistorical(unittest.TestCase):
         index_names = ['date', 'ticker', 'exchange']
         # NOTE: This data may change as EOD historical make corrections
         test_values = [
-            [-1.15, -0.8527, 133.72, 135.99, 133.4, 135.58, 134.87, 96452117.0],
-            [-1.15, -0.5406, 211.56, 213.36, 211.28, 212.96, 212.71, 1854990.0],
+            [-1.15, -0.8527, 133.72, 135.99, 133.4, 135.58, 134.87, 96452100.0],
+            [-1.15, -0.5406, 211.56, 213.36, 211.28, 212.96, 212.71, 1855000.0],
             [38.0, 0.6983, 5480.0, 5510.0, 5385.0, 5405.0, 5442.0, 57423.0],
         ]
         # Get Bulk EOD (Type=None)
@@ -412,18 +411,20 @@ class TestBulkHistorical(unittest.TestCase):
     def test_get_eod(self):
         """ Get historical data for a list of securities. """
         # Test data
-        to_date = '2020-12-31'
+        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
         index_names = ['date', 'ticker', 'exchange']
         columns = ['close', 'high', 'low', 'open', 'volume']
         test_values = [  # Last date data
-            [132.69, 134.74, 131.72, 134.08, 99116594.0],
-            [214.58, 214.93, 210.78, 211.25, 2610914.0],
+            [132.69, 134.74, 131.72, 134.08, 99116600.0],
+            [214.58, 214.93, 210.78, 211.25, 2610900.0],
             [5460.0, 5511.0, 5403.0, 5492.0, 112700.0]
         ]
 
         # Longer date range test causes a decision to use the EOD API service
-        from_date1 = '2020-01-01'
-        df = self.bulk.get_eod(self.symbol_list_bad, from_date1, to_date)
+        from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        symbol_list_bad = [
+            (s[0], s[1], from_date1, to_date) for s in self.symbol_list_bad]
+        df = self.bulk.get_eod(symbol_list_bad)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test-rank columns
@@ -434,7 +435,7 @@ class TestBulkHistorical(unittest.TestCase):
         self.assertEqual(list(df.index.names), list(index_names))
         self.assertEqual(list(df.columns), list(columns))
         # Test against last date data
-        df = df.loc[to_date].droplevel('date')
+        df = df.loc[to_date]
         self.assertFalse(df.empty)
         for i, item in enumerate(df.iterrows()):
             symbol, series = item
@@ -444,8 +445,10 @@ class TestBulkHistorical(unittest.TestCase):
                 )
 
         # Shorter date range test causes a decision to use the Bulk API service
-        from_date2 = '2020-12-25'
-        df = self.bulk.get_eod(self.symbol_list, from_date2, to_date)
+        from_date2 = datetime.datetime.strptime('2020-12-25', '%Y-%m-%d')
+        symbol_list = [
+            (s[0], s[1], from_date2, to_date) for s in self.symbol_list]
+        df = self.bulk.get_eod(symbol_list)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test-rank columns
@@ -454,7 +457,7 @@ class TestBulkHistorical(unittest.TestCase):
         # Test
         self.assertEqual(set(df.index.names), set(index_names))
         self.assertEqual(set(df.columns), set(columns))
-        df = df.loc[to_date].droplevel('date')
+        df = df.loc[to_date]
         self.assertFalse(df.empty)
         for i, item in enumerate(df.iterrows()):
             symbol, series = item
@@ -482,8 +485,10 @@ class TestBulkHistorical(unittest.TestCase):
             columns=columns)
 
         # Longer date range test causes a decision to use the EOD API service
-        from_date1 = '2020-01-01'
-        df = self.bulk.get_dividends(self.symbol_list, from_date1, to_date)
+        from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        symbol_list = [
+            (s[0], s[1], from_date1, to_date) for s in self.symbol_list]
+        df = self.bulk.get_dividends(symbol_list)
         # Test
         self.assertEqual(len(df), 12)
         self.assertEqual(list(df.index.names), list(index_names))
@@ -528,7 +533,9 @@ class TestBulkHistorical(unittest.TestCase):
             ]
 
         # Get
-        df = self.bulk.get_forex(self.forex_list, from_date, to_date)
+        forex_list = [
+            (s, from_date, to_date) for s in self.forex_list]
+        df = self.bulk.get_forex(forex_list)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test-rank columns
@@ -557,7 +564,7 @@ class Suite(object):
             TestAPI,
             TestHistorical,
             TestBulk,
-            TestBulkHistorical,
+            TestMultiHistorical,
         ]
 
         suites_list = list()

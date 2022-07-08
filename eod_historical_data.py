@@ -218,7 +218,8 @@ class Historical(_API):
             self._historical_eod, exchange, ticker,
             from_date=from_date, to_date=to_date)
 
-    async def get_dividends(self, exchange, ticker, from_date=None, to_date=None):
+    async def get_dividends(
+            self, exchange, ticker, from_date=None, to_date=None):
         """ Get daily, EOD historical dividends over a date range.
 
         Parameters
@@ -450,8 +451,8 @@ class Fundamentals(_API):
         return table
 
 
-class BulkHistorical(object):
-    """ Get bulk histories across exchanges, securities and date ranges.
+class MultiHistorical(object):
+    """ Get multiple histories across exchanges, securities and date ranges.
 
     This class' public methods take a list of `(exchange, ticker)` tuples and
     generate a single call per `(exchange, ticker)` tuple from the appropriate
@@ -463,8 +464,7 @@ class BulkHistorical(object):
     (``pandas.DataFrame``) which is returned.
 
     """
-    async def _get_eod(
-            self, path, symbol_list, from_date=None, to_date=None):
+    async def _get_eod(self, path, symbol_list):
         """ Get historical data for a list of securities.
 
         This uses the EOD history API service (class ``Historical``) which means
@@ -481,16 +481,12 @@ class BulkHistorical(object):
             The domain's specific API service path, example: "/api/eod"
             for EOD prices
         symbol_list : list of tuples
-            A list of ticker-exchange symbol_list. As an example Apple Inc.
-            would be `AAPL.US` and it's symbol tuple would be `('AAPL', 'US')`,
-            where `AAPL` is the exchange ticker and `US` is the exchange code
-            (actually EOD code for all US exchanges).
-        from_date : datetime.date, optional
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown.
 
         Note
         ----
@@ -500,7 +496,7 @@ class BulkHistorical(object):
         # Each security has its own from date.
         tasks = list()
         async with Historical() as historical:
-            for ticker, exchange in symbol_list:
+            for ticker, exchange, from_date, to_date in symbol_list:
                 # Call historical EOD
                 tasks.append(
                     historical._get(
@@ -512,13 +508,20 @@ class BulkHistorical(object):
             table_list = list()
             for i, result in enumerate(zip(symbol_list, result_list)):
                 symbol, unknown = result
+                ticker, exchange, from_date, to_date = symbol
+                # Check dates, guard against None's
+                assert from_date is None or isinstance(from_date, datetime.date),\
+                    'Expected symbol_list''s from_date type as datetime.date.'
+                assert to_date is None or isinstance(to_date, datetime.date),\
+                    'Expected symbol_list''s to_date type as datetime.date.'
                 if isinstance(unknown, Exception):
+                    exception = unknown
                     logger.warning(
-                        'Exception %s for symbol %s', unknown, symbol)
+                        'Exception %s for symbol %s.%s',
+                        exception, ticker, exchange)
                 else:
                     # Process table and add to list
                     table = unknown
-                    ticker, exchange = symbol
                     table['ticker'] = ticker
                     table['exchange'] = exchange
                     table_list.append(table)
@@ -603,7 +606,7 @@ class BulkHistorical(object):
 
         return table
 
-    def get_eod(self, symbol_list, from_date=None, to_date=None):
+    def get_eod(self, symbol_list):
         """ Get historical EOD for a list of securities.
 
         This method switches between EOD and Bulk feeds (classes Historical and
@@ -611,50 +614,20 @@ class BulkHistorical(object):
         calls.
 
         symbol_list : list of tuples
-            A list of ticker-exchange symbol_list. As an example Apple Inc.
-            would be `AAPL.US` and it's symbol tuple would be `('AAPL', 'US')`,
-            where `AAPL` is the exchange ticker and `US` is the exchange code
-            (actually EOD code for all US exchanges).
-        from_date : datetime.date
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown.
 
         """
-        # HACK: Issues with _get_bulk and NaNs warrant this value to be `0`
-        # forcing use of _get_eod in every case. The NaNs is as we looking only
-        # 1-day deep and there are most often no dividends on th day.
-        days_threshold = 0
         columns_names = [
             'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
 
-        # Make any dates into datetime - a standardisation across methods
-        from_date, to_date = datepair_to_datetimes(from_date, to_date)
-
-        # Test inclusive date range
-        if (to_date - from_date).days + 1 > days_threshold:
-            # Use EOD API
-            table = asyncio.run(
-                self._get_eod(
-                    Historical._historical_eod,
-                    symbol_list,
-                    from_date,
-                    to_date,
-                    )
-                )
-        else:
-            # Use Bulk API
-            table = asyncio.run(
-                self._get_bulk(
-                    symbol_list,
-                    from_date,
-                    to_date,
-                    type=None
-                    )
-                )
-
+        # Use EOD API
+        table = asyncio.run(
+            self._get_eod( Historical._historical_eod, symbol_list))
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
@@ -664,7 +637,7 @@ class BulkHistorical(object):
 
         return table
 
-    def get_dividends(self, symbol_list, from_date=None, to_date=None):
+    def get_dividends(self, symbol_list):
         """ Get historical dividends for a list of securities.
 
         This method uses only the EOD (class Historical) due to incorrect Bulk
@@ -672,35 +645,21 @@ class BulkHistorical(object):
         restricting to only the specified tickers or symbols.
 
         symbol_list : list of tuples
-            A list of ticker-exchange symbol_list. As an example Apple Inc.
-            would be `AAPL.US` and it's symbol tuple would be `('AAPL', 'US')`,
-            where `AAPL` is the exchange ticker and `US` is the exchange code
-            (actually EOD code for all US exchanges).
-        from_date : datetime.date
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown
 
         """
         columns_names = [
             'currency', 'declarationDate', 'paymentDate', 'period',
             'recordDate', 'unadjustedValue', 'value']
 
-        # Make any dates into datetime - a standardisation across methods
-        from_date, to_date = datepair_to_datetimes(from_date, to_date)
-
         # Use EOD API
         table = asyncio.run(
-            self._get_eod(
-                Historical._historical_dividends,
-                symbol_list,
-                from_date,
-                to_date,
-                )
-            )
-
+            self._get_eod(Historical._historical_dividends, symbol_list))
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
@@ -710,44 +669,35 @@ class BulkHistorical(object):
 
         return table
 
-    def get_forex(self, forex_list, from_date=None, to_date=None):
+    def get_forex(self, forex_list):
         """ Get historical forex for a list of rates.
 
         This method uses only the EOD (class Historical) due to incorrect Bulk
         API call behaviour such as not returning the ``value`` filed and not
         restricting to only the specified tickers or symbols.
 
-        forex_list : list of tuples
-            A list of forex symbols. As an example 'EURUSD'.
-        from_date : datetime.date
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
+        symbol_list : list of tuples
+            A list of forex tickers and date range list. As an example, if USD
+            to ZAR (ticker USDZAR) was required between 2021-01-01 and
+            2022-01-01 then it's symbol tuple would be: `('USDZAR',
+            datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note that
+            the date must be `datetime.date` or an exception shall be thrown
 
         """
         columns_names = [
             'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
 
-        # Make any dates into datetime - a standardisation across methods
-        from_date, to_date = datepair_to_datetimes(from_date, to_date)
-
-        # Construct a symbol list form the forex ticker list as (`exchange`,
+        # Re-construct a symbol list form the forex ticker list as (`exchange`,
         # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
-        # part set to "FOREX".
-        symbol_list = [(ticker, 'FOREX') for ticker in forex_list]
+        # part set to "FOREX". In other words, insert FOREX in the right
+        # position.
+        symbol_list = [
+            (ticker, 'FOREX', from_date, to_date
+             ) for ticker, from_date, to_date in forex_list]
 
         # Use EOD API
         table = asyncio.run(
-            self._get_eod(
-                Historical._historical_forex,
-                symbol_list,
-                from_date,
-                to_date,
-                )
-            )
-
+            self._get_eod( Historical._historical_forex, symbol_list))
         # As the exchange is always 'FOREX' it is unnecessary.
         table = table.droplevel(level='exchange')
 

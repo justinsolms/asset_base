@@ -47,8 +47,15 @@ class Common(Base):
     # Polymorphism discriminator.
     _discriminator = Column(String(32))
 
+    __mapper_args__ = {
+        'polymorphic_identity': __tablename__,
+        'polymorphic_on': _discriminator,
+    }
+
     id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
+
+    __table_args__ = (UniqueConstraint('_discriminator', 'id'), )
 
     name = Column(String(256), nullable=False)
     """str: Entity name."""
@@ -68,18 +75,6 @@ class Common(Base):
     date_mod_stamp = Column(Date, nullable=True)
     """sqlalchemy.DateTime: Modification date stamp. May be in the past."""
 
-    __mapper_args__ = {
-        'polymorphic_identity': __tablename__,
-        'polymorphic_on': _discriminator,
-    }
-
-    # In all polymorph cases the _discriminator must remain as the
-    # `__tablename__` and in most polymorph cases the _discriminator together
-    # with the `id` shall by inheritance be constrained to be unique. In
-    # exceptions to this case the `UniqueConstraint` may be changed by
-    # overriding the `__table_args__` attribute
-    # TODO: Use multiple primary keys across tables instead
-    __table_args__ = (UniqueConstraint('_discriminator', 'id'), )
 
     def __init__(self, name, **kwargs):
         """Instance initialization."""
