@@ -1399,20 +1399,15 @@ class TestListedEquity(TestListed):
         # Method to be tested
         # Check data
         # NOTE: These values may change as EOD historical data gets corrected
-        # FIXME: Check total_returns/total_prices are accurate!!!
         last_date = pd.to_datetime(self.to_date)
         price = listed.time_series()
         self.assertEqual(price[last_date], 54.60)
         volume = listed.time_series(series='volume')
         self.assertEqual(volume[last_date], 112700)
-        # FIXME: Failing total price last is 2022-06-30    3.399222e-211
-        total_price = listed.time_series(return_type='total_price')
         dividend = listed.time_series(series='dividend')
-
-
-        # self.assertEqual(df[last_date], 81.24353503753133)
-        # Check security name
-        self.assertEqual(df.name.identity_code, listed.identity_code)
+        self.assertEqual(dividend.loc['2020-10-21'], 0.091925)
+        total_price = listed.time_series(return_type='total_price')
+        self.assertEqual(total_price[last_date], 81.24353503753133)
 
 
 class Suite(object):

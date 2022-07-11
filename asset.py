@@ -149,9 +149,8 @@ class Asset(Common):
         order_by=TimeSeriesBase.date_stamp,
         back_populates='asset')
 
-    # TODO: This where we would add asset prices
-    # TODO: This is were we would add asset fundamental data relationships
-    # TODO: This is were we would add asset book relationships
+    # TODO: This (or child) is were we would add asset fundamental data relationships
+    # TODO: This (or child) is were we would add asset book relationships
 
     # Major asset class. This is a generic class so the asset class is
     # indeterminate.
@@ -303,90 +302,6 @@ class Asset(Common):
             pass
 
         return obj
-
-    def get_eod(self):
-        """Return the EOD time series for the asset.
-
-        Returns
-        -------
-        pandas.DataFrame
-            An EOD trade data time series with a ``datetime.date`` date index
-            sorted in ascending order. The class' respective time series class
-            in the ``time_series`` shall have a ``to_dict()`` method which shall
-            inform the ``pandas.DataFrame`` columns returned, in addition to the
-            data frame `date_stamp` index.
-
-        """
-
-        trade_eod_dict_list = [
-            s.to_dict() for s in self._listed_eod_series]
-        import ipdb; ipdb.set_trace()
-        if len(trade_eod_dict_list) == 0:
-            raise TimeSeriesNoData(
-                f'No EOD trade data for asset {self.identity_code}.')
-        data_frame = pd.DataFrame(trade_eod_dict_list)
-        data_frame['date_stamp'] = pd.to_datetime(data_frame['date_stamp'])
-        data_frame.set_index('date_stamp', inplace=True)
-        data_frame.sort_index(inplace=True)  # Assure ascending
-        data_frame.name = self
-
-        return data_frame
-
-    def get_last_eod(self):
-        """Return the EOD last date, data dict, for the asset.
-
-        Returns
-        -------
-        dict
-            An End-Of-Day (EOD) price data dictionary with keys from the
-            ``ListedEOD.to_dict()`` method.
-        """
-        # Note that _eod_series is ordered by ListedEOD.last_date
-        try:
-            last_eod = self._eod_series[-1]
-        except IndexError:
-            last_eod = None
-
-        return last_eod.to_dict()
-
-    def get_last_eod_date(self):
-        """Return the EOD last date for the asset.
-
-        Returns
-        -------
-        datetime.date
-            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
-            time series .
-        """
-        # Note that _eod_series is ordered by ListedEOD.last_date
-        try:
-            last_eod = self._eod_series[-1]
-            last_eod_date = last_eod.date_stamp
-        except IndexError:
-            last_eod_date = None
-
-        return last_eod_date
-
-    def time_series(self):
-        """Return the EOD time series for the asset.
-
-        Returns
-        -------
-        pandas.DataFrame
-            An EOD trade data time series with a ``datetime.date`` date index
-            sorted in ascending order. The class' respective time series class
-            in the ``time_series`` shall have a ``to_dict()`` method which shall
-            inform the ``pandas.DataFrame`` columns returned, in addition to the
-            data frame `date_stamp` index.
-
-        Note
-        ----
-        This method should be overridden by child classes or it may be used as
-        is. In this case it is simply an alias for the ``get_eod`` method.
-
-        """
-
-        return self.get_eod()
 
 
 class Cash(Asset):
@@ -1068,9 +983,8 @@ class Listed(Share):
     _exchange_id = Column(Integer, ForeignKey('exchange.id'), nullable=False)
     exchange = relationship('Exchange', backref='securities_list')
 
-    # Historical SimpleEOD end-of-day (EOD) time-series collection ranked by
-    # SimpleEOD.date_stamp
-    _listed_eod_series = relationship(
+    # EOD historical time-series collection ranked by date_stamp
+    _eod_series = relationship(
         ListedEOD,
         order_by=ListedEOD.date_stamp,
         back_populates='listed')
@@ -1468,6 +1382,66 @@ class Listed(Share):
         # time-series
         ListedEOD.reuse(session, dumper, Listed)
 
+    def get_eod(self):
+        """Return the EOD time series for the asset.
+
+        Returns
+        -------
+        pandas.DataFrame
+            An EOD trade data time series with a ``datetime.date`` date index
+            sorted in ascending order. The class' respective time series class
+            in the ``time_series`` shall have a ``to_dict()`` method which shall
+            inform the ``pandas.DataFrame`` columns returned, in addition to the
+            data frame `date_stamp` index.
+
+        """
+        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
+        if len(trade_eod_dict_list) == 0:
+            raise TimeSeriesNoData(
+                f'No EOD trade data for asset {self.identity_code}.')
+        data_frame = pd.DataFrame(trade_eod_dict_list)
+        data_frame['date_stamp'] = pd.to_datetime(data_frame['date_stamp'])
+        data_frame.set_index('date_stamp', inplace=True)
+        data_frame.sort_index(inplace=True)  # Assure ascending
+        data_frame.name = self
+
+        return data_frame
+
+    def get_last_eod(self):
+        """Return the EOD last date, data dict, for the asset.
+
+        Returns
+        -------
+        dict
+            An End-Of-Day (EOD) price data dictionary with keys from the
+            ``ListedEOD.to_dict()`` method.
+        """
+        # Note that _eod_series is ordered by ListedEOD.last_date
+        try:
+            last_eod = self._eod_series[-1]
+        except IndexError:
+            last_eod = None
+
+        return last_eod.to_dict()
+
+    def get_last_eod_date(self):
+        """Return the EOD last date for the asset.
+
+        Returns
+        -------
+        datetime.date
+            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
+            time series .
+        """
+        # Note that _eod_series is ordered by ListedEOD.last_date
+        try:
+            last_eod = self._eod_series[-1]
+            last_eod_date = last_eod.date_stamp
+        except IndexError:
+            last_eod_date = None
+
+        return last_eod_date
+
     def get_live_trades(self):
         # TODO: The required methods are not currently functioning.
         """Return the live trade data if available else use the last EOD trades.
@@ -1583,6 +1557,7 @@ class ListedEquity(Listed):
     """ Primary key."""
 
     # Historical Dividend end-of-day (EOD) time-series collection
+    # TODO: Rename to dividends
     _dividend_series = relationship(
         'Dividend',
         order_by=TimeSeriesBase.date_stamp,

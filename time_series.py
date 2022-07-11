@@ -75,7 +75,8 @@ class TimeSeriesBase(Base):
 
     # Foreign key giving ``Asset`` a time series capability
     _asset_id = Column(Integer, ForeignKey('asset.id'), nullable=False)
-    asset = relationship('Asset', back_populates='_series')
+    asset = relationship(
+        'Asset', back_populates='_series', foreign_keys=[_asset_id])
 
     date_stamp = Column(Date, nullable=False)
     """datetime: EOD date."""
@@ -225,17 +226,6 @@ class TimeSeriesBase(Base):
         # add_all instead.
         session.add_all(instances_list)
 
-        # Commit here or time series wont be available for other essential
-        # operations such as Asset.get_last_dates(), etc.
-        # try:
-        #     session.commit()
-        # except Exception as ex:
-        #     logger.critical('Commit failed - rolling back.')
-        #     session.rollback()
-        #     logger.info('Rolled back.')
-        #     # Rethrow the exception
-        #     raise ex
-
     @classmethod
     def to_data_frame(cls, session, asset_class):
         """Convert all instances to a single data table.
@@ -266,6 +256,7 @@ class TimeSeriesBase(Base):
         #  Get a table of time-series instances with attribute columns
         record_list = list()
         for instance in session.query(cls).all():
+            # FIXME: Check that the query is pure, i.e., not returning every TimeSeriesBase parent instance but rather only the child class instances
             # Get instance data dictionary and add the `Listed` ISIN number
             instance_dict = instance.to_dict()
             # Reference to the class primary key attribute Asset.id (or
@@ -544,15 +535,23 @@ class ListedEOD(TradeEOD):
     id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
     """ Primary key."""
 
-    # Foreign key giving ``ListedEquity`` a Dividend series capability. Note:
+    # Foreign key giving ``Share`` a EOD series capability. Note:
     # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
-    # for the relationships with ``.asset.Asset._eod_series`` and
-    # ``.asset.ListedEquity._dividend_series`` to work and avoids the
+    # for the relationships with ``.asset.Share._series`` and
+    # ``.asset.Share._eod_series`` to work and avoids the
     # "SAWarning: relationship" warning for the relationship below.
-    _listed_equity_id = Column(
-        Integer, ForeignKey('listed_equity.id'), nullable=False)
+    _listed_id = Column(Integer, ForeignKey('listed.id'), nullable=False)
     listed = relationship(
-        'Listed', back_populates='_listed_eod_series')
+        'Listed', back_populates='_eod_series', foreign_keys=[_listed_id])
+
+    def __init__(
+            self, asset, date_stamp,
+            open, close, high, low, adjusted_close, volume):
+        """Instance initialization."""
+        super().__init__(
+            asset, date_stamp,
+            open, close, high, low, adjusted_close, volume)
+        self.listed = asset
 
     @classmethod
     def update_all(cls, session, asset_class, get_method):
@@ -698,22 +697,25 @@ class Dividend(TimeSeriesBase):
 
     """
 
-    __tablename__ = 'dividends'
+    __tablename__ = 'dividend'
     __mapper_args__ = {'polymorphic_identity': __tablename__, }
 
     id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
     """ Primary key."""
-    # NOTE: Inherited _asset_id backrefs to the polymorphic ListedEquity
+    # NOTE: Inherited
+    # backrefs to the polymorphic ListedEquity
 
     # Foreign key giving ``ListedEquity`` a Dividend series capability. Note:
     # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
-    # for the relationships with ``.asset.Asset._eod_series`` and
+    # for the relationships with ``.asset.Asset._series`` and
     # ``.asset.ListedEquity._dividend_series`` to work and avoids the
     # "SAWarning: relationship" warning for the relationship below.
     _listed_equity_id = Column(
         Integer, ForeignKey('listed_equity.id'), nullable=False)
     listed_equity = relationship(
-        'ListedEquity', back_populates='_dividend_series')
+        'ListedEquity',
+        back_populates='_dividend_series',
+        foreign_keys=[_listed_equity_id])
 
     currency = Column(String, nullable=False)
     """str: 3-Letter currency symbol for the dividend currency. """
@@ -754,9 +756,6 @@ class Dividend(TimeSeriesBase):
         self.record_date = record_date
         self.unadjusted_value = unadjusted_value
         self.adjusted_value = adjusted_value
-
-        assert self.asset == self.listed_equity, \
-            'The Asset and ListedEquity ust be the same.'
 
     @classmethod
     def _get_last_date(cls, security):
