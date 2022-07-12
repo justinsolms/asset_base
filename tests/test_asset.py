@@ -229,7 +229,7 @@ class TestForex(TestAsset):
     def setUp(self):
         """Set up test case fixtures."""
         super().setUp()
-        # Test currencies
+        # Currencies for Forex tests
         self.base_currency = Currency.factory(
             self.session, Forex.root_currency)
         self.price_currency = Currency.factory(
@@ -288,10 +288,11 @@ class TestForex(TestAsset):
         self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
-        df.reset_index(drop=True, inplace=True)
         # Sort to remove ambiguity
         df.sort_values(by='close', inplace=True)
+        df.reset_index(drop=True, inplace=True)
         self.test_values.sort_values(by='close', inplace=True)
+        self.test_values.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
 
     def test_get_eod(self):

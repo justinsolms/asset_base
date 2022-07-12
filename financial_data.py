@@ -400,7 +400,7 @@ class AssetHistory(_Feed):
         self._sub_path = None
 
     @staticmethod
-    def _preprocessor(asset_list, from_date, to_date, series='eod'):
+    def _preprocessor(asset_list, from_date, to_date, series):
         """ Generate date list with date ranges for each asset."""
         # From date list, one per Asset instance
         if from_date is None:
@@ -410,6 +410,8 @@ class AssetHistory(_Feed):
                 from_date_list = [s.get_last_eod_date() for s in asset_list]
             elif series == 'dividend':
                 from_date_list = [s.get_last_dividend_date() for s in asset_list]
+            elif series == 'forex':
+                from_date_list = [s.get_last_eod_date() for s in asset_list]
             else:
                 raise Exception('Unexpected `series` argument.')
         else:
@@ -447,7 +449,7 @@ class AssetHistory(_Feed):
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self._preprocessor(
-            asset_list, from_date, to_date)
+            asset_list, from_date, to_date, series='eod')
 
         # Assemble symbol list
         symbol_list = list()
@@ -612,7 +614,7 @@ class AssetHistory(_Feed):
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self._preprocessor(
-            forex_list, from_date, to_date)
+            forex_list, from_date, to_date, series='forex')
 
         # Assemble symbol list
         symbol_list = list()

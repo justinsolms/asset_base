@@ -535,10 +535,10 @@ class ListedEOD(TradeEOD):
     id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
     """ Primary key."""
 
-    # Foreign key giving ``Share`` a EOD series capability. Note:
+    # Foreign key giving ``Listed`` a EOD series capability. Note:
     # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
     # for the relationships with ``.asset.Share._series`` and
-    # ``.asset.Share._eod_series`` to work and avoids the
+    # ``.asset.Listed._eod_series`` to work and avoids the
     # "SAWarning: relationship" warning for the relationship below.
     _listed_id = Column(Integer, ForeignKey('listed.id'), nullable=False)
     listed = relationship(
@@ -630,6 +630,15 @@ class ForexEOD(TradeEOD):
     id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
     """ Primary key."""
 
+    # Foreign key giving ``Forex`` a EOD series capability. Note:
+    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
+    # for the relationships with ``.asset.Share._series`` and
+    # ``.asset.Forex._eod_series`` to work and avoids the
+    # "SAWarning: relationship" warning for the relationship below.
+    _forex_id = Column(Integer, ForeignKey('forex.id'), nullable=False)
+    forex = relationship(
+        'Forex', back_populates='_eod_series', foreign_keys=[_forex_id])
+
     def __init__(
             self, asset, date_stamp,
             open, close, high, low, adjusted_close, volume):
@@ -637,6 +646,7 @@ class ForexEOD(TradeEOD):
         super().__init__(
             asset, date_stamp,
             open, close, high, low, adjusted_close, volume)
+        self.forex = asset
 
     @classmethod
     def update_all(cls, session, asset_class, get_method):

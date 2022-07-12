@@ -326,7 +326,7 @@ class TestEntity(unittest.TestCase):
         instances_list = self.session.query(Entity).all()
         test_df = pd.DataFrame(
             [(item.id, item.key_code) for item in instances_list],
-            columns=['entity_id', 'key_code'])
+            columns=['id', 'key_code'])
         df = Entity.key_code_id_table(self.session)
         pd.testing.assert_frame_equal(test_df, df)
 
