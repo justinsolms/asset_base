@@ -619,12 +619,37 @@ class Forex(Cash):
     price in Japanese Yen (JPY) and in 2022/06/22 the price of 1 USD was 135
     JPY. USD may be considered the primary currency. JPY may be considered the
     secondary currency. As such the code for this exchange rate shall be USDJPY
-    and may be read as USD to JPY, i.e., 1 USD to 135 JPY.
+    and may be read as USD to JPY, i.e., 1 USD to 135 JPY, or 1USD costs 135JPY.
+
+    All stored forex rates will have as their ``base_currency`` be the
+    ``root_currency_ticker``. Arbitrary rates will then be calculated off these stored
+    rates.
+
+    Note
+    ----
+    The notion of a currency conversion of a price in a base currency may be
+    thought of as a multiplication of a that price by a factor with the
+    price currency being the numerator and the base currency the
+    denominator. So:
+
+        ```
+            price    = price    * EURUSD
+                    USD        EUR
+        ```
+
+    Warning
+    -------
+    For this version the ``base_currency`` shall be asserted to be the same as
+    the toot currency (USD) or an assertion exception shall be raised. This
+    therefore also applies then too to the ``factory`` and ``update_all``
+    methods. In future versions, to avoid this issue, the ``update_all`` method
+    will automate the collation of diverse rates into a rate suite with one
+    ``base_currency``, i.e., the ``root_currency_ticker``.
 
     Parameters
     ----------
     base_currency : .asset.Currency
-        The currency that is priced in the `price_currency`. In the example
+        The currency that is priced is the `price_currency`. In the example
         above this is USD. It may be considered the primary currency. It may
         also be considered the asset-to-be-priced.
     price_currency : .asset.Currency
@@ -634,7 +659,6 @@ class Forex(Cash):
 
 
     """
-
     __tablename__ = 'forex'
     __mapper_args__ = {'polymorphic_identity': __tablename__}
 
@@ -656,7 +680,7 @@ class Forex(Cash):
     #  A short class name for use in the alt_name method.
     _name_appendix = 'Forex'
 
-    # Priced currency, or base currency
+    # Priced currency, or ``base_currency``
     _currency_id2 = Column(Integer, ForeignKey('currency.id'), nullable=True)
     base_currency = relationship(Currency, foreign_keys=[_currency_id2])
 
@@ -669,10 +693,10 @@ class Forex(Cash):
     #     ForexEOD, order_by=ForexEOD.date_stamp, backref='asset')
 
     # The reference or root ticker. Its price will always be 1.0.
-    root_currency = 'USD'
+    root_currency_ticker = 'USD'
 
     # List of top foreign currencies. Their time series are maintained as the
-    # price of 1 unit of the root currency. South African ZAR is included for
+    # price of 1 unit of the ``root_currency_ticker``. South African ZAR is included for
     # domestic reasons.
     foreign_currencies = [
         'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'HKD',
@@ -680,6 +704,7 @@ class Forex(Cash):
 
     def __init__(self, base_currency, price_currency, **kwargs):
         """Instance initialization."""
+        # FIXME: For this version assert the ``base_currency`` to be the ``root_currency_ticker`` and state clearly in the documentation
 
         # The name is constrained to that of the currency.
         # Note that we set the pricing currency of the cash asset here.
@@ -688,6 +713,9 @@ class Forex(Cash):
 
         self.currency = price_currency
         self.base_currency = base_currency
+
+        assert base_currency.ticker == self.root_currency_ticker, \
+            f'Expected the `base_currency` to be the root currency (USD).'
 
         # Ticker is Joined ISO 4217 3-letter currency codes
         self.ticker = '{}{}'.format(
@@ -705,7 +733,7 @@ class Forex(Cash):
 
     @property
     def base_currency_ticker(self):
-        """ISO 4217 3-letter base currency code."""
+        """ISO 4217 3-letter ``base_currency`` code."""
         return self.base_currency.ticker
 
     @property
@@ -735,9 +763,9 @@ class Forex(Cash):
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         base_ticker : str(3)
-            ISO 4217 3-letter currency codes. The priced or base currency.
+            ISO 4217 3-letter currency code. The priced or ``base_currency``.
         price_ticker : str(3)
-            ISO 4217 3-letter currency codes. The price currency.
+            ISO 4217 3-letter currency code. The price currency.
         create : bool, optional
             If `False` then the factory shall expect the specified `Entity` to
             already exist in the session or it shall raise an exception instead
@@ -753,7 +781,7 @@ class Forex(Cash):
         .Asset.factory,
 
         """
-        # Get the base currency if it exits
+        # Get the ``base_currency`` if it exits
         try:
             base_currency = Currency.factory(session, base_ticker)
         except NoResultFound:
@@ -786,7 +814,7 @@ class Forex(Cash):
         return obj
 
     @classmethod
-    def update_all(cls, session, get_forex_method=None):
+    def update_all(cls, session, get_forex_method=None, _test_forex_list=None):
         """Update/create all the objects in the asset_base session.
 
         The existing records of the ``Currency`` instances in
@@ -810,25 +838,95 @@ class Forex(Cash):
             then the ``ForexEOD`` time_series will not be created.
 
         """
+        # For testing only
+        if _test_forex_list is not None:
+            foreign_currencies_list = _test_forex_list
+        else:
+            foreign_currencies_list = cls.foreign_currencies
+
         # Create Forex instances as per the Forex.foreign_currencies list
         # attribute
         foreign_currencies = session.query(Currency).filter(
-            Currency.ticker.in_(cls.foreign_currencies),
+            Currency.ticker.in_(foreign_currencies_list),
             ).all()
         if len(foreign_currencies) == 0:
             raise Exception(
                 'No Currency instances found. '
                 'Please run `Currency.update_all`.')
-        if len(cls.foreign_currencies) != len(foreign_currencies):
+        if len(foreign_currencies_list) != len(foreign_currencies):
             raise FactoryError('Not all foreign currencies were found.')
         for price_currency in foreign_currencies:
             Forex.factory(
-                session, cls.root_currency, price_currency.ticker)
+                session, cls.root_currency_ticker, price_currency.ticker)
 
         # Get EOD trade data for Forex.
-        # TODO: Write ForexEOD
         if get_forex_method is not None:
             ForexEOD.update_all(session, cls, get_forex_method)
+
+    @classmethod
+    def get_rates_data_frame(
+            cls, session,
+            base_ticker, price_ticker_list, price_item='close'):
+        """Price the base in a list of pricing currencies.
+
+        Note
+        ----
+        The notion of a currency conversion of a price in a base currency may be
+        thought of as a multiplication of a that price by a factor with the
+        price currency being the numerator and the base currency the
+        denominator. So:
+
+            ```
+                price    = price    * EURUSD
+                     USD        EUR
+            ```
+
+        Parameter
+        ---------
+        base_ticker : str(3)
+            ISO 4217 3-letter currency code. The desired new ``base_currency``,
+            i.e., the currency to be priced in the other currencies defined by
+            the ``price_ticker_list``.
+        price_ticker_list : list
+            ISO 4217 3-letter currency code. The list of pricing currency
+            tickers with which to price the base currency.
+        price_item : str
+            The specific item of price such as 'close', 'open', `high`, or
+            `low`. Only valid when the ``series`` argument is set to 'price'.
+
+        Returns
+        -------
+        pandas.DataFrame
+            There shall be one rate column per ``price_ticker_list`` item, each
+            column being the desired price of the base currency in the price
+            currency.
+        """
+        # Get the `root_currency_ticker` prices in the currencies defined in the
+        # price_ticker_list argument
+        eod_dict = dict()
+        for price_ticker in price_ticker_list:
+            forex = cls.factory(session, cls.root_currency_ticker, price_ticker)
+            eod = forex.get_eod()
+            eod_dict[price_ticker] = eod[price_item]
+        df_eod_prices = pd.DataFrame(eod_dict)
+        # Keep last price over holiday periods
+        df_eod_prices.ffill(axis='index', inplace=True)
+
+        # Get the `root_currency_ticker` prices in the desired `base_ticker`
+        # currency.
+        forex = cls.factory(session, cls.root_currency_ticker, base_ticker)
+        eod = forex.get_eod()
+        series_eod_base = eod[price_item]
+        # Condition the index to that of df_eod_prices in preparation to become
+        # the denominator, then forward fill last price over holiday or break
+        # periods.
+        series_eod_base = series_eod_base.reindex(
+            index=df_eod_prices.index, method='ffill')
+
+        # Price the base currency in the pricing currencies.
+        df_rates = df_eod_prices.divide(series_eod_base, axis='index')
+
+        return df_rates
 
 
 class Share(Asset):
@@ -1837,17 +1935,8 @@ class ListedEquity(Listed):
             'volume':
                 The volume of trade (total value of trade) in the period.
         price_item : str
-            The specific item of price. Only valid when the ``series`` argument
-            is set to 'price':
-
-            'close' :
-                The period's close price.
-            'open' :
-                The period's open price.
-            'low' :
-                The period's lowest price.
-            'high' :
-                The period's highest price.
+            The specific item of price such as 'close', 'open', `high`, or
+            `low`. Only valid when the ``series`` argument is set to 'price'.
         return_type : str
             The specific view of the price series:
 

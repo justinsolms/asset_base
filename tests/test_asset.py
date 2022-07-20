@@ -231,7 +231,7 @@ class TestForex(TestAsset):
         super().setUp()
         # Currencies for Forex tests
         self.base_currency = Currency.factory(
-            self.session, Forex.root_currency)
+            self.session, Forex.root_currency_ticker)
         self.price_currency = Currency.factory(
             self.session, Forex.foreign_currencies[-1])  # Pick last one
         # Tickers
@@ -330,6 +330,19 @@ class TestForex(TestAsset):
         self.test_values.reset_index(drop=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+
+    def test_get_rates_data_frame(self):
+        """Price the base in a list of pricing currencies."""
+        # Test data
+        date = pd.to_datetime(self.to_date)
+        test_values = [0.06808371573687005, 0.05593077247783875, 1.0]
+        # Populate
+        self.Cls.update_all(self.session, self.get_method)
+        # Test
+        df = self.Cls.get_rates_data_frame(
+            self.session, 'ZAR', self.Cls.foreign_currencies)
+        self.assertTrue(all(df['ZAR'] == 1.0))
+        self.assertEqual(df.loc[date].tolist(), test_values)
 
 
 class TestShare(TestAsset):
