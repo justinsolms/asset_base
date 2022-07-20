@@ -80,7 +80,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from asset_base.common import Base
 from asset_base.entity import Domicile, Exchange
-from asset_base.asset import ListedEquity, Currency, Cash
+from asset_base.asset import Forex, ListedEquity, Currency, Cash
 from asset_base.exceptions import TimeSeriesNoData
 
 import asset_base.financial_data as fd
@@ -309,7 +309,8 @@ class AssetBase(object):
         self.session = Session(self.engine, autoflush=True, autocommit=False)
         logger.info('New database, engine and tables with URL "%s"' % db_url)
 
-    def set_up(self, reuse=True, update=True, _test_isin_list=None):
+    def set_up(self, reuse=True, update=True,
+               _test_isin_list=None, _test_forex_list=None):
         """Set up the database for operations.
 
         Parameters
@@ -352,7 +353,10 @@ class AssetBase(object):
         if reuse:
             self.reuse()
 
-        self.update(_test_isin_list=_test_isin_list)
+        # Update all
+        self.update(
+            _test_isin_list=_test_isin_list,
+            _test_forex_list=_test_forex_list)
 
     def tear_down(self, delete_dump_data=False):
         """Tear down the environment for operation of the module.
@@ -389,15 +393,15 @@ class AssetBase(object):
             logger.info(
                 'Dropped database and closed session and engine')
 
-    def update(self, _test_isin_list=None):
+    def update(self, _test_isin_list=None, _test_forex_list=None):
         """Update all non-static data.
 
         Uses the ``.financial_data`` module as the data source.
         """
 
         # Check for newer securities data and update the database
-        fundamentals = fd.SecuritiesFundamentals()
-        history = fd.SecuritiesHistory()
+        fundamentals = fd.AssetFundamentals()
+        history = fd.AssetHistory()
         # NOTE: Future security classes place their update_all() methods here.
         ListedEquity.update_all(
             self.session,
@@ -405,6 +409,13 @@ class AssetBase(object):
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
             _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
+            )
+
+        # Forex update - based on existing currencies and built in list
+        # Forex.foreign_currencies
+        Forex.update_all(
+            self.session, get_forex_method=history.get_forex,
+            _test_forex_list=_test_forex_list,  # Hidden arg. For testing only!
             )
 
     def dump(self):
@@ -502,8 +513,8 @@ class AssetBase(object):
 
     def time_series(self, asset_list,
                     series='price', price_item='close', return_type='price',
-                    tidy=True, identifier='id', date_index=None):
-        """Retrieve historic time-series for a list of entities.
+                    currency=None, tidy=True, identifier='id', date_index=None):
+        """Return historic time-series for a list of entities.
 
         Note
         ----
@@ -548,15 +559,35 @@ class AssetBase(object):
                 The price period-on-period price series inclusive of the extra
                 yield due to dividends paid. The total_price series start value
                 is the same as the price start value.
+        currency : str(3), optional
+            ISO 4217 3-letter currency code. If set then the returned data is
+            converted to the specified currency using the ``.asset.Forex``
+            class.
         tidy : bool
             When ``True`` then prices are tidied up by removing outliers.
         date_index : pandas.DatetimeIndex, optional
             If there are non-cash securities specified by `id_list` then this
             argument is overridden by the resulting union of
             `pandas.DatetimeIndex` of the time-series for all specified non-cash
-            securities. This data range is not optional and is required if the
-            `id_list` argument specifies only `Cash` security ids. See
+            securities. If the `id_list` argument specifies only `Cash` security
+            ids then this data range is not optional and is required . See
             documentation on `Cash.time_series`.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A column of data for each  ``.asset.Asset`` instance in the
+            ``asset-list`` argument. The column labels are the ``.asset.Asset``
+            instances.
+
+        Warning
+        -------
+        In the current implementation the column labels which is an
+        ``.asset.Asset`` instance will retain its ``.asset.Asset.currency`` even
+        if the ``currency`` argument specifies a new currency. In a follow up
+        implementation this may change through the use
+        of``sqlalchemy.orm.make_transient()`` where the column label's
+        ``.asset.Asset.currency`` will reflect the new currency.
 
         Raises
         ------
@@ -612,9 +643,32 @@ class AssetBase(object):
         # Concatenate the separate data in the list into one pandas.DataFrame.
         data = pd.concat(data_list, axis=1, sort=True)
 
+        # Assure ascending date index
+        data.sort_index(inplace=True)
+
         # Warning if a dataframe has mixed currency time series.
         if len(set(s.currency for s in data.columns)) > 1:
             logger.warning('The DataFrame data is of mixed currencies.')
+
+        # Transform currency using forex rates.
+        new = dict()
+        if currency is not None:
+            foreign_tickers = [asset.currency.ticker for asset in data.columns]
+            forex = Forex.get_rates_data_frame(
+                self.session, currency, foreign_tickers)
+            # Match index of rate with index of series for correct division
+            # later
+            data_index = data.index.copy()  # For reindex back to data index
+            common_index = data.index.union(forex.index)
+            data = data.reindex(index=common_index, method='ffill')
+            forex = forex.reindex(index=common_index, method='ffill')
+            # Transform each column as per its asset (see column label) currency
+            for asset, series in data.items():
+                rate = forex[asset.currency.ticker]
+                new[asset] = series / rate  # Inverse rate
+            data = pd.DataFrame(new)
+            # Index back to original data index
+            data = data.reindex(index=data_index)
 
         # Return all time series in one pandas.DataFrame.
         return data

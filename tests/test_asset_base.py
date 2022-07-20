@@ -99,6 +99,7 @@ class TestAssetBase(unittest.TestCase):
         cls.isin1 = 'US5801351017'
         cls.isin2 = 'ZAE000027108'
         cls.isin_list = [cls.isin, cls.isin1, cls.isin2]
+        cls.foreign_currencies_list = ['USD', 'EUR', 'ZAR']
 
         # Cash is USD
         cls.cash_ticker = 'USD'
@@ -116,7 +117,9 @@ class TestAssetBase(unittest.TestCase):
         # folder which was set up as a required test fixture.
         self.asset_base.dumper.delete(delete_folder=False)
         # Set-up the database with selected test securities
-        self.asset_base.set_up(_test_isin_list=self.isin_list,)
+        self.asset_base.set_up(
+            _test_isin_list=self.isin_list,
+            _test_forex_list=self.foreign_currencies_list)
         # This is also a test of AssetBase.set_up() and AssetBase.tear_down()
 
     def tearDown(self):
@@ -158,8 +161,8 @@ class TestAssetBase(unittest.TestCase):
         eod_data = ListedEOD.to_data_frame(self.session, ListedEquity)
         dividend_data = Dividend.to_data_frame(self.session, ListedEquity)
         # Get test data from feed
-        fundamentals = fd.SecuritiesFundamentals()
-        history = fd.SecuritiesHistory()
+        fundamentals = fd.AssetFundamentals()
+        history = fd.AssetHistory()
         securities_list = self.session.query(ListedEquity).all()
         securities_test_data = fundamentals.get_securities(
             _test_isin_list=self.isin_list)
@@ -186,9 +189,7 @@ class TestAssetBase(unittest.TestCase):
                     ['date_stamp', 'isin']).reset_index(drop=True))
 
     def test_time_series(self):
-        """Test all securities are functional using total returns checksum.
-
-        """
+        """Test all securities time series. """
         # Test total_return check-product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
         data = self.asset_base.time_series(
@@ -199,6 +200,28 @@ class TestAssetBase(unittest.TestCase):
         test_data = {
             'STX40': 1.0807429980281673,
             'AAPL': 0.4534256160141147,
+            'MCD': 1.113204809354809}
+        self.assertEqual(test_data, data_check_prod)
+
+    def test_time_series_forex(self):
+        """Test all securities time series with currency transformed to ZAR."""
+        # Test total_return check-product over short historical date window.
+        securities_list = self.session.query(ListedEquity).all()
+        data = self.asset_base.time_series(
+            securities_list, return_type='total_return')
+        data.columns = [f'{c.identity_code}.{c.currency.ticker}' for c in data.columns]
+        data_zar = self.asset_base.time_series(
+            securities_list, return_type='total_return', currency='ZAR')
+        data_zar.columns = [f'{c.identity_code}.{c.currency.ticker}' for c in data_zar.columns]
+        import ipdb; ipdb.set_trace()
+
+
+        replace_time_series_labels(data, 'ticker', inplace=True)
+        data = data.loc['2020-01-01':'2021-01-01']  # Fixed historical window
+        data_check_prod = data.prod().to_dict()
+        test_data = {
+            'STX40': 1.0807429980281673,
+            'AAPL': 0.4557730329977179,
             'MCD': 1.113204809354809}
         self.assertEqual(test_data, data_check_prod)
 
