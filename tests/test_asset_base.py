@@ -26,7 +26,7 @@ import unittest
 import sys
 
 import pandas as pd
-from asset_base.asset import ListedEquity
+from asset_base.asset import Forex, ListedEquity
 from asset_base.exceptions import TimeSeriesNoData
 
 from asset_base.financial_data import Dump
@@ -209,21 +209,26 @@ class TestAssetBase(unittest.TestCase):
         securities_list = self.session.query(ListedEquity).all()
         data = self.asset_base.time_series(
             securities_list, return_type='total_return')
-        data.columns = [f'{c.identity_code}.{c.currency.ticker}' for c in data.columns]
-        data_zar = self.asset_base.time_series(
-            securities_list, return_type='total_return', currency='ZAR')
-        data_zar.columns = [f'{c.identity_code}.{c.currency.ticker}' for c in data_zar.columns]
-        import ipdb; ipdb.set_trace()
+        data_zar = self.asset_base.to_common_currency(data, 'ZAR')
+        data = replace_time_series_labels(data, 'ticker')
+        data_zar = replace_time_series_labels(data_zar, 'ticker')
+        forex = Forex.get_rates_data_frame(self.session, 'ZAR', ['USD'])
 
-
-        replace_time_series_labels(data, 'ticker', inplace=True)
-        data = data.loc['2020-01-01':'2021-01-01']  # Fixed historical window
-        data_check_prod = data.prod().to_dict()
-        test_data = {
-            'STX40': 1.0807429980281673,
-            'AAPL': 0.4557730329977179,
-            'MCD': 1.113204809354809}
-        self.assertEqual(test_data, data_check_prod)
+        # Recover exchange rates. Correct recovery is the test that everything
+        # works
+        recover = data / data_zar
+        recover = recover[['STX40', 'AAPL', 'MCD']]
+        # Extract values
+        stx_40 = recover['STX40'][~recover['STX40'].isna()]
+        aapl = recover['AAPL'][~recover['AAPL'].isna()]
+        mcd = recover['MCD'][~recover['MCD'].isna()]
+        # The MCD and APPL should, within rounding errors, correspond
+        self.assertTrue(all(aapl.round(6) == mcd.round(6)))
+        # This is ZAR to ZAR and should all be 1.0
+        self.assertTrue(all(stx_40 == 1.0))
+        # The ZARUSD exchange rate is properly recovered
+        self.assertTrue(
+            all(forex.reindex(aapl.index).USD.round(6) == aapl.round(6)))
 
 
 class Suite(object):

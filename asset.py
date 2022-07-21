@@ -1933,7 +1933,7 @@ class ListedEquity(Listed):
             'dividend':
                 The annualized dividend yield.
             'volume':
-                The volume of trade (total value of trade) in the period.
+                The volume of trade (total units of trade) in the period.
         price_item : str
             The specific item of price such as 'close', 'open', `high`, or
             `low`. Only valid when the ``series`` argument is set to 'price'.

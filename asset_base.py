@@ -154,11 +154,13 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
     else:
         raise ValueError('Unexpected value for "identifier" argument.')
 
-    data_frame.columns = columns
 
     if not inplace:
+        data_frame = data_frame.copy()
+        data_frame.columns = columns
         return data_frame
     else:
+        data_frame.columns = columns
         return None
 
 
@@ -513,7 +515,7 @@ class AssetBase(object):
 
     def time_series(self, asset_list,
                     series='price', price_item='close', return_type='price',
-                    currency=None, tidy=True, identifier='id', date_index=None):
+                    tidy=True, identifier='id', date_index=None):
         """Return historic time-series for a list of entities.
 
         Note
@@ -533,7 +535,7 @@ class AssetBase(object):
             'dividend':
                 The annualized distribution yield.
             'volume':
-                The volume of trade (total value of trade) in the period.
+                The volume of trade (total units of trade) in the period.
         price_item : str
             The specific item of price. Only valid for the `price` type:
 
@@ -559,10 +561,6 @@ class AssetBase(object):
                 The price period-on-period price series inclusive of the extra
                 yield due to dividends paid. The total_price series start value
                 is the same as the price start value.
-        currency : str(3), optional
-            ISO 4217 3-letter currency code. If set then the returned data is
-            converted to the specified currency using the ``.asset.Forex``
-            class.
         tidy : bool
             When ``True`` then prices are tidied up by removing outliers.
         date_index : pandas.DatetimeIndex, optional
@@ -579,15 +577,6 @@ class AssetBase(object):
             A column of data for each  ``.asset.Asset`` instance in the
             ``asset-list`` argument. The column labels are the ``.asset.Asset``
             instances.
-
-        Warning
-        -------
-        In the current implementation the column labels which is an
-        ``.asset.Asset`` instance will retain its ``.asset.Asset.currency`` even
-        if the ``currency`` argument specifies a new currency. In a follow up
-        implementation this may change through the use
-        of``sqlalchemy.orm.make_transient()`` where the column label's
-        ``.asset.Asset.currency`` will reflect the new currency.
 
         Raises
         ------
@@ -650,28 +639,72 @@ class AssetBase(object):
         if len(set(s.currency for s in data.columns)) > 1:
             logger.warning('The DataFrame data is of mixed currencies.')
 
-        # Transform currency using forex rates.
-        new = dict()
-        if currency is not None:
-            foreign_tickers = [asset.currency.ticker for asset in data.columns]
-            forex = Forex.get_rates_data_frame(
-                self.session, currency, foreign_tickers)
-            # Match index of rate with index of series for correct division
-            # later
-            data_index = data.index.copy()  # For reindex back to data index
-            common_index = data.index.union(forex.index)
-            data = data.reindex(index=common_index, method='ffill')
-            forex = forex.reindex(index=common_index, method='ffill')
-            # Transform each column as per its asset (see column label) currency
-            for asset, series in data.items():
-                rate = forex[asset.currency.ticker]
-                new[asset] = series / rate  # Inverse rate
-            data = pd.DataFrame(new)
-            # Index back to original data index
-            data = data.reindex(index=data_index)
-
         # Return all time series in one pandas.DataFrame.
         return data
+
+    def to_common_currency(self, data_frame, currency_ticker):
+        """Transform price-like time-series to a common currency.
+
+        Parameters
+        ----------
+        data_frame : pandas.DataFrame
+            An asset price data frame derived from the ``time_series``
+            method. Must be price series data. Thus valid
+        currency_ticker : str(3), optional
+            ISO 4217 3-letter currency code of the desired price currency.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The price data frame with prices transformed to the new currency of
+            the ``currency_ticker`` argument.
+
+        Warning
+        -------
+        It is _incorrect_ to transform anything but a price to a new price
+        currency and transforming returns or volume series is incorrect. Of
+        course a dividend series is also a price-like series and may be
+        transformed.
+
+        Warning
+        -------
+        It shall not be possible to use this method with data from
+        ``time_series`` that has had the data column labels modified using some
+        method such as the ``replace_time_series_labels`` method. Therefore
+        apply please apply the ``to_common_currency`` method before applying the
+        ``replace_time_series_labels`` method.
+
+        Warning
+        -------
+        In the current implementation if the the column labels are
+        ``.asset.Asset`` instances, these shall retain their original
+        ``.asset.Asset.currency`` even if the ``currency`` argument specifies a
+        new currency. In a follow up implementation this may change through the
+        use of``sqlalchemy.orm.make_transient()`` where the column label's
+        ``.asset.Asset.currency`` will reflect the new currency.
+
+        """
+        new = dict()
+        # Get the data_frame column currencies and the corresponding forex
+        foreign_tickers = [asset.currency.ticker for asset in data_frame.columns]
+        foreign_tickers = list(set(foreign_tickers))  # Make list of unique
+        forex = Forex.get_rates_data_frame(
+            self.session, currency_ticker, foreign_tickers)
+        # Match index of rate with index of series for correct division
+        # later
+        data_index = data_frame.index.copy()  # For reindex back to data index
+        common_index = data_frame.index.union(forex.index)
+        data_frame = data_frame.reindex(index=common_index, method='ffill')
+        forex = forex.reindex(index=common_index, method='ffill')
+        # Transform each column as per its asset (see column label) currency
+        for asset, series in data_frame.items():
+            rate = forex[asset.currency.ticker]
+            new[asset] = series / rate  # Inverse rate
+        data_frame = pd.DataFrame(new)
+        # Index back to original data_frame index
+        data_frame = data_frame.reindex(index=data_index)
+
+        return data_frame
 
     # TODO: Add a method to transform and force a single currency within a
     # dataframe of mixed currency time series.
