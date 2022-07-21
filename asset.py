@@ -687,11 +687,6 @@ class Forex(Cash):
     # Currency ticker is redundant information, but very useful and inexpensive
     ticker = Column(String(6))
 
-    # Historical ForexEOD end-of-day (EOD) time-series collection ranked by
-    # ForexEOD.date_stamp
-    # _eod_series = relationship(
-    #     ForexEOD, order_by=ForexEOD.date_stamp, backref='asset')
-
     # The reference or root ticker. Its price will always be 1.0.
     root_currency_ticker = 'USD'
 
@@ -1176,11 +1171,6 @@ class Listed(Share):
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
-
-    # Historical TradeEOD end-of-day (EOD) time-series collection ranked by
-    # ListedEOD.date_stamp
-    # _eod_series = relationship(
-    #     ListedEOD, order_by=ListedEOD.date_stamp, backref='listed')
 
     # Listing status.
     status = Column(Enum('listed', 'delisted'), nullable=False)
