@@ -877,7 +877,7 @@ class Forex(Cash):
 
         # Get EOD trade data for Forex.
         if get_forex_method is not None:
-            ForexEOD.update_all(session, cls, get_forex_method)
+            ForexEOD.update_all(session, get_forex_method)
 
     @classmethod
     def get_rates_data_frame(
@@ -1503,7 +1503,7 @@ class Listed(Share):
 
         # Get EOD trade data.
         if get_eod_method is not None:
-            ListedEOD.update_all(session, cls, get_eod_method)
+            ListedEOD.update_all(session, get_eod_method)
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -1834,7 +1834,7 @@ class ListedEquity(Listed):
 
         # Get Dividend trade data.
         if get_dividends_method is not None:
-            Dividend.update_all(session, cls, get_dividends_method)
+            Dividend.update_all(session, get_dividends_method)
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -2162,6 +2162,12 @@ class Index(Base):
         issuer code (or ticker) to uniquely identity the index in the world.
     currency : .entity.Currency
         Currency of asset pricing.
+    total_return : bool, optional
+        Indicates the index time series is a total return price series.
+    static : bool, optional
+        If set True then the index's time series data is static, i.e., not
+        updated and so would be ignored when the ``Index.update_all`` method is
+        called.
 
     See also
     --------
@@ -2188,14 +2194,24 @@ class Index(Base):
     # Unique index ticker
     ticker = Column(String(12), nullable=False)
 
+    # Indicates the index time series is a total return price series
+    total_return = Column(Boolean, nullable=False)
+
+    # If set True then the index's time series data is static, i.e., not updated
+    # and so would be ignored when the ``IndexEOD.update_all`` method is called.
+    static = Column(Boolean, nullable=False)
+
     #  A short class name for use in the alt_name method.
     _name_appendix = 'Index'
 
-    def __init__(self, name, ticker, currency, **kwargs):
+    def __init__(
+        self, name, ticker, currency, total_return=False, static=False,
+        **kwargs):
         """Instance initialization."""
         super().__init__(name, currency, **kwargs)
-
         self.ticker = ticker
+        self.total_return = total_return
+        self.static = static
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
@@ -2304,7 +2320,7 @@ class Index(Base):
 
         # Get EOD trade data.
         if get_eod_method is not None:
-            IndexEOD.update_all(session, cls, get_eod_method)
+            IndexEOD.update_all(session, get_eod_method)
 
 
 class ExchangeTradeFund(ListedEquity):

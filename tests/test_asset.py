@@ -1472,8 +1472,9 @@ class TestIndex(TestBase):
 
     def test___init__(self):
         """Initialization."""
-        index = Index(self.index_name, self.ticker, self.currency)
+        index = Index(self.index_name, self.ticker, self.currency, True)
         self.assertIsInstance(index, Index)
+        self.assertTrue(index.total_return)
 
     def test___str__(self):
         index = Index(self.index_name, self.ticker, self.currency)

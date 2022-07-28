@@ -8,6 +8,8 @@
 from __future__ import annotations
 # Used to avoid ImportError (most likely due to a circular import)
 from typing import TYPE_CHECKING
+
+
 if TYPE_CHECKING:
     from asset_base.asset import Asset
 
@@ -548,7 +550,7 @@ class ListedEOD(TradeEOD):
         self.listed = base_obj
 
     @classmethod
-    def update_all(cls, session, asset_class, get_method):
+    def update_all(cls, session, get_method):
         """ Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -564,10 +566,6 @@ class ListedEOD(TradeEOD):
         get_method : financial_data module class method
             The method that returns a ``pandas.DataFrame`` with columns of the
             same name as all this class' constructor method arguments.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
 
         No object shall be destroyed, only updated, or missing object created.
 
@@ -575,7 +573,11 @@ class ListedEOD(TradeEOD):
         # TODO: Find a way to get the financial_data module to look for delisted
         # data. Then skipping de-listed securities below can be avoided
 
-        # Skip data fetch and warn for all de-listed securities
+        # Get asset class from the asset relationship. This is to avoid an import from
+        # `.asset` which would cause a circular import.
+        asset_class = cls.listed.property.mapper.class_
+
+        # For all de-listed securities skip data fetch and warn
         securities_delisted = session.query(asset_class).filter(
             asset_class.status == 'delisted').all()
         for security in securities_delisted:
@@ -644,7 +646,7 @@ class IndexEOD(TradeEOD):
         self.index = base_obj
 
     @classmethod
-    def update_all(cls, session, asset_class, get_method):
+    def update_all(cls, session, get_method):
         """ Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -660,17 +662,18 @@ class IndexEOD(TradeEOD):
         get_method : financial_data module class method
             The method that returns a ``pandas.DataFrame`` with columns of the
             same name as all this class' constructor method arguments.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
 
         No object shall be destroyed, only updated, or missing object created.
 
         """
+        # Get asset class from the asset relationship. This is to avoid an import from
+        # `.asset` which would cause a circular import.
+        asset_class = cls.index.property.mapper.class_
+
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
-        index_list = session.query(asset_class).all()
+        index_list = session.query(
+            asset_class).filter(asset_class.static==False).all()
 
         super().update_all(session, asset_class, get_method, index_list)
 
@@ -728,7 +731,7 @@ class ForexEOD(TradeEOD):
         self.forex = base_obj
 
     @classmethod
-    def update_all(cls, session, asset_class, get_method):
+    def update_all(cls, session, get_method):
         """ Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -744,14 +747,13 @@ class ForexEOD(TradeEOD):
         get_method : financial_data module class method
             The method that returns a ``pandas.DataFrame`` with columns of the
             same name as all this class' constructor method arguments.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
 
         No object shall be destroyed, only updated, or missing object created.
 
         """
+        # Get asset class from the asset relationship. This is to avoid an import from
+        # `.asset` which would cause a circular import.
+        asset_class = cls.forex.property.mapper.class_
 
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
@@ -868,7 +870,7 @@ class Dividend(TimeSeriesBase):
         return data
 
     @classmethod
-    def update_all(cls, session, asset_class, get_method):
+    def update_all(cls, session, get_method):
         """ Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -884,16 +886,16 @@ class Dividend(TimeSeriesBase):
         get_method : financial_data module class method
             The method that returns a ``pandas.DataFrame`` with columns of the
             same name as all this class' constructor method arguments.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
 
         No object shall be destroyed, only updated, or missing object created.
 
         """
         # TODO: Find a way to get the financial_data module to look for delisted
         # data. Then skipping de-listed securities below can be avoided
+
+        # Get asset class from the asset relationship. This is to avoid an import from
+        # `.asset` which would cause a circular import.
+        asset_class = cls.listed_equity.property.mapper.class_
 
         # Skip data fetch and warn for all de-listed securities
         securities_delisted = session.query(asset_class).filter(

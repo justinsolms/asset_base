@@ -458,7 +458,7 @@ class TestListedEOD(TestTradeEOD):
         """ Update/create all the objects in the asset_base session."""
         # This test is stolen from test_financial_data
         # Call the tested method.
-        ListedEOD.update_all(self.session, Listed, self.feed.get_eod)
+        ListedEOD.update_all(self.session, self.feed.get_eod)
         # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(ListedEOD).all()])
@@ -724,7 +724,7 @@ class TestDividend(TestTimeSeriesBase):
         """Get historical dividends for a specified list of securities."""
         # Test stolen from test_financial_data
         # Call the tested method.
-        Dividend.update_all(self.session, ListedEquity, self.feed.get_dividends)
+        Dividend.update_all(self.session, self.feed.get_dividends)
         # Retrieve the submitted date stamped data from asset_base
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(Dividend).all()])
