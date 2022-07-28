@@ -17,11 +17,10 @@ import pandas as pd
 from asset_base.common import TestSession
 
 from asset_base.financial_data import Dump, DumpReadError, Static
-from asset_base.financial_data import AssetFundamentals
-from asset_base.financial_data import AssetHistory
+from asset_base.financial_data import MetaData
+from asset_base.financial_data import History
 from asset_base.entity import Currency, Domicile, Exchange
-from asset_base.asset import Forex, Listed
-from asset_base.asset_base import AssetBase
+from asset_base.asset import Forex, Index, Listed
 from fundmanage.utils import date_to_str
 
 
@@ -85,13 +84,13 @@ class TestStatic(unittest.TestCase):
             self.assertEqual(len(item1), 4)
 
 
-class TestSecuritiesFundamentals(unittest.TestCase):
+class TestMetaData(unittest.TestCase):
     """Provide fundamental and meta-data of the working universe securities."""
 
     @classmethod
     def setUpClass(cls):
         """Set up test class fixtures."""
-        cls.feed = AssetFundamentals()
+        cls.feed = MetaData()
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -99,7 +98,7 @@ class TestSecuritiesFundamentals(unittest.TestCase):
 
     def test___init__(self):
         """Initialization."""
-        self.assertIsInstance(self.feed, AssetFundamentals)
+        self.assertIsInstance(self.feed, MetaData)
         self.assertEqual(self.feed._data_path, 'data')
         self.assertEqual(self.feed._sub_path, 'static')
 
@@ -117,6 +116,16 @@ class TestSecuritiesFundamentals(unittest.TestCase):
         data = self.feed.get_securities()
         self.assertEqual(set(data.columns.tolist()), set(columns_dict.keys()))
 
+    def test_get_indices(self):
+        """Fetch indices form the feeds."""
+        test_columns = [
+            'index_name', 'ticker', 'currency_code']
+        test_row = ['FTSE/JSE Top 40', 'J200', 'ZAR']
+        table = self.feed.get_indices()
+        self.assertEqual(test_columns, table.columns.tolist())
+        self.assertEqual(
+            test_row, table[table['ticker'] == 'J200'].values.tolist()[0])
+
 
 class TestSecuritiesHistory(unittest.TestCase):
 
@@ -124,10 +133,9 @@ class TestSecuritiesHistory(unittest.TestCase):
     def setUpClass(cls):
         """Set up test class fixtures."""
         # Securities meta-data
-        cls.get_method = AssetFundamentals().get_securities
-        securities_dataframe = cls.get_method()
+        securities_dataframe = MetaData().get_securities()
         # Securities feed
-        cls.feed = AssetHistory()
+        cls.feed = History()
         # Select Test security symbol identities subset
         symbols = [('AAPL', 'XNYS'), ('MCD', 'XNYS'), ('STX40', 'XJSE')]
         securities_dataframe.set_index(['ticker', 'mic'], inplace=True)
@@ -135,7 +143,8 @@ class TestSecuritiesHistory(unittest.TestCase):
         cls.securities_dataframe.reset_index(drop=False, inplace=True)
         # Forex tickers
         cls.forex_tickers = ('USDEUR', 'USDGBP', 'USDUSD')
-
+        # Index tickers
+        cls.index_tickers = ('GSPC', 'ASX', 'J200')
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -146,20 +155,25 @@ class TestSecuritiesHistory(unittest.TestCase):
         Currency.update_all(self.session, get_method=static_obj.get_currency)
         Domicile.update_all(self.session, get_method=static_obj.get_domicile)
         Exchange.update_all(self.session, get_method=static_obj.get_exchange)
-        # Create Forex instances from Currency instances. do not populate Forex
-        # time series yet as that is for the tests.
-        Forex.update_all(self.session)
         # Listed test instances
         Listed.from_data_frame(self.session, self.securities_dataframe)
         # Securities test instances list
         self.securities_list = self.session.query(Listed).all()
+        # Create Forex instances from Currency instances. do not populate Forex
+        # time series yet as that is for the tests.
+        Forex.update_all(self.session)
         # Forex test instances list
         self.forex_list = self.session.query(
             Forex).filter(Forex.ticker.in_(self.forex_tickers)).all()
+        # Create index instances
+        Index.update_all(self.session, MetaData().get_indices)
+        # Index test instances list
+        self.index_list = self.session.query(
+            Index).filter(Index.ticker.in_(self.index_tickers)).all()
 
     def test___init__(self):
         """Initialization."""
-        self.assertIsInstance(self.feed, AssetHistory)
+        self.assertIsInstance(self.feed, History)
         self.assertEqual(self.feed._data_path, None)
         self.assertEqual(self.feed._sub_path, None)
 
@@ -243,6 +257,32 @@ class TestSecuritiesHistory(unittest.TestCase):
         df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
         pd.testing.assert_frame_equal(df, test_df)
 
+    def test_get_index(self):
+        """Get historical EOD for a specified list of securities."""
+        # Test data
+        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        columns = ['date_stamp', 'ticker', 'close', 'high', 'low', 'open', 'volume']
+        # NOTE: This data may change as EOD historical make corrections
+        test_df = pd.DataFrame([  # Last date data
+            ['2020-12-31', 'ASX', 3673.63, 3723.98, 3664.69, 3723.98, 49334000],
+            ['2020-12-31', 'GSPC', 3756.0701, 3760.2, 3726.8799, 3733.27, 3172510000],
+            ['2020-12-31', 'J200', 54379.58, 54615.33, 53932.88, 54615.33, 0]
+        ], columns=columns)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        # Call
+        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
+        df = self.feed.get_indices(self.index_list, from_date, to_date)
+        # Do not test for 'adjusted_close' as it changes
+        df.drop(columns='adjusted_close', inplace=True)
+        # Test
+        # Test against last date data
+        self.assertFalse(df.empty)
+        # Condition columns for testing
+        df = df[columns]
+        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
+        pd.testing.assert_frame_equal(df, test_df)
+
 
 class TestDump(unittest.TestCase):
 
@@ -310,9 +350,8 @@ class Suite(object):
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
             TestStatic,
-            TestSecuritiesFundamentals,
+            TestMetaData,
             TestSecuritiesHistory,
-            TestForexHistory,
             TestDump,
         ]
 

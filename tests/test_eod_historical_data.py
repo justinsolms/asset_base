@@ -19,7 +19,7 @@ import pandas as pd
 import datetime
 
 # Classes to be tested
-from asset_base.eod_historical_data import _API
+from asset_base.eod_historical_data import _API, Exchanges
 from asset_base.eod_historical_data import Historical
 from asset_base.eod_historical_data import Bulk
 from asset_base.eod_historical_data import MultiHistorical
@@ -308,15 +308,66 @@ class TestBulk(aiounittest.AsyncTestCase):
         )
 
 
+class TestExchanges(unittest.TestCase):
+    """Get exchanges (and list of indices) data."""
+
+    @classmethod
+    def setUpClass(cls):
+        """ Set up class test fixtures. """
+        cls.exchanges = Exchanges()
+        cls.exchange = 'JSE'
+
+    def setUp(self):
+        """ Set up one test. """
+        pass
+
+    def test_get_exchanges(self):
+        """Get the full list of supported exchanges."""
+        test_columns = [
+            'Name', 'Code', 'OperatingMIC', 'Country', 'Currency',
+            'CountryISO2', 'CountryISO3']
+        test_row = [
+            'USA Stocks', 'US', 'XNAS, XNYS', 'USA', 'USD', 'US','USA']
+        table = self.exchanges.get_exchanges()
+        self.assertEqual(test_columns, table.columns.tolist())
+        self.assertEqual(
+            test_row, table[table['Name'] == 'USA Stocks'].values.tolist()[0])
+
+    def test_get_exchange_symbol_list(self):
+        """Get the full list symbols (tickers) on the exchange."""
+        test_columns = [
+            'Code', 'Name', 'Country', 'Exchange', 'Currency', 'Type', 'Isin']
+        test_row = [
+            'WHL', 'Woolworths Holdings Ltd', 'South Africa', 'JSE', 'ZAC',
+            'Common Stock', 'ZAE000063863']
+        table = self.exchanges.get_exchange_symbols(self.exchange)
+        self.assertEqual(test_columns, table.columns.tolist())
+        self.assertEqual(
+            test_row, table[table['Code'] == 'WHL'].values.tolist()[0])
+
+    def test_get_indices_list(self):
+        """Get a list of supported indices."""
+        test_columns = [
+            'Code', 'Name', 'Country', 'Exchange', 'Currency', 'Type', 'Isin']
+        test_row = [
+            'J200', 'FTSE/JSE Top 40', 'South Africa', 'INDX', 'ZAR',
+            'INDEX', None]
+        table = self.exchanges.get_indices()
+        self.assertEqual(test_columns, table.columns.tolist())
+        self.assertEqual(
+            test_row, table[table['Code'] == 'J200'].values.tolist()[0])
+
+
 class TestMultiHistorical(unittest.TestCase):
     """ Get bulk histories across exchanges, securities and date ranges."""
 
     @classmethod
     def setUpClass(cls):
         """ Set up class test fixtures. """
-        cls.bulk = MultiHistorical()
+        cls.historical = MultiHistorical()
         cls.symbol_list = (('AAPL', 'US'), ('MCD', 'US'), ('STX40', 'JSE'))
         cls.forex_list = ('USDEUR', 'USDGBP', 'USDUSD')
+        cls.index_list = ('GSPC', 'ASX', 'J200')
         cls.symbol_list_bad = (
             ('AAPL', 'US'), ('MCD', 'US'), ('BADONE', 'JSE'), ('STX40', 'JSE'))
 
@@ -331,7 +382,7 @@ class TestMultiHistorical(unittest.TestCase):
 
     def test___init__(self):
         """ Test Initialization. """
-        self.assertIsInstance(self.bulk, MultiHistorical)
+        self.assertIsInstance(self.historical, MultiHistorical)
 
     def test__get_eod(self):
         """ Get historical data for a list of securities. """
@@ -351,7 +402,7 @@ class TestMultiHistorical(unittest.TestCase):
         symbol_list = [
             (s[0], s[1], from_date, to_date) for s in self.symbol_list]
         df = asyncio.run(
-            self.bulk._get_eod(Historical._historical_eod, symbol_list)
+            self.historical._get_eod(Historical._historical_eod, symbol_list)
         )
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
@@ -386,7 +437,7 @@ class TestMultiHistorical(unittest.TestCase):
         ]
         # Get Bulk EOD (Type=None)
         df = asyncio.run(
-            self.bulk._get_bulk(
+            self.historical._get_bulk(
                 self.symbol_list,
                 from_date, to_date,
                 type=None
@@ -424,7 +475,7 @@ class TestMultiHistorical(unittest.TestCase):
         from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         symbol_list_bad = [
             (s[0], s[1], from_date1, to_date) for s in self.symbol_list_bad]
-        df = self.bulk.get_eod(symbol_list_bad)
+        df = self.historical.get_eod(symbol_list_bad)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test-rank columns
@@ -448,7 +499,7 @@ class TestMultiHistorical(unittest.TestCase):
         from_date2 = datetime.datetime.strptime('2020-12-25', '%Y-%m-%d')
         symbol_list = [
             (s[0], s[1], from_date2, to_date) for s in self.symbol_list]
-        df = self.bulk.get_eod(symbol_list)
+        df = self.historical.get_eod(symbol_list)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test-rank columns
@@ -488,7 +539,7 @@ class TestMultiHistorical(unittest.TestCase):
         from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         symbol_list = [
             (s[0], s[1], from_date1, to_date) for s in self.symbol_list]
-        df = self.bulk.get_dividends(symbol_list)
+        df = self.historical.get_dividends(symbol_list)
         # Test
         self.assertEqual(len(df), 12)
         self.assertEqual(list(df.index.names), list(index_names))
@@ -535,7 +586,7 @@ class TestMultiHistorical(unittest.TestCase):
         # Get
         forex_list = [
             (s, from_date, to_date) for s in self.forex_list]
-        df = self.bulk.get_forex(forex_list)
+        df = self.historical.get_forex(forex_list)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
         # Test-rank columns
@@ -549,8 +600,34 @@ class TestMultiHistorical(unittest.TestCase):
             df.values.tolist(),
             )
 
-        def test_bad_ticker(self):
-            """Fail for bad ticker but get the rest."""
+    def test_get_index(self):
+        """ Get daily, EOD historial forex."""
+        # Test data
+        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        columns = ['close', 'high', 'low', 'open', 'volume']
+        index_names = ['date', 'ticker']
+        test_values = [
+            [3673.63, 3723.98, 3664.69, 3723.98, 49334000.0],
+            [3756.0701, 3760.2, 3726.8799, 3733.27, 3172510000.0],
+            [54379.58, 54615.33, 53932.88, 54615.33, 0.0]]
+
+        # Get
+        index_list = [
+            (s, from_date, to_date) for s in self.index_list]
+        df = self.historical.get_index(index_list)
+        # Do not test for 'adjusted_close' as it changes
+        df.drop(columns='adjusted_close', inplace=True)
+        # Test-rank columns
+        df = df[columns]
+        df = df.iloc[-3:]
+        # Test
+        self.assertEqual(df.index.names, index_names)
+        self.assertEqual(list(df.columns), list(columns))
+        self.assertEqual(
+            test_values,
+            df.values.tolist(),
+            )
 
 
 class Suite(object):

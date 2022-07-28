@@ -316,7 +316,7 @@ class Static(_Feed):
         return data
 
 
-class AssetFundamentals(_Feed):
+class MetaData(_Feed):
     """Provide fundamental and meta-data of the working universe securities."""
 
     def __init__(self):
@@ -326,13 +326,7 @@ class AssetFundamentals(_Feed):
         self._data_path = "data"
 
     def get_securities(self, **kwargs):
-        """Fetch JSE securities mata-data from a local file.
-
-        Note
-        ----
-        The _test_isin_list argument is for testing only. Please do not use it.
-
-        """
+        """Fetch JSE securities mata-data from a local file. """
         universe_file_name = 'ETFs.JSE.Meta.csv'
         path = self._path(universe_file_name)
 
@@ -381,14 +375,55 @@ class AssetFundamentals(_Feed):
         # For testing purposes only!!!
         if '_test_isin_list' in kwargs and \
                 kwargs['_test_isin_list'] is not None:
-            _test_isin_list = kwargs['_test_isin_list']
+            _test_isin_list = kwargs.pop('_test_isin_list')
             # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
             data = data[data['isin'].isin(_test_isin_list)]
 
         return data
 
+    def get_indices(self, feed='EOD', **kwargs):
+        """Fetch indices form the feeds."""
 
-class AssetHistory(_Feed):
+        if feed == 'EOD':
+            feed = eod.Exchanges()
+            column_dict = {
+                'Name': 'index_name',
+                'Code': 'ticker',
+                'Currency': 'currency_code',
+            }
+            # Try fetch the data form the feed
+            try:
+                data = feed.get_indices()
+            except Exception as ex:
+                logger.error('Failed to get Indices meta data.')
+                raise ex
+            # If no data then just return a simple empty pandas DataFrame.
+            if data.empty:
+                return pd.DataFrame
+            #  Reset the index as we need to form here on treat the index as
+            # column data. The security and date info is in the index
+            data.reset_index(inplace=True)
+            # Extract by columns name and rename to a standard. This is also
+            # then a check for expected columns.
+            data = data[list(column_dict.keys())]
+            data.rename(columns=column_dict, inplace=True)
+        else:
+            raise Exception('Feed {} not implemented.'.format(feed))
+
+        # For testing purposes only!!!
+        if '_test_ticker_list' in kwargs and \
+                kwargs['_test_ticker_list'] is not None:
+            _test_ticker_list = kwargs.pop('_test_ticker_list')
+            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
+            data = data[data['ticker'].isin(_test_ticker_list)]
+
+        return data
+
+    # TODO: Add get_exchanges method
+    # TODO: Add get_exchange_symbols method
+
+
+class History(_Feed):
     """Provide securities historical data from data feeds.
 
     This class manages
@@ -400,30 +435,51 @@ class AssetHistory(_Feed):
         self._sub_path = None
 
     @staticmethod
-    def _preprocessor(asset_list, from_date, to_date, series):
-        """ Generate date list with date ranges for each asset."""
+    def date_preprocessor(obj_list, from_date, to_date, series):
+        """ Generate date lists with date ranges for each asset.
+
+        Parameters
+        ----------
+        obj_list : .asset.Base (or polymorph child class)
+            The list of asset instances.
+        from_date : datetime.date
+            If a from date argument is not provided then the time series of each
+            asset is inspected and the from date generated according to the
+            latest date of the individual time series.
+        from_date : datetime.date
+            If not provided then the date returned shl be that of today.
+
+        Returns
+        -------
+        from_date_list
+            The list of dates per asset instance.
+        to_date_list
+            The list of dates per asset instance.
+
+        """
         # From date list, one per Asset instance
         if from_date is None:
             # One asset, one date
-            # FIXME: For dividends we must use the get_last_dividend_date
             if series == 'eod':
-                from_date_list = [s.get_last_eod_date() for s in asset_list]
+                from_date_list = [s.get_last_eod_date() for s in obj_list]
             elif series == 'dividend':
-                from_date_list = [s.get_last_dividend_date() for s in asset_list]
+                from_date_list = [s.get_last_dividend_date() for s in obj_list]
             elif series == 'forex':
-                from_date_list = [s.get_last_eod_date() for s in asset_list]
+                from_date_list = [s.get_last_eod_date() for s in obj_list]
+            elif series == 'index':
+                from_date_list = [s.get_last_eod_date() for s in obj_list]
             else:
                 raise Exception('Unexpected `series` argument.')
         else:
-            from_date_list = [from_date for s in asset_list]
+            from_date_list = [from_date for s in obj_list]
         # To date list, one per Asset instance. As such to future accommodate
         # one asset, one date, mixed to_date(s) lists, as seen in the from_date
         # above.
         if to_date is None:
             # Default to today
-            to_date_list = [datetime.date.today() for s in asset_list]
+            to_date_list = [datetime.date.today() for s in obj_list]
         else:
-            to_date_list = [to_date for s in asset_list]
+            to_date_list = [to_date for s in obj_list]
 
         return from_date_list, to_date_list
 
@@ -448,7 +504,7 @@ class AssetHistory(_Feed):
 
         """
         # Generate date list with date ranges for each asset.
-        from_date_list, to_date_list = self._preprocessor(
+        from_date_list, to_date_list = self.date_preprocessor(
             asset_list, from_date, to_date, series='eod')
 
         # Assemble symbol list
@@ -517,8 +573,8 @@ class AssetHistory(_Feed):
             securities that are listed and traded.
         from_date : datetime.date, optional
             Inclusive start date of historical data. If not provided then the
-            date is set to the ``asset.Asset.get_last_dividend_date()`` date for
-            each asset in the ``asset_list`` argument.
+            date is set to the ``asset.ListedEquity.get_last_dividend_date()``
+            date for each asset in the ``asset_list`` argument.
         to_date : datetime.date, optional
             Inclusive end date of historical data. If not provide then the date
             is set to today.
@@ -528,7 +584,7 @@ class AssetHistory(_Feed):
 
         """
         # Generate date list with date ranges for each asset.
-        from_date_list, to_date_list = self._preprocessor(
+        from_date_list, to_date_list = self.date_preprocessor(
             asset_list, from_date, to_date, series='dividend')
 
         # Assemble symbol list
@@ -602,7 +658,7 @@ class AssetHistory(_Feed):
             A list of forex for which data are required.
         from_date : datetime.date, optional
             Inclusive start date of historical data. If not provided then the
-            date is set to the ``asset.Asset.get_last_eod_date()`` date for each
+            date is set to the ``asset.Forex.get_last_eod_date()`` date for each
             asset in the ``asset_list`` argument.
         to_date : datetime.date, optional
             Inclusive end date of historical data. If not provide then the date
@@ -613,7 +669,7 @@ class AssetHistory(_Feed):
 
         """
         # Generate date list with date ranges for each asset.
-        from_date_list, to_date_list = self._preprocessor(
+        from_date_list, to_date_list = self.date_preprocessor(
             forex_list, from_date, to_date, series='forex')
 
         # Assemble symbol list
@@ -638,6 +694,72 @@ class AssetHistory(_Feed):
             }
             try:
                 data = feed.get_forex(symbol_list)
+            except Exception as ex:
+                logger.error('Failed to get Forex data.')
+                raise ex
+            # If no data then just return a simple empty pandas DataFrame.
+            if data.empty:
+                return pd.DataFrame
+            #  Reset the index as we need to from here on treat the index as
+            # column data. The security and date info is in the index
+            data.reset_index(inplace=True)
+            # Extract by columns name and rename to a standard. This is also
+            # then a check for expected columns.
+            data = data[list(column_dict.keys())]
+            data.rename(columns=column_dict, inplace=True)
+            # Condition date
+            data['date_stamp'] = pd.to_datetime(data['date_stamp'])
+        else:
+            raise Exception('Feed {} not implemented.'.format(feed))
+
+        return data
+
+    def get_indices(
+            self, index_list, from_date=None, to_date=None, feed='EOD'):
+        """ Get historical EOD for a specified list of indices.
+
+        This method fetches the data from the specified feed.
+
+        index_list : list of .asset_base.Index instances
+            A list of forex for which data are required.
+        from_date : datetime.date, optional
+            Inclusive start date of historical data. If not provided then the
+            date is set to the ``asset.Forex.get_last_eod_date()`` date for each
+            asset in the ``asset_list`` argument.
+        to_date : datetime.date, optional
+            Inclusive end date of historical data. If not provide then the date
+            is set to today.
+        feed : str
+            The data feed module to use:
+                'EOD' - eod_historical_data
+
+        """
+        # Generate date list with date ranges for each asset.
+        from_date_list, to_date_list = self.date_preprocessor(
+            index_list, from_date, to_date, series='index')
+
+        # Assemble symbol list
+        symbol_list = list()
+        for sec, from_date, to_date in zip(
+                index_list, from_date_list, to_date_list):
+            symbol_list.append(
+                (sec.ticker, from_date, to_date))
+
+        # Pick feed
+        if feed == 'EOD':
+            feed = eod.MultiHistorical()
+            column_dict = {
+                'date': 'date_stamp',
+                'ticker': 'ticker',
+                'adjusted_close': 'adjusted_close',
+                'close': 'close',
+                'high': 'high',
+                'low': 'low',
+                'open': 'open',
+                'volume': 'volume',
+            }
+            try:
+                data = feed.get_index(symbol_list)
             except Exception as ex:
                 logger.error('Failed to get Forex data.')
                 raise ex

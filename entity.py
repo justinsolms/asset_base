@@ -184,6 +184,7 @@ class Currency(Base):
                 session.add(obj)
             else:
                 raise FactoryError(
+                    'Attempted instance creation. '
                     'Expected all positional arguments',
                     action='Creation failed')
         else:
@@ -390,7 +391,7 @@ class Domicile(Base):
             arg_list = [country_code, country_name, currency_ticker]
             if not all(arg_list):
                 raise FactoryError(
-                    'Domicile Creation Failed. '
+                    'Attempted instance creation. '
                     'Expected all positional arguments.',
                     action='Create failed')
             currency = Currency.factory(session, currency_ticker)

@@ -132,6 +132,7 @@ class Historical(_API):
 
     _historical_eod = '/api/eod'
     _historical_forex = '/api/eod'
+    _historical_index = '/api/eod'
     _historical_dividends = '/api/div'
 
     async def _get(self, path, exchange, ticker, from_date=None, to_date=None):
@@ -414,6 +415,7 @@ class Bulk(_API):
 
 class Fundamentals(_API):
     """ Get fundamental data API for stocks, ETFs, Mutual Funds, Indices. """
+
     # TODO: Add fundamental public methods
     _fundamentals = '/api/fundamentals'
 
@@ -445,6 +447,65 @@ class Fundamentals(_API):
         table = await self._get_retries(path, params=params)
 
         return table
+
+
+class Exchanges(object):
+    """Get exchanges (and list of indices) data."""
+
+    def get_exchanges(self):
+        """Get the full list of supported exchanges."""
+        # Path must append ticker and short exchange code
+        _exchanges = '/api/exchanges-list'
+        path = '{}'.format(_exchanges)
+
+        # Get the API response
+        params = dict(
+            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
+            period='d',  # Default to daily sampling period
+            order='a',  # Default to ascending order
+        )
+
+        async def _get(path, params):
+            async with _API() as exchanges:
+                task = await exchanges._get_retries(path, params=params)
+            return task
+
+        table = asyncio.run(_get(path, params))
+
+        return table
+
+    def get_exchange_symbols(self, exchange):
+        """Get the full table of symbols (tickers) on the exchange.
+
+        Parameters
+        ----------
+        exchange : str
+            Short exchange code.
+
+        """
+        # Path must append ticker and short exchange code
+        _exchange_symbol_list = '/api/exchange-symbol-list'
+        path = '{}/{}'.format(_exchange_symbol_list, exchange)
+
+        # Get the API response
+        params = dict(
+            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
+            period='d',  # Default to daily sampling period
+            order='a',  # Default to ascending order
+        )
+
+        async def _get(path, params):
+            async with _API() as exchanges:
+                task = await exchanges._get_retries(path, params=params)
+            return task
+
+        table = asyncio.run(_get(path, params))
+
+        return table
+
+    def get_indices(self):
+        """Get a table of supported indices."""
+        return self.get_exchange_symbols('INDX')
 
 
 class MultiHistorical(object):
@@ -623,7 +684,7 @@ class MultiHistorical(object):
 
         # Use EOD API
         table = asyncio.run(
-            self._get_eod( Historical._historical_eod, symbol_list))
+            self._get_eod(Historical._historical_eod, symbol_list))
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
@@ -693,7 +754,7 @@ class MultiHistorical(object):
 
         # Use EOD API
         table = asyncio.run(
-            self._get_eod( Historical._historical_forex, symbol_list))
+            self._get_eod(Historical._historical_forex, symbol_list))
         # As the exchange is always 'FOREX' it is unnecessary.
         table = table.droplevel(level='exchange')
 
@@ -705,3 +766,45 @@ class MultiHistorical(object):
             table = table[columns_names]
 
         return table
+
+    def get_index(self, index_list):
+        """ Get historical forex for a list of rates.
+
+        This method uses only the EOD (class Historical) due to incorrect Bulk
+        API call behaviour such as not returning the ``value`` filed and not
+        restricting to only the specified tickers or symbols.
+
+        symbol_list : list of tuples
+            A list of index tickers and date range list. As an example, if the
+            index ASX (FTSE All Share Index) was required between 2021-01-01 and
+            2022-01-01 then it's symbol tuple would be: `('ASX',
+            datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note that
+            the date must be `datetime.date` or an exception shall be thrown
+
+        """
+        columns_names = [
+            'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
+
+        # Re-construct a symbol list form the forex ticker list as (`exchange`,
+        # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
+        # part set to "FOREX". In other words, insert FOREX in the right
+        # position.
+        symbol_list = [
+            (ticker, 'INDX', from_date, to_date
+             ) for ticker, from_date, to_date in index_list]
+
+        # Use EOD API
+        table = asyncio.run(
+            self._get_eod(Historical._historical_forex, symbol_list))
+        # As the exchange is always 'FOREX' it is unnecessary.
+        table = table.droplevel(level='exchange')
+
+        if table.empty:
+            # Produce an empty DataFrame that will pass empty tests downstream
+            table = pd.DataFrame()
+        else:
+            # The security and date info is in the index
+            table = table[columns_names]
+
+        return table
+

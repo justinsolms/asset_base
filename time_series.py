@@ -52,8 +52,8 @@ class TimeSeriesBase(Base):
 
     Parameters
     ----------
-    asset : .Asset (or polymorph child class)
-        The ``Asset`` instance the EOD data belongs to.
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     """
@@ -74,33 +74,34 @@ class TimeSeriesBase(Base):
     __table_args__ = (UniqueConstraint('_discriminator', '_asset_id', 'date_stamp'), )
 
     # Foreign key giving ``Asset`` a time series capability
-    _asset_id = Column(Integer, ForeignKey('asset.id'), nullable=False)
-    asset = relationship(
-        'Asset', back_populates='_series', foreign_keys=[_asset_id])
+    _asset_id = Column(Integer, ForeignKey('base.id'), nullable=False)
+    base_obj = relationship(
+        'Base', back_populates='_series', foreign_keys=[_asset_id])
 
     date_stamp = Column(Date, nullable=False)
+    # TODO: Consider making this part of the primary keys
     """datetime: EOD date."""
 
     date_column_names = ['date_stamp']
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
-    def __init__(self, asset, date_stamp):
+    def __init__(self, base_obj, date_stamp):
         """Instance initialization."""
-        self.asset = asset
+        self.base_obj = base_obj
         self.date_stamp = date_stamp
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         name = self._class_name
         date = self.date_stamp
-        id_code = self.asset.identity_code
+        id_code = self.base_obj.identity_code
 
         return f'Time series:{name}, date stamp:{date}, asset:{id_code}'
 
     def __repr__(self):
         """Return the official string output."""
         name = self._class_name
-        asset = self.asset
+        asset = self.base_obj
         date = self.date_stamp
 
         return f'<{name}(asset={asset!r}, date_stamp={date})>'
@@ -129,15 +130,14 @@ class TimeSeriesBase(Base):
         ----------
         session : sqlalchemy.orm.Session
             The database session.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
+        asset_class : .asset.Base (or child class)
+            The ``Base`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
         data_frame : pandas.DataFrame
             A ``pandas.DataFrame`` with columns of the same name as this
             class' constructor method arguments, with the exception that instead
             of a column named ``asset``,
-            FIXME: instead there must be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
 
         """
@@ -219,7 +219,7 @@ class TimeSeriesBase(Base):
             # Create the security's series list of class instances and extend
             # onto the instances list
             instances = [
-                cls(asset=security, **row) for index, row in series.iterrows()]
+                cls(base_obj=security, **row) for index, row in series.iterrows()]
             instances_list.extend(instances)
 
         # The bulk_save_objects does not work with inherited objects. Use
@@ -257,7 +257,6 @@ class TimeSeriesBase(Base):
         #  Get a table of time-series instances with attribute columns
         record_list = list()
         for instance in session.query(cls).all():
-            # FIXME: Check that the query is pure, i.e., not returning every TimeSeriesBase parent instance but rather only the child class instances
             # Get instance data dictionary and add the `Listed` ISIN number
             instance_dict = instance.to_dict()
             # Reference to the class primary key attribute Asset.id (or
@@ -283,12 +282,6 @@ class TimeSeriesBase(Base):
     def update_all(cls, session, asset_class, get_method, asset_list):
         """ Update/create the eod trade data of all the Listed instances.
 
-        Warning
-        -------
-        The Listed.time_series_last_date attribute (or child class attribute) is
-        not updated by this method as it is the responsibility of the ``Listed``
-        class and its child classes to manage that attribute.
-
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -306,11 +299,10 @@ class TimeSeriesBase(Base):
         No object shall be destroyed, only updated, or missing object created.
 
         """
-        # FIXME: Modify the next two lines to individually take the `from_date`
-        # and `to_date` per asset and package them into the `asset_list` as
-        # required by the financial_data module  `SecuritiesHistory`  or
-        # `ForexHistory` `get_method`. Consider merging `SecuritiesHistory` and
-        # `ForexHistory`. Requires `Asset.get_last_date` method.
+        # The `financial_data` module's `get_method` individually considers the
+        # `from_date` and `to_date` per asset based on the last time series date
+        # of the relevant time series (this time series is determined by the
+        # `get_method`).
 
         # Get all financial data from- the from_date till today.
         data_frame = get_method(asset_list)
@@ -386,8 +378,8 @@ class SimpleEOD(TimeSeriesBase):
 
     Parameters
     ----------
-    asset : .Asset or child instance
-        The ``.Asset`` instance the EOD data belongs to.
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     price : float
@@ -405,9 +397,9 @@ class SimpleEOD(TimeSeriesBase):
     """float: Price for the day."""
 
     def __init__(
-            self, asset, date_stamp, price):
+            self, base_obj, date_stamp, price):
         """Instance initialization."""
-        super().__init__(asset, date_stamp)
+        super().__init__(base_obj, date_stamp)
         self.price = price
 
     def to_dict(self):
@@ -423,8 +415,8 @@ class TradeEOD(SimpleEOD):
 
     Parameters
     ----------
-    asset : .Asset or child instance
-        The ``.Asset`` instance the EOD data belongs to.
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     open : float
@@ -476,11 +468,11 @@ class TradeEOD(SimpleEOD):
     """float: Number of shares traded in the day."""
 
     def __init__(
-            self, asset, date_stamp,
+            self, base_obj, date_stamp,
             open, close, high, low, adjusted_close, volume):
         """Instance initialization."""
         super().__init__(
-            asset, date_stamp,
+            base_obj, date_stamp,
             price=close,  # Convention that price=close price
             )
         self.open = open
@@ -508,8 +500,9 @@ class ListedEOD(TradeEOD):
 
     Parameters
     ----------
-    asset : .Asset or child instance
-        The ``.Asset`` instance the EOD data belongs to.
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to. In this case
+        ``.asset.Listed``.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     open : float
@@ -546,13 +539,13 @@ class ListedEOD(TradeEOD):
         'Listed', back_populates='_eod_series', foreign_keys=[_listed_id])
 
     def __init__(
-            self, asset, date_stamp,
+            self, base_obj, date_stamp,
             open, close, high, low, adjusted_close, volume):
         """Instance initialization."""
         super().__init__(
-            asset, date_stamp,
+            base_obj, date_stamp,
             open, close, high, low, adjusted_close, volume)
-        self.listed = asset
+        self.listed = base_obj
 
     @classmethod
     def update_all(cls, session, asset_class, get_method):
@@ -598,13 +591,98 @@ class ListedEOD(TradeEOD):
         super().update_all(session, asset_class, get_method, securities_list)
 
 
+class IndexEOD(TradeEOD):
+    """A single index's date-stamped EOD trade data.
+
+    Parameters
+    ----------
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to. In this case
+        ``.asset.Index``.
+    date_stamp : datetime.date
+        The end-of-day (EOD) data date stamp.
+    open : float
+        Open price for the day.
+    close : float
+        The EOD closing price for the day.
+    high : float
+        High price for the day.
+    low : float
+        Low price for the day.
+    adjusted_close : float
+        Adjusted close price for the day. The closing price is the raw price,
+        which is just the cash value of the last transacted price before the
+        market closes. The adjusted closing price factors in anything that might
+        affect the stock price after the market closes.
+    volume : float
+        Number of shares traded in the day.
+
+    """
+
+    __tablename__ = 'index_eod'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
+    """ Primary key."""
+
+    # Foreign key giving ``Index`` a EOD series capability. Note:
+    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
+    # for the relationships with ``.asset.Share._series`` and
+    # ``.asset.Listed._eod_series`` to work and avoids the
+    # "SAWarning: relationship" warning for the relationship below.
+    _index_id = Column(Integer, ForeignKey('index.id'), nullable=False)
+    index = relationship(
+        'Index', back_populates='_eod_series', foreign_keys=[_index_id])
+
+    def __init__(
+            self, base_obj, date_stamp,
+            open, close, high, low, adjusted_close, volume):
+        """Instance initialization."""
+        super().__init__(
+            base_obj, date_stamp,
+            open, close, high, low, adjusted_close, volume)
+        self.index = base_obj
+
+    @classmethod
+    def update_all(cls, session, asset_class, get_method):
+        """ Update/create the eod trade data of all the Listed instances.
+
+        Warning
+        -------
+        The Listed.time_series_last_date attribute (or child class attribute) is
+        not updated by this method as it is the responsibility of the ``Listed``
+        class and its child classes to manage that attribute.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all this class' constructor method arguments.
+        asset_class : .asset.Asset (or child class)
+            The ``Asset`` class which has this time-series data. (Not to be
+            confused with the market asset class of security such as cash,
+            bonds, equities commodities, etc.).
+
+        No object shall be destroyed, only updated, or missing object created.
+
+        """
+        # Get all actively listed Listed instances so we can fetch their
+        # EOD trade data
+        index_list = session.query(asset_class).all()
+
+        super().update_all(session, asset_class, get_method, index_list)
+
+
 class ForexEOD(TradeEOD):
     """A single forex date-stamped EOD trade data.
 
     Parameters
     ----------
-    listed : .Listed
-        The ``Listed`` instance the EOD data belongs to.
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to. In this case
+        ``.asset.Forex``.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     open : float
@@ -641,13 +719,13 @@ class ForexEOD(TradeEOD):
         'Forex', back_populates='_eod_series', foreign_keys=[_forex_id])
 
     def __init__(
-            self, asset, date_stamp,
+            self, base_obj, date_stamp,
             open, close, high, low, adjusted_close, volume):
         """Instance initialization."""
         super().__init__(
-            asset, date_stamp,
+            base_obj, date_stamp,
             open, close, high, low, adjusted_close, volume)
-        self.forex = asset
+        self.forex = base_obj
 
     @classmethod
     def update_all(cls, session, asset_class, get_method):
@@ -687,8 +765,9 @@ class Dividend(TimeSeriesBase):
 
     Parameters
     ----------
-    listed : .Listed
-        The ``Listed`` instance the EOD data belongs to.
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to. In this case
+        ``.asset.ListedEquity``.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     currency : str(3)
@@ -754,12 +833,12 @@ class Dividend(TimeSeriesBase):
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
     def __init__(
-            self, asset, date_stamp,
+            self, base_obj, date_stamp,
             currency, declaration_date, payment_date,
             period, record_date, unadjusted_value, adjusted_value, **kwargs):
         """Instance initialization."""
-        super().__init__(asset, date_stamp)
-        self.listed_equity = asset  # See .asset.ListedEquity._dividend_series
+        super().__init__(base_obj, date_stamp)
+        self.listed_equity = base_obj
         self.currency = currency
         self.declaration_date = declaration_date
         self.payment_date = payment_date

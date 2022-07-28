@@ -31,7 +31,7 @@ from asset_base.financial_data import Dump
 from asset_base.common import Common
 from asset_base.entity import Currency, Exchange, Issuer
 from asset_base.industry_class import IndustryClassICB
-from asset_base.time_series import Dividend, ForexEOD, ListedEOD, SimpleEOD, TimeSeriesBase
+from asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD, SimpleEOD, TimeSeriesBase
 
 # Get module-named logger.
 import logging
@@ -45,7 +45,132 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 metadata = MetaData()
 
 
-class Asset(Common):
+class Base(Common):
+    """Base class for the module."""
+
+    __tablename__ = 'base'
+    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+
+    id = Column(Integer, ForeignKey('common.id'), primary_key=True)
+    """ Primary key."""
+
+    # Asset currency. Optional.
+    _currency_id = Column(Integer, ForeignKey('currency.id'), nullable=True)
+    currency = relationship(Currency)
+
+    # All historical time-series collection ranked by date_stamp
+    _series = relationship(
+        TimeSeriesBase,
+        order_by=TimeSeriesBase.date_stamp,
+        back_populates='base_obj')
+
+    def __init__(self, name, currency, **kwargs):
+        """Instance initialization."""
+        super().__init__(name, **kwargs)
+
+        self.currency = currency
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return '{} is an {} priced in {}.'.format(
+            self.name, self._class_name, self.currency_ticker)
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '<{}(name="{}", currency={!r})>'.format(
+            self._class_name, self.name, self.currency)
+
+    @property
+    def _eod_series(self):
+        """Alias for ``_series`` column attribute.
+
+        Note
+        ----
+        This MUST be overloaded by an actual ``_eod_series``
+        ``sqlalchemy.Column`` column attribute in child polymorphs for their
+        proper time-series functionality. Here this alias is merely a
+        convenience so we can put the methods ``get_eod``, ``get_last_eod`` and
+        ``get_last_eod_date`` in this class. They all use ``_eod_series``.
+        """
+        return self._series
+
+    @property
+    def key_code(self):
+        """A key string unique to the class instance."""
+        return self.currency.ticker + '.' + self.name
+
+    @property
+    def identity_code(self):
+        """A human readable string unique to the class instance."""
+        return self.currency.ticker + '.' + self.name
+
+    @property
+    def currency_ticker(self):
+        """ISO 4217 3-letter currency code."""
+        return self.currency.ticker
+
+    def get_eod(self):
+        """Return the EOD time series for the asset.
+
+        Returns
+        -------
+        pandas.DataFrame
+            An EOD trade data time series with a ``datetime.date`` date index
+            sorted in ascending order. The class' respective time series class
+            in the ``time_series`` shall have a ``to_dict()`` method which shall
+            inform the ``pandas.DataFrame`` columns returned, in addition to the
+            data frame `date_stamp` index.
+
+        """
+        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
+        if len(trade_eod_dict_list) == 0:
+            raise TimeSeriesNoData(
+                f'No EOD trade data for asset {self.identity_code}.')
+        data_frame = pd.DataFrame(trade_eod_dict_list)
+        data_frame['date_stamp'] = pd.to_datetime(data_frame['date_stamp'])
+        data_frame.set_index('date_stamp', inplace=True)
+        data_frame.sort_index(inplace=True)  # Assure ascending
+        data_frame.name = self
+
+        return data_frame
+
+    def get_last_eod(self):
+        """Return the EOD last date, data dict, for the asset.
+
+        Returns
+        -------
+        dict
+            An End-Of-Day (EOD) price data dictionary with keys from the
+            ``ListedEOD.to_dict()`` method.
+        """
+        # Note that _eod_series is ordered by ListedEOD.last_date
+        try:
+            last_eod = self._eod_series[-1]
+        except IndexError:
+            last_eod = None
+
+        return last_eod.to_dict()
+
+    def get_last_eod_date(self):
+        """Return the EOD last date for the listed share.
+
+        Returns
+        -------
+        datetime.date
+            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
+            time series .
+        """
+        # Note that _eod_series is ordered by ListedEOD.last_date
+        try:
+            last_eod = self._eod_series[-1]
+            last_eod_date = last_eod.date_stamp
+        except IndexError:
+            last_eod_date = None
+
+        return last_eod_date
+
+
+class Asset(Base):
     """A financial asset.
 
     Note
@@ -83,7 +208,7 @@ class Asset(Common):
     ----------
     name : str
         Entity full name.
-    currency : .Currency
+    currency : .entity.Currency
         Currency of asset pricing.
     owner : .entity.Entity
         Share owner entity.
@@ -91,7 +216,7 @@ class Asset(Common):
     Warning
     -------
     An instance of this class may be an index of a basket of underlying
-    invest-able assets. Then it is not a data-like indice of the ``Indice``
+    invest-able assets. Then it is not a data-like indice of the ``Index``
     class but rather an instance of this the ``Asset`` class. Not all these
     indices are however invest-able.
 
@@ -129,25 +254,15 @@ class Asset(Common):
     __tablename__ = 'asset'
     __mapper_args__ = {'polymorphic_identity': __tablename__, }
 
-    id = Column(Integer, ForeignKey('common.id'), primary_key=True)
+    id = Column(Integer, ForeignKey('base.id'), primary_key=True)
     """ Primary key."""
-
-    # Asset currency. Optional.
-    _currency_id = Column(Integer, ForeignKey('currency.id'), nullable=True)
-    currency = relationship(Currency)
 
     # Entity owns Asset. Entity has a reference list to many owned Asset named
     # `asset_list`
-    # FIXME: Currently owner is allowed to be NULL. Make owner compulsory.
+    # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
     _owner_id = Column(Integer, ForeignKey('entity.id'))
     owner = relationship(
         'Entity', backref='asset_list', foreign_keys=[_owner_id])
-
-    # All historical time-series collection ranked by date_stamp
-    _series = relationship(
-        TimeSeriesBase,
-        order_by=TimeSeriesBase.date_stamp,
-        back_populates='asset')
 
     # TODO: This (or child) is were we would add asset fundamental data relationships
     # TODO: This (or child) is were we would add asset book relationships
@@ -158,10 +273,7 @@ class Asset(Common):
 
     def __init__(self, name, currency, **kwargs):
         """Instance initialization."""
-        super().__init__(name, **kwargs)
-
-        # Pricing currency
-        self.currency = currency
+        super().__init__(name, currency, **kwargs)
 
         # Asset owner
         if 'owner' in kwargs:
@@ -169,8 +281,7 @@ class Asset(Common):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        msg = '{} is an {} priced in {}.'.format(
-            self.name, self._class_name, self.currency_ticker)
+        msg = super().__str__()
         if self.owner is not None:
             msg += ' Owner: {}'.format(self.owner)
 
@@ -179,8 +290,7 @@ class Asset(Common):
     def __repr__(self):
         """Return the official string output."""
         if self.owner is None:
-            msg = '<{}(name="{}", currency="{}")>'.format(
-                self._class_name, self.name, self.currency)
+            msg = super().__repr__()
         else:
             msg = '<{}(name="{}", currency={!r}, owner={!r})>'.format(
                 self._class_name, self.name, self.currency, self.owner)
@@ -188,42 +298,13 @@ class Asset(Common):
         return msg
 
     @property
-    def _eod_series(self):
-        """Alias for ``_series`` column attribute.
-
-        Note
-        ----
-        This MUST be overloaded by an actual ``_eod_series``
-        ``sqlalchemy.Column`` column attribute in child polymorphs for their
-        proper time-series functionality. Here this alias is merely a
-        convenience so we can put the methods ``get_eod``, ``get_last_eod`` and
-        ``get_last_eod_date`` in this class. They all use ``_eod_series``.
-        """
-        return self._series
-
-    @property
     def domicile(self):
         """.entity.Domicile : ``Domicile`` of the ``Share`` owner ``Entity``."""
-        # FIXME: Currently owner is allowed to be NULL. Make owner compulsory.
+        # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
         if self.owner is None:
             return None
         else:
             return self.owner.domicile
-
-    @property
-    def key_code(self):
-        """A key string unique to the class instance."""
-        return self.currency.ticker + '.' + self.name
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
-        return self.currency.ticker + '.' + self.name
-
-    @property
-    def currency_ticker(self):
-        """ISO 4217 3-letter currency code."""
-        return self.currency.ticker
 
     def get_asset_class(self):
         """Return the major asset class in lower-case.
@@ -316,66 +397,6 @@ class Asset(Common):
             pass
 
         return obj
-
-    def get_eod(self):
-        """Return the EOD time series for the asset.
-
-        Returns
-        -------
-        pandas.DataFrame
-            An EOD trade data time series with a ``datetime.date`` date index
-            sorted in ascending order. The class' respective time series class
-            in the ``time_series`` shall have a ``to_dict()`` method which shall
-            inform the ``pandas.DataFrame`` columns returned, in addition to the
-            data frame `date_stamp` index.
-
-        """
-        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
-        if len(trade_eod_dict_list) == 0:
-            raise TimeSeriesNoData(
-                f'No EOD trade data for asset {self.identity_code}.')
-        data_frame = pd.DataFrame(trade_eod_dict_list)
-        data_frame['date_stamp'] = pd.to_datetime(data_frame['date_stamp'])
-        data_frame.set_index('date_stamp', inplace=True)
-        data_frame.sort_index(inplace=True)  # Assure ascending
-        data_frame.name = self
-
-        return data_frame
-
-    def get_last_eod(self):
-        """Return the EOD last date, data dict, for the asset.
-
-        Returns
-        -------
-        dict
-            An End-Of-Day (EOD) price data dictionary with keys from the
-            ``ListedEOD.to_dict()`` method.
-        """
-        # Note that _eod_series is ordered by ListedEOD.last_date
-        try:
-            last_eod = self._eod_series[-1]
-        except IndexError:
-            last_eod = None
-
-        return last_eod.to_dict()
-
-    def get_last_eod_date(self):
-        """Return the EOD last date for the listed share.
-
-        Returns
-        -------
-        datetime.date
-            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
-            time series .
-        """
-        # Note that _eod_series is ordered by ListedEOD.last_date
-        try:
-            last_eod = self._eod_series[-1]
-            last_eod_date = last_eod.date_stamp
-        except IndexError:
-            last_eod_date = None
-
-        return last_eod_date
 
 
 class Cash(Asset):
@@ -1458,10 +1479,6 @@ class Listed(Share):
         This method updates its class collection of ``ListedEOD`` instances from
         the ``financial_data`` module.
 
-        This method sets the ``Listed.time_series_last_date`` attribute to
-        ``datetime.datetime.today()`` for its collection of  ``ListedEOD``
-        instances. This is conditional to the ``last_update`` argument.
-
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -1952,7 +1969,7 @@ class ListedEquity(Listed):
 
         See also
         --------
-        .Cash.get_time_series_data_frame, .EntityBase.get_time_series_data_frame
+        Cash.time_series
 
         """
         def get_price_series(price_item):
@@ -2092,6 +2109,204 @@ class ListedEquity(Listed):
         return result
 
 
+class Index(Base):
+    """An index representing some financial data.
+
+    Wikipedia defines an index is an indirect short-cut derived from and
+    pointing into, a greater volume of values, data, information or knowledge.
+
+    In the case of this class the index is usually a financial index but this
+    need not be so.
+
+    A statistical measure of change in an economy or a securities market. In
+    the case of financial markets, an index is an imaginary portfolio of
+    securities representing a particular market or a portion of it. Each index
+    has its own calculation methodology and is usually expressed in terms of a
+    change from a base value. Thus, the percentage change is more important
+    than the actual numeric value.
+
+    This may also be an indice of economic importance such as the normalized
+    price of a consumer commodities basket for representing inflation or it may
+    be a population of a country or a GDP, etc.
+
+    The Standard & Poor's 500 is one of the world's best known indexes, and is
+    the most commonly used benchmark for the stock market. Other prominent
+    indexes include the DJ Wilshire 5000 (total stock market), the MSCI EAFE
+    (foreign stocks in Europe, Australasia, Far East) and the Lehman Brothers
+    Aggregate Bond Index (total bond market).
+
+    Because, technically, you can't actually invest in an index, index mutual
+    funds and exchange- traded funds (based on indexes) allow investors to
+    invest in securities representing broad market segments and/or the total
+    market.
+
+    It is important to realize that each index must have an issuer institution.
+
+    Parameters
+    ----------
+    ticker : str
+        A short mnemonic code (often derived from the name) used to identity
+        the index. This may be used in conjunction with the issuer name or
+        issuer code (or ticker) to uniquely identity the index in the world.
+    name : str
+        Entity full name.
+
+
+    Attributes
+    ----------
+    name : str
+        Index full name.
+    ticker : str
+        A short mnemonic code (often derived from the name) used to identity
+        the index. This may be used in conjunction with the issuer name or
+        issuer code (or ticker) to uniquely identity the index in the world.
+    currency : .entity.Currency
+        Currency of asset pricing.
+
+    See also
+    --------
+    .Entity, .Institution,
+
+    """
+
+    __tablename__ = 'index'
+    __mapper_args__ = {'polymorphic_identity': __tablename__}
+
+    id = Column(Integer, ForeignKey('base.id'), primary_key=True)
+
+    key_code_name = 'ticker'
+    """str: The name to attach to the ``key_code`` attribute (@property method).
+    Override in  sub-classes. This is used for example as the column name in
+    tables of key codes."""
+
+    # EOD historical time-series collection ranked by date_stamp
+    _eod_series = relationship(
+        IndexEOD,
+        order_by=IndexEOD.date_stamp,
+        back_populates='index')
+
+    # Unique index ticker
+    ticker = Column(String(12), nullable=False)
+
+    #  A short class name for use in the alt_name method.
+    _name_appendix = 'Index'
+
+    def __init__(self, name, ticker, currency, **kwargs):
+        """Instance initialization."""
+        super().__init__(name, currency, **kwargs)
+
+        self.ticker = ticker
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        msg = '{} is an {} priced in {}.'.format(
+            self.name, self._class_name, self.currency_ticker)
+
+        return msg
+
+    def __repr__(self):
+        """Return the official string output."""
+        msg = '<{}(name="{}", ticker="{}", currency={!r})>'.format(
+            self._class_name, self.name, self.ticker, self.currency)
+
+        return msg
+
+    @property
+    def key_code(self):
+        """Return a unique string code for this class instance."""
+        return f'{self.ticker}'
+
+    @property
+    def identity_code(self):
+        """Return a unique string code for this class instance."""
+        return f'{self.ticker}'
+
+    @classmethod
+    def factory(
+            cls, session, index_name, ticker, currency_code, create=True,
+            **kwargs):
+        """Manufacture/retrieve an instance from the given parameters.
+
+        If a record of the specified class instance does not exist then add it,
+        else do nothing. Then return the instance.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        index_name : str
+            Entity full name. If the instance does not exist in the session then
+            this parameter must be provided to create the instance otherwise an
+            exception shall be raised.
+        ticker : str
+            A short mnemonic code (often derived from the name) used to identity
+            the index. This may be used in conjunction with the issuer to
+            uniquely identity the index in the world.
+        currency_code : str(3)
+            ISO 4217 3-letter currency codes.
+
+        Return
+        ------
+        Index
+            The single instance that is in the session.
+
+        """
+        currency = Currency.factory(session, currency_code)
+
+        # Check if exchange exists in the session and if not then add it.
+        try:
+            obj = session.query(cls).filter(cls.ticker == ticker).one()
+        except NoResultFound:
+            if not create:
+                raise FactoryError(
+                    'Index "{}" with ticker="{}", not found.'.format(
+                        index_name, ticker))
+            else:
+                # Create and add.
+                obj = cls(index_name, ticker, currency)
+                session.add(obj)
+        else:
+            # Changes are not allowed so nothing to reconcile here.
+            pass
+
+        return obj
+
+    @classmethod
+    def update_all(
+            cls, session, get_meta_method, get_eod_method=None,
+            **kwargs):
+        """ Update/create all the objects in the asset_base session.
+
+        This method updates its class collection of ``Index`` instances from
+        the ``financial_data`` module.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_meta_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all the `factory` method arguments. This is for the
+            securities meta-data form which ``Index`` instances shall be
+            created.
+        get_eod_method : financial_data module class method, optional
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all the ``Index.factory`` method arguments. This is
+            for the securities time series trade end of day data form which the
+            ``IndexEOD`` instances shall be created. If this argument is omitted
+            then the ``IndexEOD`` will not be created.
+
+        No object shall be destroyed, only updated, or missing object created.
+
+        """
+        # Get securities
+        super().update_all(session, get_meta_method, **kwargs)
+
+        # Get EOD trade data.
+        if get_eod_method is not None:
+            IndexEOD.update_all(session, cls, get_eod_method)
+
+
 class ExchangeTradeFund(ListedEquity):
     """An exchange-traded fund (ETF).
 
@@ -2181,6 +2396,9 @@ class ExchangeTradeFund(ListedEquity):
     id = Column(Integer, ForeignKey('listed_equity.id'), primary_key=True)
     """ Primary key."""
 
+    # The index, if any, that the ETF attempts to replicate.
+    index = Column(Integer, ForeignKey('index.id'), nullable=True)
+
     # HACK: These are are workarounds for not having data for all the underlying
     # securities for our ETFs.
     _classes = ('money', 'bond', 'property', 'equity', 'commodity')
@@ -2201,12 +2419,14 @@ class ExchangeTradeFund(ListedEquity):
                  **kwargs):
         """Instance initialization."""
         # Optional parameters.
+        if 'index' in kwargs:
+            self.index = kwargs.pop('index')
         if 'asset_class' in kwargs:
-            self._asset_class = kwargs['asset_class']
+            self._asset_class = kwargs.pop('asset_class')
         if 'locality' in kwargs:
-            self._locality = kwargs['locality']
+            self._locality = kwargs.pop('locality')
         if 'roll_up' in kwargs:
-            roll_up = kwargs['roll_up']
+            roll_up = kwargs.pop('roll_up')
             if roll_up in (True, 'TRUE', 'True', 'true'):
                 self.roll_up = True
             elif roll_up in (False, 'FALSE', 'False', 'false'):
@@ -2214,7 +2434,7 @@ class ExchangeTradeFund(ListedEquity):
             else:
                 raise ValueError('Unexpected "roll_up" argument.')
         if 'ter' in kwargs:
-            self.ter = kwargs['ter']
+            self.ter = kwargs.pop('ter')
 
         super().__init__(
             domicile, name, issuer, isin, exchange, ticker,
@@ -2264,3 +2484,68 @@ class ExchangeTradeFund(ListedEquity):
             locality = 'foreign'
 
         return locality
+
+
+    def time_series(self,
+                    series='price', price_item='close', return_type='price',
+                    tidy=False, include_index=True):
+        """Retrieve historic time-series for this instance.
+
+        Parameters
+        ----------
+        series : str
+            Which security series:
+
+            'price':
+                The security's periodic trade price.
+            'dividend':
+                The annualized dividend yield.
+            'volume':
+                The volume of trade (total units of trade) in the period.
+        price_item : str
+            The specific item of price such as 'close', 'open', `high`, or
+            `low`. Only valid when the ``series`` argument is set to 'price'.
+        return_type : str
+            The specific view of the price series:
+
+            'price':
+                The original price series.
+            'return':
+                The price period-on-period return series.
+            'total_return':
+                The period-on-period return series inclusive of the extra
+                yield due to dividends paid.
+            'total_price':
+                The price period-on-period price series inclusive of the extra
+                yield due to dividends paid. The total_price series start value
+                is the same as the price start value.
+        tidy : bool
+            When ``True`` then prices are tidied up by removing outliers.
+
+        Note
+        ----
+        The data is re-sampled at the daily frequency (365 days per year). Note
+        that this may introduce some serial correlations (autocorrelations) into
+        the data due to the forward filling of any missing data (NaNs).
+
+        See also
+        --------
+        Cash.time_series,
+        ListedEquity.time_series
+
+        """
+        data = super().time_series(series, price_item, return_type, tidy)
+
+        if include_index:
+            if self.index == None:
+                logger.warning(
+                    'This ExchangeTradeFund has no replicated Index.')
+            else:
+                pass
+                # FIXME:!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+        return data
+
+
+

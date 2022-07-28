@@ -3,26 +3,26 @@ import datetime
 import pandas as pd
 import pandas
 
-from asset_base.financial_data import Dump, AssetFundamentals
-from asset_base.financial_data import AssetHistory, Static
+from asset_base.financial_data import Dump, MetaData
+from asset_base.financial_data import History, Static
 
 from asset_base.common import TestSession
 from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
-from asset_base.asset import Asset, Cash, Forex, Listed, ListedEquity, Share
-from asset_base.time_series import Dividend, ForexEOD, ListedEOD
+from asset_base.asset import Asset, Base, Cash, Forex, Index, Listed, ListedEquity, Share
+from asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
 from fundmanage.utils import date_to_str
 
 
-class TestAsset(unittest.TestCase):
+class TestBase(unittest.TestCase):
+    """Test Base class and provide a base class for child tests."""
 
     @classmethod
     def setUpClass(cls):
         """Set up test class fixtures."""
-        super().setUpClass()
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
-        cls.Cls = Asset
+        cls.Cls = Base
         # Fixed date window for time series tests
         cls.from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d').date()
         cls.to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d').date()
@@ -34,11 +34,6 @@ class TestAsset(unittest.TestCase):
             cls.currency_dataframe.ticker == 'USD']
         cls.currency_name = cls.currency_item.name.to_list()[0]
         cls.currency_ticker = cls.currency_item.ticker.to_list()[0]
-        # Test strings
-        cls.name = 'Test Asset'
-        cls.test_str = 'Test Asset is an Asset priced in USD.'
-        cls.key_code = 'USD.Test Asset'
-        cls.identity_code = 'USD.Test Asset'
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -47,6 +42,22 @@ class TestAsset(unittest.TestCase):
         # Add all Currency objects to asset_base
         Currency.update_all(self.session, get_method=Static().get_currency)
         self.currency = Currency.factory(self.session, self.currency_ticker)
+
+
+class TestAsset(TestBase):
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up test class fixtures."""
+        super().setUpClass()
+        # Specify which class is being tested. Apply when tests are meant to be
+        # inherited.
+        cls.Cls = Asset
+        # Test strings
+        cls.name = 'Test Asset'
+        cls.test_str = 'Test Asset is an Asset priced in USD.'
+        cls.key_code = 'USD.Test Asset'
+        cls.identity_code = 'USD.Test Asset'
 
     def test___init__(self):
         asset = Asset(self.name, self.currency)
@@ -105,12 +116,10 @@ class TestCash(TestAsset):
         cls.identity_code = 'USD'
 
     def test___init__(self):
-        # Get the currency of the Cash
-        currency = Currency.factory(self.session, self.currency_ticker)
         # Produce the Cash item with the currency
-        cash = Cash(currency)
+        cash = Cash(self.currency)
         self.assertIsInstance(cash, Cash)
-        self.assertEqual(cash.currency, currency)
+        self.assertEqual(cash.currency, self.currency)
         self.assertEqual(cash.name, self.currency_name)
         self.assertEqual(cash.ticker, self.currency_ticker)
 
@@ -207,7 +216,7 @@ class TestForex(TestAsset):
         # NOTE: Remember to use `self.Cls` instead of `Forex` for less tickers.
         cls.Cls.foreign_currencies = ['USD', 'EUR', 'ZAR']
         # Currency data
-        cls.get_method = AssetHistory().get_forex
+        cls.get_method = History().get_forex
         # Test strings
         cls.name = 'USDZAR'
         cls.test_str = 'One USD priced in ZAR'
@@ -272,10 +281,10 @@ class TestForex(TestAsset):
     def test_update_all(self):
         """Full test forex time series history."""
         self.Cls.update_all(self.session, self.get_method)
+        # Make sure they are all present
         forex_list = self.session.query(Forex).all()
         ticker_list = [forex.price_currency_ticker for forex in forex_list]
         self.assertEqual(set(Forex.foreign_currencies), set(ticker_list))
-
         # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame([item.to_dict()
                            for item in self.session.query(ForexEOD).all()])
@@ -423,10 +432,10 @@ class TestListed(TestShare):
         # inherited.
         cls.Cls = Listed
         # Securities meta-data
-        cls.get_meta_method = AssetFundamentals().get_securities
+        cls.get_meta_method = MetaData().get_securities
         cls.securities_dataframe = cls.get_meta_method()
         # Securities EOD-data
-        cls.get_eod_method = AssetHistory().get_eod
+        cls.get_eod_method = History().get_eod
         # Apple Inc.
         cls.security_item = cls.securities_dataframe[
             cls.securities_dataframe.ticker == 'AAPL']
@@ -499,9 +508,9 @@ class TestListed(TestShare):
         """Convert all class price attributes to a dictionary."""
         return {
             "date_stamp": item.date_stamp,
-            "isin": item.asset.isin,
-            "ticker": item.asset.ticker,
-            "mic": item.asset.exchange.mic,
+            "isin": item.base_obj.isin,
+            "ticker": item.base_obj.ticker,
+            "mic": item.base_obj.exchange.mic,
             "open": item.open,
             "close": item.close,
             "high": item.high,
@@ -962,7 +971,7 @@ class TestListedEquity(TestListed):
         # inherited.
         cls.Cls = ListedEquity
         # Securities EOD-data
-        cls.get_dividends_method = AssetHistory().get_dividends
+        cls.get_dividends_method = History().get_dividends
         # ICB Classification
         cls.industry_class = 'icb'
         cls.industry_name = 'Exchange Traded Funds'
@@ -1422,6 +1431,107 @@ class TestListedEquity(TestListed):
         self.assertEqual(dividend.loc['2020-10-21'], 0.091925)
         total_price = listed.time_series(return_type='total_price')
         self.assertEqual(total_price[last_date], 81.24353503753133)
+
+
+class TestIndex(TestBase):
+    """An index representing some financial data."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up test class fixtures."""
+        super().setUpClass()
+        # Specify which class is being tested. Apply when tests are meant to be
+        # inherited.
+        cls.Cls = Index
+        # Get methods
+        cls.get_method = MetaData().get_indices
+        cls.get_eod_method = History().get_indices
+        # Test strings
+        cls.index_name = 'Gold Spot'
+        cls.ticker = 'XYZ'
+        cls.test_str = 'Gold Spot is an Index priced in USD.'
+        cls.key_code = 'XYZ'
+        cls.identity_code = 'XYZ'
+        # Small set of test index tickers
+        cls.index_tickers = ('GSPC', 'ASX', 'J200')
+        # Test ListedEOD time series data
+        # Test data
+        cls.from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d').date()
+        cls.to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d').date()
+        cls.columns = [
+            'date_stamp', 'ticker', 'mic', 'isin',
+            'adjusted_close', 'close', 'high', 'low', 'open']
+        cls.test_columns = [
+            'adjusted_close', 'close', 'high', 'low', 'open']
+        # Exclude adjusted_close as it changes
+        cls.test_values = pd.DataFrame([  # Last date data
+            [3673.63, 3673.63, 3723.98, 3664.69, 3723.98],
+            [3756.0701, 3756.0701, 3760.2, 3726.8799, 3733.27],
+            [54379.58, 54379.58, 54615.33, 53932.88, 54615.33]
+        ], columns=cls.test_columns)
+
+    def test___init__(self):
+        """Initialization."""
+        index = Index(self.index_name, self.ticker, self.currency)
+        self.assertIsInstance(index, Index)
+
+    def test___str__(self):
+        index = Index(self.index_name, self.ticker, self.currency)
+        self.assertEqual(self.test_str, index.__str__())
+
+    def test_key_code(self):
+        index = Index(self.index_name, self.ticker, self.currency)
+        self.assertEqual(self.key_code, index.key_code)
+
+    def test_identity_code(self):
+        index = Index(self.index_name, self.ticker, self.currency)
+        self.assertEqual(self.identity_code, index.identity_code)
+
+    def test_factory(self):
+        """Manufacture/retrieve an instance from the given parameters."""
+        # Add.
+        index = Index.factory(
+            self.session, self.index_name, self.ticker, self.currency_ticker)
+        index = Index.factory(
+            self.session, self.index_name, self.ticker, self.currency_ticker)
+        # Despite using factory twice there should be only one instance
+        self.assertEqual(len(self.session.query(Index).all()), 1)
+        # Attributes
+        self.assertEqual(index.name, self.index_name)
+        self.assertEqual(index.currency_ticker, self.currency_ticker)
+        # Get same
+        indx1 = Index.factory(
+            self.session, self.index_name, self.ticker, self.currency_ticker)
+        self.assertEqual(index, indx1)
+
+    def test_update_all(self):
+        """Update/create all the objects in the asset_base session."""
+        # Test a limited number of test tickers
+        Index.update_all(
+            self.session, self.get_method, self.get_eod_method,
+            _test_ticker_list=self.index_tickers)
+        # Make sure they are all present
+        index_list = self.session.query(Index).all()
+        ticker_list = [index.ticker for index in index_list]
+        self.assertEqual(set(self.index_tickers), set(ticker_list))
+        # Retrieve the submitted ListedEOD data from asset_base
+        df = pd.DataFrame([item.to_dict()
+                           for item in self.session.query(IndexEOD).all()])
+        # Test
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df.sort_values(['date_stamp'], inplace=True)
+        # Test against last date test_values data
+        last_date = pd.to_datetime(self.to_date)
+        df = df[df['date_stamp'] == last_date]
+        self.assertFalse(df.empty)
+        # Exclude adjusted_close as it changes
+        df = df[self.test_columns]  # Column select and rank for testing
+        # Sort to remove ambiguity
+        df.sort_values(by='close', inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        self.test_values.sort_values(by='close', inplace=True)
+        self.test_values.reset_index(drop=True, inplace=True)
+        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
 
 
 class Suite(object):
