@@ -58,6 +58,10 @@ class Base(Common):
     _currency_id = Column(Integer, ForeignKey('currency.id'), nullable=True)
     currency = relationship(Currency)
 
+    # Price quote in cents or units. Strictly convert all prices to currency
+    # units in case of this attribute being in cents.
+    quote_units = Column(Enum('units', 'cents'), nullable=False)
+
     # All historical time-series collection ranked by date_stamp
     _series = relationship(
         TimeSeriesBase,
@@ -69,6 +73,11 @@ class Base(Common):
         super().__init__(name, **kwargs)
 
         self.currency = currency
+
+        if 'quote_units' in kwargs:
+            self.quote_units = kwargs.pop('quote_units')
+        else:
+            self.quote_units = 'units'
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
@@ -996,10 +1005,6 @@ class Share(Asset):
     # Number of share units issued byu the Issuer
     shares_in_issue = Column(Integer, nullable=True)
 
-    # Share price quote in cents or units. Use to always convert to currency
-    # units in case of being in cents.
-    quote_units = Column(Enum('units', 'cents'), nullable=False)
-
     #  A short class name for use in the alt_name method.
     _name_appendix = 'Share'
 
@@ -1014,11 +1019,6 @@ class Share(Asset):
         super().__init__(name, currency, **kwargs)
 
         self.issuer = issuer
-
-        if 'quote_units' in kwargs:
-            self.quote_units = kwargs.pop('quote_units')
-        else:
-            self.quote_units = 'units'
 
         # Number of shares issued by the Issuer
         if 'shares_in_issue' in kwargs:
@@ -2144,16 +2144,6 @@ class Index(Base):
 
     Parameters
     ----------
-    ticker : str
-        A short mnemonic code (often derived from the name) used to identity
-        the index. This may be used in conjunction with the issuer name or
-        issuer code (or ticker) to uniquely identity the index in the world.
-    name : str
-        Entity full name.
-
-
-    Attributes
-    ----------
     name : str
         Index full name.
     ticker : str
@@ -2168,6 +2158,8 @@ class Index(Base):
         If set True then the index's time series data is static, i.e., not
         updated and so would be ignored when the ``Index.update_all`` method is
         called.
+
+
 
     See also
     --------
@@ -2501,7 +2493,6 @@ class ExchangeTradeFund(ListedEquity):
 
         return locality
 
-
     def time_series(self,
                     series='price', price_item='close', return_type='price',
                     tidy=False, include_index=True):
@@ -2552,16 +2543,41 @@ class ExchangeTradeFund(ListedEquity):
         """
         data = super().time_series(series, price_item, return_type, tidy)
 
-        if include_index:
-            if self.index == None:
-                logger.warning(
-                    'This ExchangeTradeFund has no replicated Index.')
-            else:
-                pass
-                # FIXME:!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # Do we back-fill the the replicated index time-series history
+        if not include_index:
+            return data
 
+        # Is there a replicated index with which we can back-fill with the
+        # replicated index time-series history
+        if self.index is None:
+            logger.warning(
+                'This ExchangeTradeFund has no replicated Index.')
+            return data
+
+        # Back-fill the the replicated index time-series history.
+
+        # Check we are using prices series only
+        if series == 'price':
+            raise Exception(
+                'Can back-fill only `price` series, not `{series}` series.')
+
+        # Check that we are using like with like, i.e., price and total
+        # return price are different indices.
+        if return_type in ['price', 'return']:
+            if not self.index.total_return:
+                raise Exception(
+                    'Total price index series cannot back-fill a price series.')
+        elif return_type in ['total_price', 'total_return']:
+            if self.index.total_return:
+                raise Exception(
+                    'Price index series cannot back-fill a total price series.')
+
+        # Get the replicated index for its time-series history as a back-fill
+        back_fill = self.index.time_series(
+            series, price_item, return_type, tidy)
+
+        #  Very important that `data` is 1st and `back_fill` is 2nd so that
+        #  `back_fill` does nto overwrite any elements in `data`.
+        data = data.combine_first(back_fill)
 
         return data
-
-
-

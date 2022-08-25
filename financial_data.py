@@ -19,6 +19,7 @@ dictionaries for ease of maintenance.
 
 """
 import datetime
+import glob
 import asset_base.eod_historical_data as eod
 
 import pandas as pd
@@ -229,7 +230,7 @@ class Dump(_Feed):
 class Static(_Feed):
     """Static data feed class.
 
-    This class provides static data needed for the `asset_base` module such as:
+    This class provides static data needed for the ``asset`` module such as:
 
         * Currency information.
         * Domicile information.
@@ -316,6 +317,111 @@ class Static(_Feed):
         return data
 
 
+class StaticIndices(_Feed):
+    """Static index data reading class for reading indices from data files.
+
+    This class provides static data needed for the ``asset`` module such as:
+
+        * Index mete-data.
+        * Index time series.
+
+    """
+
+    def __init__(self):
+        """Instance initialization."""
+        super().__init__()
+        self._data_path = "data"
+        self._sub_path = "static_time_series"
+
+    def get_indices_meta(self, **kwargs):
+        """Fetch indices mete data from the feeds."""
+        file_name = 'IndicesMeta.csv'
+        path = self._path(file_name)
+
+        column_dict = {
+            'Name': 'index_name',
+            'Code': 'ticker',
+            'Currency': 'currency_code',
+            'TRI': 'total_return'
+        }
+
+        with open(path) as stream:
+            data = pd.read_csv(stream)
+
+        # If no data then just return a simple empty pandas DataFrame.
+        if data.empty:
+            raise Exception(
+                f'Expected index data but found file {path} empty.')
+        #  Reset the index as we need to form here on treat the index as
+        # column data. The security and date info is in the index
+        data.reset_index(inplace=True)
+        # Extract by columns name and rename to a standard. This is also
+        # then a check for expected columns.
+        data = data[list(column_dict.keys())]
+        data.rename(columns=column_dict, inplace=True)
+
+        # Mark the data as static (non feed API).
+        data['static'] = True
+
+        # For testing purposes only!!!
+        if '_test_ticker_list' in kwargs and \
+                kwargs['_test_ticker_list'] is not None:
+            _test_ticker_list = kwargs.pop('_test_ticker_list')
+            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
+            data = data[data['ticker'].isin(_test_ticker_list)]
+
+        return data
+
+    def get_indices(self, index_list, **kwargs):
+        """ Get historical EOD for a specified list of indices.
+
+        This method fetches the data from the specified feed.
+
+        index_list : list of .asset_base.Index instances
+            A list of forex for which data are required.
+
+        """
+        # Column renaming dict
+        column_dict = {
+            'Name': 'index_name',
+            'Code': 'ticker',
+            'Currency': 'currency_code',
+            'TRI': 'total_return'
+        }
+
+        # Look for files with INDX.<index ticker>.csv
+        data_list = list()
+        tickers = [index.ticker for index in index_list]
+        for ticker in tickers:
+            file_name = f'INDX.{ticker}.csv'
+            path = self._path(file_name)
+            # Read CSV history file
+            try:
+                file = open(path)
+            except FileNotFoundError:
+                raise FileNotFoundError(
+                    f'Index file {path} could not be found.')
+            else:
+                data = pd.read_csv(file)
+            finally:
+                file.close()
+            # Try extract by columns names and rename to a standard. This is
+            # also then a check for expected columns.
+            try:
+                data = data[list(column_dict.keys())]
+            except KeyError:
+                raise KeyError(f'Error in column headers for file {path}')
+            else:
+                data.rename(columns=column_dict, inplace=True)
+            # Append to list for concatenation into one pandas.DataFrame
+            data_list.append(data)
+        data = pd.concat(data_list, axis='index')
+        # Condition date
+        data['date_stamp'] = pd.to_datetime(data['date_stamp'])
+
+        return data
+
+
 class MetaData(_Feed):
     """Provide fundamental and meta-data of the working universe securities."""
 
@@ -382,7 +488,7 @@ class MetaData(_Feed):
         return data
 
     def get_indices(self, feed='EOD', **kwargs):
-        """Fetch indices form the feeds."""
+        """Fetch indices mete data from the feeds."""
 
         if feed == 'EOD':
             feed = eod.Exchanges()

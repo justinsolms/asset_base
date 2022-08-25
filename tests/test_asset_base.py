@@ -161,8 +161,8 @@ class TestAssetBase(unittest.TestCase):
         eod_data = ListedEOD.to_data_frame(self.session, ListedEquity)
         dividend_data = Dividend.to_data_frame(self.session, ListedEquity)
         # Get test data from feed
-        fundamentals = fd.AssetFundamentals()
-        history = fd.AssetHistory()
+        fundamentals = fd.MetaData()
+        history = fd.History()
         securities_list = self.session.query(ListedEquity).all()
         securities_test_data = fundamentals.get_securities(
             _test_isin_list=self.isin_list)

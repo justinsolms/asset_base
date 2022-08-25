@@ -402,8 +402,8 @@ class AssetBase(object):
         """
 
         # Check for newer securities data and update the database
-        fundamentals = fd.AssetFundamentals()
-        history = fd.AssetHistory()
+        fundamentals = fd.MetaData()
+        history = fd.History()
         # NOTE: Future security classes place their update_all() methods here.
         ListedEquity.update_all(
             self.session,
