@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 
 
 class _API(aiohttp.ClientSession):
+    # TODO: DO not inherit from aiohttp.ClientSession
     """ Direct API query, response and result checking.
 
     Parameters
