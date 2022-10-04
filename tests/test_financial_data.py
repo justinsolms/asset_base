@@ -21,7 +21,7 @@ from asset_base.financial_data import MetaData
 from asset_base.financial_data import History
 from asset_base.entity import Currency, Domicile, Exchange
 from asset_base.asset import Forex, Index, Listed
-from fundmanage.utils import date_to_str
+from fundmanage3.utils import date_to_str
 
 
 class TestStatic(unittest.TestCase):

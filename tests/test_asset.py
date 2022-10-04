@@ -11,7 +11,7 @@ from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Asset, Base, Cash, Forex, Index, Listed, ListedEquity, Share
 from asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
-from fundmanage.utils import date_to_str
+from fundmanage3.utils import date_to_str
 
 
 class TestBase(unittest.TestCase):

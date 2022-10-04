@@ -8,7 +8,7 @@ from asset_base.financial_data import Dump, MetaData, History, Static
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Forex, Index, Listed, ListedEquity
 from asset_base.time_series import Dividend, ForexEOD, IndexEOD, SimpleEOD, TimeSeriesBase, ListedEOD, TradeEOD
-from fundmanage.utils import date_to_str
+from fundmanage3.utils import date_to_str
 
 
 class TestTimeSeriesBase(unittest.TestCase):

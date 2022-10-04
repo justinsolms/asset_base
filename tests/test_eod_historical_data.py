@@ -23,7 +23,7 @@ from asset_base.eod_historical_data import _API, Exchanges
 from asset_base.eod_historical_data import Historical
 from asset_base.eod_historical_data import Bulk
 from asset_base.eod_historical_data import MultiHistorical
-from fundmanage.utils import date_to_str
+from fundmanage3.utils import date_to_str
 
 import warnings
 warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)
