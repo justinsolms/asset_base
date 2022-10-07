@@ -22,6 +22,7 @@ methods such as ``factory``, ``from_dataframe``, and lots more.
 
 
 """
+import datetime
 import unittest
 import sys
 
@@ -152,10 +153,13 @@ class TestAssetBase(unittest.TestCase):
         fundamentals = fd.MetaData()
         history = fd.History()
         securities_list = self.session.query(ListedEquity).all()
+        from_date = datetime.date(1900, 1, 1)  # Get all history
+        # Test data - get all history and should be the same as the data direct
+        # from the database with reused data
         securities_test_data = fundamentals.get_securities(
             _test_isin_list=self.isin_list)
-        eod_test_data = history.get_eod(securities_list)
-        dividend_test_data = history.get_dividends(securities_list)
+        eod_test_data = history.get_eod(securities_list, from_date=from_date)
+        dividend_test_data = history.get_dividends(securities_list, from_date=from_date)
         # Test - reused data should be same as feed data
         pd.testing.assert_frame_equal(
             securities_test_data[
