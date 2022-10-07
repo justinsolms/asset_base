@@ -30,7 +30,7 @@ Base = declarative_base()
 
 
 class TestSession(object):
-    """Set up a test database and session."""
+    """Set up an `in-memory` test database and session."""
 
     def __init__(self):
         self.engine = create_engine('sqlite://', echo=True)

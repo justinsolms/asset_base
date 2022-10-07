@@ -31,9 +31,6 @@ from asset_base.exceptions import TimeSeriesNoData
 
 from asset_base.financial_data import Dump
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
 from asset_base.asset_base import AssetBase, replace_time_series_labels
 from asset_base.time_series import Dividend, ListedEOD
 import asset_base.financial_data as fd
@@ -69,15 +66,6 @@ def assert_no_index_duplicates(security, security1, security2):
                 index.any(),
                 f'The {series} series of {sec.identity_code} '
                 'has duplicates in it\'s index.')
-
-
-class TestSession(object):
-    """Set up a test database and session."""
-
-    def __init__(self):
-        self.engine = create_engine('sqlite://', echo=True)
-        Base.metadata.create_all(self.engine)  # Using asset_base.Base
-        self.session = Session(self.engine)
 
 
 class TestAssetBase(unittest.TestCase):
@@ -240,7 +228,6 @@ class Suite(object):
 
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
-            TestSession,
             TestAssetBase,
         ]
 
