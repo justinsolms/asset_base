@@ -578,8 +578,8 @@ class TestMultiHistorical(unittest.TestCase):
         columns = ['close', 'high', 'low', 'open', 'volume']
         index_names = ['date', 'ticker']
         test_values = [
-            [0.8215, 0.8216, 0.8128, 0.8139, 3575.0],
-            [0.7336, 0.7348, 0.7308, 0.7337, 0.0],
+            [0.8185, 0.8191, 0.8123, 0.8131, 89060.0],
+            [0.7311, 0.7351, 0.7307, 0.7340, 0.0],
             [1.0, 1.0, 1.0, 1.0, 0.0]
             ]
 

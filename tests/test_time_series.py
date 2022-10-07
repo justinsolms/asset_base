@@ -174,7 +174,7 @@ class TestForexEOD(TestTradeEOD):
         cls.test_values = pd.DataFrame([  # Last date data
             [14.6878, 14.7204, 14.5707,  14.6078,    0],
             [1.0000,   1.0000,  1.0000,   1.0000,    0],
-            [0.8215,   0.8216,  0.8128,   0.8139, 3575],
+            [0.8185,   0.8191,  0.8123,   0.8131, 89060],
         ], columns=cls.test_columns)
 
     def setUp(self):

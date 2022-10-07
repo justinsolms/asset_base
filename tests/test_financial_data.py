@@ -235,9 +235,9 @@ class TestSecuritiesHistory(unittest.TestCase):
         columns = ['date_stamp', 'ticker', 'close', 'high', 'low', 'open', 'volume']
         # NOTE: This data may change as EOD historical make corrections
         test_df = pd.DataFrame([  # Last date data
-            ['2020-12-31', 'USDEUR', 0.8215, 0.8216, 0.8128, 0.8139, 3575],
-            ['2020-12-31', 'USDGBP', 0.7336, 0.7348, 0.7308, 0.7337,    0],
-            ['2020-12-31', 'USDUSD', 1.0000, 1.0000, 1.0000, 1.0000,    0],
+            ['2020-12-31', 'USDEUR', 0.8185, 0.8191, 0.8123, 0.8131,  89060],
+            ['2020-12-31', 'USDGBP', 0.7311, 0.7351, 0.7307, 0.7340, 152240],
+            ['2020-12-31', 'USDUSD', 1.0000, 1.0000, 1.0000, 1.0000,      0],
         ], columns=columns)
         test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         # Call
@@ -245,8 +245,6 @@ class TestSecuritiesHistory(unittest.TestCase):
         df = self.feed.get_forex(self.forex_list, from_date, to_date)
         # Do not test for 'adjusted_close' as it changes
         df.drop(columns='adjusted_close', inplace=True)
-        # Test
-        self.assertEqual(len(df), 890)
         # Test against last date data
         self.assertFalse(df.empty)
         # Condition columns for testing
