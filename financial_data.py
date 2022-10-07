@@ -29,7 +29,7 @@ import abc
 
 from asset_base.exceptions import _BaseException
 
-from asset_base.__init__ import get_data_path
+from asset_base.__init__ import get_data_path, get_var_path
 
 # Get module-named logger.
 import logging
@@ -51,11 +51,12 @@ class _Feed(object, metaclass=abc.ABCMeta):
 
     _CLASS_DATA_PATH = None
 
-    def __init__(self):
+    def __init__(self, path=None):
         """Instance initialization."""
         # Make the absolute data path for writing
         if self._CLASS_DATA_PATH is not None:
             self._abs_data_path = get_data_path(self._CLASS_DATA_PATH)
+            # Make directory if not existing
             self.makedir(self._abs_data_path)
 
     def _path(self, file_name=None):
@@ -110,7 +111,14 @@ class Dump(_Feed):
         if testing:
             self._CLASS_DATA_PATH = self._CLASS_TEST_DATA_PATH
 
-        super().__init__()
+        # Do not call superclass __init__ as its messes with the paths. Here we
+        # use the `var` path instead of the `data` path.
+
+        # Make the absolute var path for writing. Overwrites the
+        # `_abs_data_path` of the parent class.
+        if self._CLASS_DATA_PATH is not None:
+            self._abs_data_path = get_var_path(self._CLASS_DATA_PATH)
+            self.makedir(self._abs_data_path)
 
     def write(self, dump_dict):
         """Write a dict of ``pandas.DataFrame`` to CSV files.
@@ -131,7 +139,7 @@ class Dump(_Feed):
                 logger.error('Could not write dump file %s', path)
                 raise
             else:
-                logger.info('Wrote dump file %s', path)
+                logger.info('Write dump file %s', path)
 
     def read(self, name_list):
         """Read a dict of ``pandas.DataFrame`` from CSV files.

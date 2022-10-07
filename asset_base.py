@@ -85,6 +85,8 @@ from asset_base.exceptions import TimeSeriesNoData
 
 import asset_base.financial_data as fd
 
+from asset_base.__init__ import get_var_path
+
 # Get module-named logger.
 import logging
 logger = logging.getLogger(__name__)
@@ -282,10 +284,10 @@ class AssetBase(object):
             db_url = self._config['backends']['database']
             db_url = db_url['mysql']['asset_base'] % self._db_name
         elif self._dialect == 'sqlite':
-            # Construct SQLite file name with path expansion for a URL.
+            # Construct SQLite file name with path expansion for a URL
             self._db_name = 'fundmanage.%s.db' % self._db_name
-            cache_path = self._config['directories']['working']['cache']
-            cache_path = os.path.expanduser(cache_path)  # Full path.
+            # Put files in a `cache`` folder under the `var` path scheme.
+            cache_path = get_var_path('cache')
             db_file_name = '%s/%s' % (cache_path, self._db_name)
             db_url = 'sqlite:///' + db_file_name
             self._db_name = db_file_name
