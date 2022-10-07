@@ -19,7 +19,6 @@ dictionaries for ease of maintenance.
 
 """
 import datetime
-import glob
 import asset_base.eod_historical_data as eod
 
 import pandas as pd
@@ -29,6 +28,8 @@ import os
 import abc
 
 from asset_base.exceptions import _BaseException
+
+from asset_base.__init__ import get_data_path
 
 # Get module-named logger.
 import logging
@@ -48,8 +49,17 @@ class _Feed(object, metaclass=abc.ABCMeta):
         An ``asset_base`` database manager with a session to the database.
     """
 
+    _CLASS_DATA_PATH = None
+
+    def __init__(self):
+        """Instance initialization."""
+        # Make the absolute data path for writing
+        if self._CLASS_DATA_PATH is not None:
+            self._abs_data_path = get_data_path(self._CLASS_DATA_PATH)
+            self.makedir(self._abs_data_path)
+
     def _path(self, file_name=None):
-        """Mandatory data path schema.
+        """Absolute data path schema with optional file name.
 
         Parameters
         ----------
@@ -57,24 +67,15 @@ class _Feed(object, metaclass=abc.ABCMeta):
             Return the name of the file to be found at the full path. If none
             is provided then only the folder path is returned.
         """
-        if file_name is None:
-            path = os.path.join(
-                os.getcwd(),
-                self._data_path,
-                self._sub_path,
-                )
+        if file_name:
+            path = os.path.join(self._abs_data_path, file_name)
         else:
-            path = os.path.join(
-                os.getcwd(),
-                self._data_path,
-                self._sub_path,
-                file_name)
+            path = self._abs_data_path
 
         return path
 
-    def makedir(self):
+    def makedir(self, path):
         """Make path if not exist."""
-        path = self._path()
         if not os.path.isdir(path):
             logger.info('Created folder %s', path)
             os.makedirs(path)
@@ -91,6 +92,9 @@ class Dump(_Feed):
         was originally designed to work with multiple class dumps at once.
 
     """
+    _CLASS_DATA_PATH = 'dumps'
+    _CLASS_TEST_DATA_PATH = 'test_dumps'
+
     def __init__(self, testing=False):
         """Instance initialization.
 
@@ -102,18 +106,11 @@ class Dump(_Feed):
             the operational dump data.
 
         """
-        super().__init__()
-
         # Avoid conflict and overwriting with operational and testing data
-        if not testing:
-            self._data_path = "data"
-            self._sub_path = "dumps"
-        else:
-            self._data_path = "data"
-            self._sub_path = "test_dumps"
+        if testing:
+            self._CLASS_DATA_PATH = self._CLASS_TEST_DATA_PATH
 
-        # Make the data path for writing
-        self.makedir()
+        super().__init__()
 
     def write(self, dump_dict):
         """Write a dict of ``pandas.DataFrame`` to CSV files.
@@ -237,12 +234,11 @@ class Static(_Feed):
         * World exchange information.
 
     """
+    _CLASS_DATA_PATH = 'static'
 
     def __init__(self):
         """Instance initialization."""
         super().__init__()
-        self._data_path = "data"
-        self._sub_path = "static"
 
     def get_currency(self):
         """Fetch currencies from the local file."""
@@ -326,12 +322,11 @@ class StaticIndices(_Feed):
         * Index time series.
 
     """
+    _CLASS_DATA_PATH = 'static_time_series'
 
     def __init__(self):
         """Instance initialization."""
         super().__init__()
-        self._data_path = "data"
-        self._sub_path = "static_time_series"
 
     def get_indices_meta(self, **kwargs):
         """Fetch indices mete data from the feeds."""
@@ -425,11 +420,11 @@ class StaticIndices(_Feed):
 class MetaData(_Feed):
     """Provide fundamental and meta-data of the working universe securities."""
 
+    _CLASS_DATA_PATH = 'static'
+
     def __init__(self):
         """Instance initialization."""
         super().__init__()
-        self._sub_path = "static"
-        self._data_path = "data"
 
     def get_securities(self, **kwargs):
         """Fetch JSE securities mata-data from a local file. """
@@ -534,11 +529,11 @@ class History(_Feed):
 
     This class manages
     """
+    _CLASS_DATA_PATH = None
+
     def __init__(self):
         """Instance initialization."""
         super().__init__()
-        self._data_path = None
-        self._sub_path = None
 
     @staticmethod
     def date_preprocessor(obj_list, from_date, to_date, series):
