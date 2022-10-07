@@ -149,7 +149,7 @@ class TimeSeriesBase(Base):
             # No data so return
             return
 
-        # The goal is to substitute the `key_code_name` column for the
+        # The goal is to substitute the `key_code_name` column with the
         # `Asset.id`.
         key_code_name = asset_class.key_code_name
         # Get Asset.key_code to Asset.id translation table
@@ -195,6 +195,11 @@ class TimeSeriesBase(Base):
         for security in security_list:
             # Get the security's time series.
             series = data_table.loc[security.id]
+            # Sort by ascending date_stamp. Use a copy (inplace=False) to avoid
+            # a SettingWithCopyWarning
+            series.sort_index(inplace=True)
+            # Reset date_stamp index making it a column
+            series.reset_index(inplace=True)
 
             # Keep only new dated data in the data_table. Due to the behaviour
             # of financial data API services very often returns data which may
@@ -213,11 +218,6 @@ class TimeSeriesBase(Base):
             # Avoid empty series edge case
             if series.empty:
                 continue
-            # Sort by ascending date_stamp. Use a copy (inplace=False) to avoid
-            # a SettingWithCopyWarning
-            series.sort_index(inplace=True)
-            # Reset date_stamp index making it a column
-            series.reset_index(inplace=True)
             # Create the security's series list of class instances and extend
             # onto the instances list
             instances = [
