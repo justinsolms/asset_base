@@ -191,7 +191,7 @@ class TestAssetBase(unittest.TestCase):
         data_check_prod = data.prod().to_dict()
         test_data = {
             'STX40': 1.0807429980281673,
-            'AAPL': 0.4534256160141147,
+            'AAPL': 0.4557730329977179,
             'MCD': 1.113204809354809}
         self.assertEqual(test_data, data_check_prod)
 
