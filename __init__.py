@@ -10,6 +10,9 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
+import logging
+import logging.config
+import yaml
 import os
 
 # Package absolute root path
@@ -47,3 +50,10 @@ def get_var_path(sub_path):
         is provided then only the folder path is returned.
     """
     return os.path.join(_ROOT, _VAR, sub_path)
+
+# Open logging configuration YAML file and convert ot a dict.
+path = os.path.dirname(os.path.realpath(__file__))
+with open(os.path.join(path, 'logconf.yaml'), 'r') as stream:
+    config = yaml.full_load(stream)
+# Use the dict to configure logging.
+logging.config.dictConfig(config)

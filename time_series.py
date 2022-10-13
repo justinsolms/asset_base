@@ -809,7 +809,8 @@ class Dividend(TimeSeriesBase):
         back_populates='_dividend_series',
         foreign_keys=[_listed_equity_id])
 
-    currency = Column(String, nullable=False)
+    # FIXME: Cannot have NULL here but some dividends are triggering tis
+    currency = Column(String, nullable=True)
     """str: 3-Letter currency symbol for the dividend currency. """
 
     declaration_date = Column(Date, nullable=True)

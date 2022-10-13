@@ -91,7 +91,7 @@ from asset_base.__init__ import get_var_path
 import logging
 logger = logging.getLogger(__name__)
 # Change logging level here.
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+# logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 # Pull in the meta data
 metadata = MetaData()
@@ -233,7 +233,7 @@ class AssetBase(object):
             A MySQL session.
 
     """
-    # These must only be Asset polymorphs
+    # These must only be `Asset` polymorphs.
     classes_to_dump = [ListedEquity]
 
     def __init__(self, dialect='sqlite', testing=False):
@@ -260,9 +260,9 @@ class AssetBase(object):
 
         # Create a new database and engine if not existing
         if not hasattr(self, 'session'):
-            self.new_database()
+            self.get_database_session()
 
-        # Data dumper - dumps to dump folder
+        # Data dumper - dumps to dump folder - indicate testing or not.
         self.dumper = fd.Dump(testing=testing)
 
     def commit(self):
@@ -276,7 +276,7 @@ class AssetBase(object):
             # Rethrow the exception
             raise ex
 
-    def new_database(self):
+    def get_database_session(self):
         self._db_name = 'asset_base'
         # Select database platform.
         if self._dialect == 'mysql':
@@ -288,7 +288,9 @@ class AssetBase(object):
             self._db_name = 'fundmanage.%s.db' % self._db_name
             # Put files in a `cache`` folder under the `var` path scheme.
             cache_path = get_var_path('cache')
-            db_file_name = '%s/%s' % (cache_path, self._db_name)
+            if not os.path.exists(cache_path):
+                os.mkdir(cache_path)
+            db_file_name = os.path.join(cache_path, self._db_name)
             db_url = 'sqlite:///' + db_file_name
             self._db_name = db_file_name
         elif self._dialect == 'memory':
@@ -308,10 +310,15 @@ class AssetBase(object):
                 Base.metadata.create_all(self.engine)
             except Exception as ex:
                 drop_database(db_url)
+                logger.info('Failed to create new database %s' % db_url)
                 raise ex
+            else:
+                logger.info('Created new database %s' % db_url)
+        else:
+            logger.info('Use existing database %s' % db_url)
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.info('New database, engine and tables with URL "%s"' % db_url)
+        logger.info('New database session %s' % db_url)
 
     def set_up(self, reuse=True, update=True,
                _test_isin_list=None, _test_forex_list=None):
@@ -328,8 +335,7 @@ class AssetBase(object):
         """
         # Create a new database and engine if not existing
         if not hasattr(self, 'session'):
-            logger.info('New database session created.')
-            self.new_database()
+            self.get_database_session()
 
         # Record creation moment as a string (item, value) pair if it does not
         # already exist.
