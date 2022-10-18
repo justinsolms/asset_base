@@ -62,7 +62,6 @@ See also
 
 """
 import os
-import sys
 import yaml
 import datetime
 import pandas as pd
@@ -155,7 +154,6 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
         columns = [s.alt_name for s in data_frame.columns]
     else:
         raise ValueError('Unexpected value for "identifier" argument.')
-
 
     if not inplace:
         data_frame = data_frame.copy()
@@ -330,6 +328,7 @@ class AssetBase(object):
             When `True` then previous dumped database content will be reused to
             initialise the database.
         update : bool
+            FIXME: Not implemented, do so urgently.
             When `True` then feeds will be checked for newer data.
 
         """

@@ -436,7 +436,7 @@ class MetaData(_Feed):
 
     def get_securities(self, **kwargs):
         """Fetch JSE securities mata-data from a local file. """
-        universe_file_name = 'ETFs.JSE.Meta.csv'
+        universe_file_name = 'ETFMeta.csv'
         path = self._path(universe_file_name)
 
         column_dict = {
