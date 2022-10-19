@@ -60,9 +60,6 @@ class Common(Base):
     name = Column(String(256), nullable=False)
     """str: Entity name."""
 
-    # Is being depreciated
-    _alt_name = Column(String(256), nullable=True)
-
     key_code_name = 'key_code'
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
@@ -79,9 +76,6 @@ class Common(Base):
     def __init__(self, name, **kwargs):
         """Instance initialization."""
         self.name = name
-        # Record alternative name if exists.
-        if 'alt_name' in kwargs:
-            self._alt_name = kwargs.pop('alt_name')
 
         # Record creation date
         self.date_create = datetime.datetime.today()

@@ -106,7 +106,7 @@ class TestMetaData(unittest.TestCase):
             'mic': str, 'listed_name': str, 'asset_class': str, 'domicile_code': str,
             'industry_class': str, 'industry_code': str,
             'industry_name': str, 'isin': str, 'issuer_domicile_code': str,
-            'issuer_name': str, 'locality': str, 'alt_name': str, 'roll_up': str,
+            'issuer_name': str, 'locality': str, 'roll_up': str,
             'sector_code': str, 'sector_name': str,
             'sub_sector_code': str, 'sub_sector_name': str,
             'super_sector_code': str, 'super_sector_name': str, 'ter': float,

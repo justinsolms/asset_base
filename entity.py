@@ -503,9 +503,6 @@ class Entity(Common):
     ----------
     name : str
         Entity full name.
-    alt_name : str, optional
-        An optional, alternative name to the ``name`` parameter. If provided the
-        ``name`` attribute shall default to this.
     domicile : .Domicile
         Domicile of the entity.
     children : list
@@ -574,15 +571,6 @@ class Entity(Common):
     def currency(self):
         """Currency : ``Currency`` of the ``Entity`` ``Domicile``."""
         return self.domicile.currency
-
-    @property
-    def alt_name(self):
-        if self._alt_name:
-            name = self._alt_name + ' ' + self._class_name
-        else:
-            name = self.name + ' ' + self._class_name
-
-        return name
 
     @property
     def key_code(self):

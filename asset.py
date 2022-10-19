@@ -458,7 +458,7 @@ class Cash(Asset):
 
     _asset_class = 'cash'
 
-    #  A short class name for use in the alt_name method.
+    #  A short class name for use in naming
     _name_appendix = 'Cash'
 
     def __init__(self, currency, **kwargs):
@@ -707,7 +707,7 @@ class Forex(Cash):
 
     _asset_class = 'forex'
 
-    #  A short class name for use in the alt_name method.
+    #  A short class name for use in naming
     _name_appendix = 'Forex'
 
     # Priced currency, or ``base_currency``
@@ -1005,7 +1005,7 @@ class Share(Asset):
     # Number of share units issued byu the Issuer
     shares_in_issue = Column(Integer, nullable=True)
 
-    #  A short class name for use in the alt_name method.
+    #  A short class name for use in naming
     _name_appendix = 'Share'
 
     def __init__(self, name, issuer, currency=None, **kwargs):
@@ -1196,7 +1196,7 @@ class Listed(Share):
     # Listing status.
     status = Column(Enum('listed', 'delisted'), nullable=False)
 
-    #  A short class name for use in the alt_name method.
+    #  A short class name for use in naming
     # TODO: Automate from class magic attributes.
     _name_appendix = 'Listed'
 
@@ -1700,7 +1700,7 @@ class ListedEquity(Listed):
                                     ForeignKey('industry_class_icb.id'),
                                     nullable=True)
 
-    #  A short class name for use in the alt_name method.
+    #  A short class name for use in naming
     _name_appendix = 'Equity'
 
     # FIXME: The __repr__ string is printing Currency.__str__ instead of
@@ -2191,7 +2191,7 @@ class Index(Base):
     # and so would be ignored when the ``IndexEOD.update_all`` method is called.
     static = Column(Boolean, nullable=False)
 
-    #  A short class name for use in the alt_name method.
+    #  A short class name for use in naming
     _name_appendix = 'Index'
 
     def __init__(
@@ -2416,7 +2416,7 @@ class ExchangeTradeFund(ListedEquity):
     # Published Total Expense Ratio of the fund.
     ter = Column(Float)
 
-    #  A short class name for use in the alt_name method.
+    #  A short class name for use in naming
     _name_appendix = 'ETF'
 
     def __init__(self, domicile, name, issuer, isin, exchange, ticker,

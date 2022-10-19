@@ -118,9 +118,6 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
                 Uses the security (asset) ``isin`` attribute.
             'name':
                 Uses the security (asset) ``name`` attribute.
-            'alt_name':
-                Uses the alternative security (asset) ``alt_name``
-                attribute.
 
     inplace: bool
         If True, modifies the DataFrame in place (do not create a new object).
@@ -149,9 +146,6 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
     elif identifier == 'name':
         # Translation of column id to names.
         columns = [s.name for s in data_frame.columns]
-    elif identifier == 'alt_name':
-        # Translation of column id to names.
-        columns = [s.alt_name for s in data_frame.columns]
     else:
         raise ValueError('Unexpected value for "identifier" argument.')
 

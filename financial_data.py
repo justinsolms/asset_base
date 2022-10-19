@@ -454,7 +454,6 @@ class MetaData(_Feed):
             'isin': 'isin',
             'issuer_domicile': 'issuer_domicile_code',
             'issuer_name': 'issuer_name',
-            'alt_name': 'alt_name',
             'roll_up': 'roll_up',
             'sector_code': 'sector_code',
             'sector_name': 'sector_name',
