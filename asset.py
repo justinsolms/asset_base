@@ -1650,8 +1650,6 @@ class ListedEquity(Listed):
         cents.
     shares_in_issue : int, optional
         Number of shares in issue.
-    exchange_board : str
-        Board of the exchange that the instrument is listed on.
     date_stamp : datetime.date
         Date stamp of the data.
     industry_class : str, optional
@@ -2356,8 +2354,6 @@ class ExchangeTradeFund(ListedEquity):
         The exchange the asset is listed upon.
     ticker : str
         The ticker assigned to the asset by the exchange listing process.
-    exchange_board : str
-        Board of the exchange that the instrument is listed on.
     date_stamp : datetime.date
         Date stamp of the data.
     listing_date : datetime.date

@@ -448,7 +448,6 @@ class MetaData(_Feed):
             'locality': 'locality',
             'domicile': 'domicile_code',
             'quote_units': 'quote_units',
-            'exchange_board': 'exchange_board',
             'industry_class': 'industry_class',
             'industry_code': 'industry_code',
             'industry_name': 'industry_name',

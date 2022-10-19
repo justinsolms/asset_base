@@ -104,7 +104,7 @@ class TestMetaData(unittest.TestCase):
         """Fetch JSE securities mata-data from a local file."""
         columns_dict = {
             'mic': str, 'listed_name': str, 'asset_class': str, 'domicile_code': str,
-            'exchange_board': str, 'industry_class': str, 'industry_code': str,
+            'industry_class': str, 'industry_code': str,
             'industry_name': str, 'isin': str, 'issuer_domicile_code': str,
             'issuer_name': str, 'locality': str, 'alt_name': str, 'roll_up': str,
             'sector_code': str, 'sector_name': str,
