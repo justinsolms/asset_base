@@ -98,6 +98,8 @@ class _API(aiohttp.ClientSession):
         retry_list = [1, 2, 'last']
         for retry in retry_list:
             try:
+                # TODO: Refer timeout to constant parameter
+                # TODO: Cose response object.
                 response = await self.get(url, params=params, timeout=20)
             except TimeoutError as ex:
                 # Test for retries
