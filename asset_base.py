@@ -252,7 +252,7 @@ class AssetBase(object):
 
         # Create a new database and engine if not existing
         if not hasattr(self, 'session'):
-            self.get_database_session()
+            self.make_database_session()
 
         # Data dumper - dumps to dump folder - indicate testing or not.
         self.dumper = fd.Dump(testing=testing)
@@ -268,7 +268,7 @@ class AssetBase(object):
             # Rethrow the exception
             raise ex
 
-    def get_database_session(self):
+    def make_database_session(self):
         self._db_name = 'asset_base'
         # Select database platform.
         if self._dialect == 'mysql':
@@ -328,7 +328,7 @@ class AssetBase(object):
         """
         # Create a new database and engine if not existing
         if not hasattr(self, 'session'):
-            self.get_database_session()
+            self.make_database_session()
 
         # Record creation moment as a string (item, value) pair if it does not
         # already exist.
