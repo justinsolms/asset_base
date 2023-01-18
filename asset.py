@@ -80,14 +80,19 @@ class Base(Common):
             self.quote_units = 'units'
 
     def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return '{} is an {} priced in {}.'.format(
-            self.name, self._class_name, self.currency_ticker)
+        """Return the informal string output. Currently ``identity_code``."""
+        return self.identity_code
 
     def __repr__(self):
         """Return the official string output."""
         return '<{}(name="{}", currency={!r})>'.format(
             self._class_name, self.name, self.currency)
+
+    @property
+    def long_name(self):
+        """str: Return the long name string."""
+        return '{} is an {} priced in {}.'.format(
+            self.name, self._class_name, self.currency_ticker)
 
     @property
     def _eod_series(self):
@@ -225,7 +230,7 @@ class Asset(Base):
     Warning
     -------
     An instance of this class may be an index of a basket of underlying
-    invest-able assets. Then it is not a data-like indice of the ``Index``
+    invest-able assets. Then it is not a data-like index of the ``Index``
     class but rather an instance of this the ``Asset`` class. Not all these
     indices are however invest-able.
 
@@ -288,14 +293,6 @@ class Asset(Base):
         if 'owner' in kwargs:
             self.owner = kwargs.pop('owner')
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        msg = super().__str__()
-        if self.owner is not None:
-            msg += ' Owner: {}'.format(self.owner)
-
-        return msg
-
     def __repr__(self):
         """Return the official string output."""
         if self.owner is None:
@@ -303,6 +300,15 @@ class Asset(Base):
         else:
             msg = '<{}(name="{}", currency={!r}, owner={!r})>'.format(
                 self._class_name, self.name, self.currency, self.owner)
+
+        return msg
+
+    @property
+    def long_name(self):
+        """str: Return the long name string."""
+        msg = super().__str__()
+        if self.owner is not None:
+            msg += ' Owner: {}'.format(self.owner)
 
         return msg
 
@@ -470,13 +476,6 @@ class Cash(Asset):
         name = currency.name
         super().__init__(name, currency, **kwargs)
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        msg = '{} is an {} priced in {}.'.format(
-            self.name, self._class_name, self.currency_ticker)
-
-        return msg
-
     def __repr__(self):
         """Return the official string output."""
         msg = '<{}(currency={!r})>'.format(
@@ -498,6 +497,14 @@ class Cash(Asset):
     def identity_code(self):
         """A human readable string unique to the class instance."""
         return self.ticker
+
+    @property
+    def long_name(self):
+        """str: Return the long name string."""
+        msg = '{} is an {} priced in {}.'.format(
+            self.name, self._class_name, self.currency_ticker)
+
+        return msg
 
     @classmethod
     def factory(cls, session, ticker, create=True, **kwargs):
@@ -746,11 +753,6 @@ class Forex(Cash):
         self.ticker = '{}{}'.format(
             self.base_currency.ticker, self.currency.ticker)
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return 'One {} priced in {}'.format(
-            self.base_currency.ticker, self.currency.ticker)
-
     def __repr__(self):
         """Return the official string output."""
         return '<{}(base_currency={!r}, price_currency={!r})>'.format(
@@ -775,6 +777,12 @@ class Forex(Cash):
     def identity_code(self):
         """A human readable string unique to the class instance."""
         return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
+
+    @property
+    def long_name(self):
+        """str: Return the long name string."""
+        return 'One {} priced in {}'.format(
+            self.base_currency.ticker, self.currency.ticker)
 
     @classmethod
     def factory(cls, session, base_ticker, price_ticker, create=True, **kwargs):
@@ -1026,12 +1034,6 @@ class Share(Asset):
         else:
             self.shares_in_issue = None
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return '{} is a {} issued by {} in {}.'.format(
-            self.name, self._class_name,
-            self.issuer.name, self.issuer.domicile.country_name)
-
     @property
     def domicile(self):
         """.entity.Domicile : ``Domicile`` of the ``Share`` ``Issuer``."""
@@ -1046,6 +1048,13 @@ class Share(Asset):
     def identity_code(self):
         """A human readable string unique to the class instance."""
         return self.issuer.identity_code + '.' + self.name
+
+    @property
+    def long_name(self):
+        """str: Return the long name string."""
+        return '{} is a {} issued by {} in {}.'.format(
+            self.name, self._class_name,
+            self.issuer.name, self.issuer.domicile.country_name)
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".
@@ -1242,14 +1251,6 @@ class Listed(Share):
         else:
             self.status = 'listed'
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return (
-            '{} ({}.{}) ISIN:{} is a {} on the {} issued by {} in {}').format(
-                self.name, self.ticker, self.exchange.mic, self.isin,
-                self._discriminator, self.exchange.name, self.issuer.name,
-                self.domicile.country_name)
-
     @property
     def domicile(self):
         """.entity.Domicile : ``Domicile`` of the ``Listed``'s ``Exchange``."""
@@ -1264,6 +1265,15 @@ class Listed(Share):
     def identity_code(self):
         """A human readable string unique to the class instance."""
         return self.isin + '.' + self.ticker
+
+    @property
+    def long_name(self):
+        """str: Return the long name string."""
+        return (
+            '{} ({}.{}) ISIN:{} is a {} on the {} issued by {} in {}').format(
+                self.name, self.ticker, self.exchange.mic, self.isin,
+                self._discriminator, self.exchange.name, self.issuer.name,
+                self.domicile.country_name)
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".
@@ -2203,13 +2213,6 @@ class Index(Base):
         self.total_return = total_return
         self.static = static
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        msg = '{} is an {} priced in {}.'.format(
-            self.name, self._class_name, self.currency_ticker)
-
-        return msg
-
     def __repr__(self):
         """Return the official string output."""
         msg = '<{}(name="{}", ticker="{}", currency={!r})>'.format(
@@ -2226,6 +2229,14 @@ class Index(Base):
     def identity_code(self):
         """Return a unique string code for this class instance."""
         return f'{self.ticker}'
+
+    @property
+    def long_name(self):
+        """str: Return the long name string."""
+        msg = '{} is an {} priced in {}.'.format(
+            self.name, self._class_name, self.currency_ticker)
+
+        return msg
 
     @classmethod
     def factory(
