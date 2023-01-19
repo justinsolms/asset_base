@@ -91,7 +91,7 @@ class BadISIN(_BaseException):
     def __init__(self, isin, **kwargs):
         """See the class docstring."""
         self.isin = isin
-        msg = 'ISIN %s checksum fails' % isin
+        msg = 'ISIN=%s checksum fails' % isin
         super().__init__(msg, **kwargs)
 
 
