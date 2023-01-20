@@ -580,39 +580,6 @@ class Cash(Asset):
         for currency in currency_list:
             Cash.factory(session, currency.ticker)
 
-    def get_last_eod_trades(self):
-        """Return the last EOD price data set in the history
-
-        Returns
-        -------
-        dict
-            A cash price End-Of-Day (EOD) data dictionary with keys :
-                date_stamp: The EOD date-time stamp of the data
-                price: Same as the closing price for EOD data
-                close: The market closing price
-            The `close` is the same as the `price`.
-
-        Note
-        ----
-        The price of ``Cash`` instances will always be 1.0
-
-        """
-
-        # The convention used by this module is to use yesterday's close price
-        # due to the limitation imposed by the database price feed.
-        yesterday = datetime.date.today() - datetime.timedelta(days=1)
-        # Round off the date to remove the time and keep only the date
-        # component.
-        date_stamp = datetime.date(
-            yesterday.year, yesterday.month, yesterday.day)
-        # The convention is that cash has a price of 1.0.
-        price = 1.0
-
-        return {
-            "date_stamp": date_stamp,
-            "close": price,
-        }
-
     def time_series(self, date_index, *args):
         """Retrieve historic time-series for a set of class instances.
 
@@ -1576,36 +1543,6 @@ class Listed(Share):
         # For all class instances in the database get a table for their
         # time-series
         ListedEOD.reuse(session, dumper, Listed)
-
-    def get_live_trades(self):
-        # TODO: The required methods are not currently functioning.
-        """Return the live trade data if available else use the last EOD trades.
-
-        This method shall first try to get live data from a feed and if that
-        fails it shall return the last EOD price.
-
-
-        Returns
-        -------
-        dict
-            If live prices are available then the live price data dictionary
-            will be returned from the class ``get_live_trades`` method, else if
-            live prices are not available then the End-Of-Day (EOD) price data
-            dictionary will be returned from the class ``get_last_eod_trades``
-            method.
-
-        See also
-        --------
-        .get_live_trades
-        .get_last_eod_trades
-        """
-        try:
-            data = self.get_live_trades()  # FIXME: Does not exist. Carry-over from old code.
-        except NoResultFound:
-            data = self.get_last_eod()
-
-        # Fetch the date filtered range of time-series data.
-        return data
 
     @staticmethod
     def _check_isin(isin):

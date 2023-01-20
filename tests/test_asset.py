@@ -177,17 +177,6 @@ class TestCash(TestAsset):
         # Assert
         self.assertEqual(codes, test_codes)
 
-    def test_get_last_eod_trades(self):
-        """Return the last EOD price data set in the history."""
-        # Add.
-        Cash.factory(self.session, self.currency_ticker)
-        # Retrieve.
-        cash = Cash.factory(self.session, self.currency_ticker)
-        # Tested method
-        price_dict = cash.get_last_eod_trades()
-        # Test
-        self.assertEqual(price_dict, self.test_price_dict)
-
     def test_time_series(self):
         """Retrieve historic time-series for a set of class instances."""
         currency = Currency.factory(self.session, self.currency_ticker)
