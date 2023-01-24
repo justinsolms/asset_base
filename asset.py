@@ -67,6 +67,18 @@ class Base(Common):
         TimeSeriesBase,
         order_by=TimeSeriesBase.date_stamp,
         back_populates='base_obj')
+    """list: EOD historical time-series collection ranked by date_stamp
+
+    A list of ``time_series.TimeSeriesBase`` instances.
+
+    Warning
+    -------
+    As this is an abstract class please do not directly use this attribute.
+
+    See also
+    --------
+    _eod_series
+    """
 
     def __init__(self, name, currency, **kwargs):
         """Instance initialization."""
@@ -104,7 +116,14 @@ class Base(Common):
         ``sqlalchemy.Column`` column attribute in child polymorphs for their
         proper time-series functionality. Here this alias is merely a
         convenience so we can put the methods ``get_eod``, ``get_last_eod`` and
-        ``get_last_eod_date`` in this class. They all use ``_eod_series``.
+        ``get_last_eod_date`` in this class. They all use ``_eod_series``. Must
+        return a list of polymorphs of ``time_series.TimeSeriesBase`` instances.
+
+        See also
+        --------
+        _series
+
+        TODO: consider just refactoring _series as _eod_series and test.
         """
         return self._series
 
@@ -481,11 +500,6 @@ class Cash(Asset):
         return msg
 
     @property
-    def _eod_series(self):
-        # FIXME: Please overload parent _eod_series to yield a time-series
-        # NOTE: Idea to use Forex for generating the time series!????
-
-    @property
     def ticker(self):
         """ISO 4217 3-letter currency code."""
         return self.currency.ticker
@@ -675,11 +689,14 @@ class Forex(Cash):
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
-    # EOD historical time-series collection ranked by date_stamp
     _eod_series = relationship(
         ForexEOD,
         order_by=ForexEOD.date_stamp,
         back_populates='forex')
+    """list: EOD historical time-series collection ranked by date_stamp
+
+    A list of ``time_series.ForexEOD`` instances.
+    """
 
     _asset_class = 'forex'
 
@@ -1160,6 +1177,10 @@ class Listed(Share):
         ListedEOD,
         order_by=ListedEOD.date_stamp,
         back_populates='listed')
+    """list: EOD historical time-series collection ranked by date_stamp
+
+    A list of ``time_series.ListedEOD`` instances.
+    """
 
     # Ticker on the listing exchange.
     ticker = Column(String(12), nullable=False)
@@ -2129,6 +2150,10 @@ class Index(Base):
         IndexEOD,
         order_by=IndexEOD.date_stamp,
         back_populates='index')
+    """list: EOD historical time-series collection ranked by date_stamp
+
+    A list of ``time_series.IndexEOD`` instances.
+    """
 
     # Unique index ticker
     ticker = Column(String(12), nullable=False)
