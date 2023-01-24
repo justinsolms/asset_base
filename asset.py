@@ -148,8 +148,18 @@ class Base(Common):
 
         return data_frame
 
+    def _get_last_eod(self):
+        """Common method for get_last_<whatever>."""
+        if len(self._eod_series) != 0:
+            # Note that _eod_series is ordered by ListedEOD.last_date
+            last_eod = self._eod_series[-1]
+        else:
+            raise TimeSeriesNoData(f'Empty EOD data for {self}.')
+
+        return last_eod
+
     def get_last_eod(self):
-        """Return the EOD last date, data dict, for the asset.
+        """Return the EOD last date's, data dict, for the asset.
 
         Returns
         -------
@@ -157,13 +167,7 @@ class Base(Common):
             An End-Of-Day (EOD) price data dictionary with keys from the
             ``ListedEOD.to_dict()`` method.
         """
-        # Note that _eod_series is ordered by ListedEOD.last_date
-        try:
-            last_eod = self._eod_series[-1]
-        except IndexError:
-            last_eod = None
-
-        return last_eod.to_dict()
+        return self._get_last_eod().to_dict()
 
     def get_last_eod_date(self):
         """Return the EOD last date for the listed share.
@@ -174,14 +178,7 @@ class Base(Common):
             Last date for the ``.time_series.TimeSeriesBase`` (or child class)
             time series .
         """
-        # Note that _eod_series is ordered by ListedEOD.last_date
-        try:
-            last_eod = self._eod_series[-1]
-            last_eod_date = last_eod.date_stamp
-        except IndexError:
-            last_eod_date = None
-
-        return last_eod_date
+        return self._get_last_eod().date_stamp
 
 
 class Asset(Base):
@@ -482,6 +479,11 @@ class Cash(Asset):
             self._class_name, self.currency)
 
         return msg
+
+    @property
+    def _eod_series(self):
+        # FIXME: Please overload parent _eod_series to yield a time-series
+        # NOTE: Idea to use Forex for generating the time series!????
 
     @property
     def ticker(self):
