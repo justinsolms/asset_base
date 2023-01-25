@@ -97,7 +97,7 @@ class TestSimpleEOD(TestTimeSeriesBase):
             self.name,  self.issuer, self.isin, self.exchange, self.ticker,
             status=self.status)
         ts_item = SimpleEOD(
-            listed, date_stamp=datetime.date.today(), price=123.45)
+            listed, date_stamp=datetime.date.today(), close=123.45)
         self.session.add(ts_item)
         # Query the superclass Asset which should produce a Cash polymorphic
         # instance
@@ -205,13 +205,13 @@ class TestForexEOD(TestTradeEOD):
         # test the inherited Asset backref
         self.assertEqual(forex_eod.base_obj, forex)
         self.assertEqual(forex_eod.date_stamp, datetime.date.today())
-        self.assertEqual(forex_eod.price, forex_eod.close)
-        self.assertEqual(forex_eod.open, 1.0)
-        self.assertEqual(forex_eod.close, 2.0)
-        self.assertEqual(forex_eod.high, 3.0)
-        self.assertEqual(forex_eod.low, 4.0)
-        self.assertEqual(forex_eod.adjusted_close, 5.0)
-        self.assertEqual(forex_eod.volume, 6.0)
+        self.assertEqual(forex_eod._close, forex_eod._close)
+        self.assertEqual(forex_eod._open, 1.0)
+        self.assertEqual(forex_eod._close, 2.0)
+        self.assertEqual(forex_eod._high, 3.0)
+        self.assertEqual(forex_eod._low, 4.0)
+        self.assertEqual(forex_eod._adjusted_close, 5.0)
+        self.assertEqual(forex_eod._volume, 6.0)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
@@ -296,13 +296,13 @@ class TestIndexEOD(TestTradeEOD):
         # test the inherited Asset backref
         self.assertEqual(index_eod.base_obj, index)
         self.assertEqual(index_eod.date_stamp, datetime.date.today())
-        self.assertEqual(index_eod.price, index_eod.close)
-        self.assertEqual(index_eod.open, 1.0)
-        self.assertEqual(index_eod.close, 2.0)
-        self.assertEqual(index_eod.high, 3.0)
-        self.assertEqual(index_eod.low, 4.0)
-        self.assertEqual(index_eod.adjusted_close, 5.0)
-        self.assertEqual(index_eod.volume, 6.0)
+        self.assertEqual(index_eod._close, index_eod._close)
+        self.assertEqual(index_eod._open, 1.0)
+        self.assertEqual(index_eod._close, 2.0)
+        self.assertEqual(index_eod._high, 3.0)
+        self.assertEqual(index_eod._low, 4.0)
+        self.assertEqual(index_eod._adjusted_close, 5.0)
+        self.assertEqual(index_eod._volume, 6.0)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
@@ -377,13 +377,13 @@ class TestListedEOD(TestTradeEOD):
         # test the inherited Asset backref
         self.assertEqual(listed_eod.base_obj, listed)
         self.assertEqual(listed_eod.date_stamp, datetime.date.today())
-        self.assertEqual(listed_eod.price, listed_eod.close)
-        self.assertEqual(listed_eod.open, 1.0)
-        self.assertEqual(listed_eod.close, 2.0)
-        self.assertEqual(listed_eod.high, 3.0)
-        self.assertEqual(listed_eod.low, 4.0)
-        self.assertEqual(listed_eod.adjusted_close, 5.0)
-        self.assertEqual(listed_eod.volume, 6.0)
+        self.assertEqual(listed_eod._close, listed_eod._close)
+        self.assertEqual(listed_eod._open, 1.0)
+        self.assertEqual(listed_eod._close, 2.0)
+        self.assertEqual(listed_eod._high, 3.0)
+        self.assertEqual(listed_eod._low, 4.0)
+        self.assertEqual(listed_eod._adjusted_close, 5.0)
+        self.assertEqual(listed_eod._volume, 6.0)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
@@ -612,8 +612,8 @@ class TestDividend(TestTimeSeriesBase):
         self.assertEqual(dividend.payment_date, datetime.date.today())
         self.assertEqual(dividend.period, 'Quarterly')
         self.assertEqual(dividend.record_date, datetime.date.today())
-        self.assertEqual(dividend.unadjusted_value, 1.0)
-        self.assertEqual(dividend.adjusted_value, 1.01)
+        self.assertEqual(dividend._unadjusted_value, 1.0)
+        self.assertEqual(dividend._adjusted_value, 1.01)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a Dividend polymorphic instance

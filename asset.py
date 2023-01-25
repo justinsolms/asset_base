@@ -1947,9 +1947,6 @@ class ListedEquity(Listed):
             except KeyError:
                 raise ValueError(
                     'Unexpected `price_item` argument {price_item}.')
-            # Adjust for quotes that are in cents
-            if self.quote_units == 'cents':
-                price_series /= 100.0
             return price_series
 
         def get_volume_series():
@@ -1960,9 +1957,6 @@ class ListedEquity(Listed):
         def get_dividend_series():
             dividends = self.get_dividend_series()
             dividend_series = dividends['unadjusted_value']
-            # Adjust for quotes that are in cents
-            if self.quote_units == 'cents':
-                dividend_series /= 100.0
             return dividend_series
 
         def get_total_returns(price_item):

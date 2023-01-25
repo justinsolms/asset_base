@@ -395,21 +395,25 @@ class SimpleEOD(TimeSeriesBase):
     id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
     """ Primary key."""
 
-    price = Column(Float, nullable=False)
+    _close = Column(Float, nullable=False)
     """float: Price for the day."""
 
     def __init__(
-            self, base_obj, date_stamp, price):
+            self, base_obj, date_stamp, close):
         """Instance initialization."""
         super().__init__(base_obj, date_stamp)
-        self.price = price
+        self._close = close
 
     def to_dict(self):
         """Convert all class price attributes to a dictionary."""
-        return {
-            "date_stamp": self.date_stamp,
-            "price": self.price,
-        }
+        if self.base_obj.quote_units == 'cents':
+            return {
+                "date_stamp": self.date_stamp,
+                "close": self._close * 100.0, }
+        else:
+            return {
+                "date_stamp": self.date_stamp,
+                "close": self._close, }
 
 
 class TradeEOD(SimpleEOD):
@@ -445,19 +449,18 @@ class TradeEOD(SimpleEOD):
     id = Column(Integer, ForeignKey('simple_eod.id'), primary_key=True)
     """ Primary key."""
 
-    open = Column(Float, nullable=False)
+    _open = Column(Float, nullable=False)
     """float: Open price for the day."""
 
-    close = Column(Float, nullable=False)
-    """float: The EOD closing price for the day."""
+    # Note that the `_close` attribute is inherited
 
-    high = Column(Float, nullable=False)
+    _high = Column(Float, nullable=False)
     """float: High price fpr the day."""
 
-    low = Column(Float, nullable=False)
+    _low = Column(Float, nullable=False)
     """float: Low price for the day."""
 
-    adjusted_close = Column(Float, nullable=False)
+    _adjusted_close = Column(Float, nullable=False)
     """float: Adjusted close price for the day.
 
     The closing price is the raw price, which is just the cash value of the last
@@ -466,7 +469,7 @@ class TradeEOD(SimpleEOD):
     closes.
     """
 
-    volume = Column(Integer, nullable=False)
+    _volume = Column(Integer, nullable=False)
     """float: Number of shares traded in the day."""
 
     def __init__(
@@ -475,26 +478,35 @@ class TradeEOD(SimpleEOD):
         """Instance initialization."""
         super().__init__(
             base_obj, date_stamp,
-            price=close,  # Convention that price=close price
+            close=close,  # Convention that price=close price
             )
-        self.open = open
-        self.close = close
-        self.high = high
-        self.low = low
-        self.adjusted_close = adjusted_close
-        self.volume = volume
+        self._open = open
+        self._close = close
+        self._high = high
+        self._low = low
+        self._adjusted_close = adjusted_close
+        self._volume = volume
 
     def to_dict(self):
         """Convert all class price attributes to a dictionary."""
-        return {
-            "date_stamp": self.date_stamp,
-            "open": self.open,
-            "close": self.close,
-            "high": self.high,
-            "low": self.low,
-            "adjusted_close": self.adjusted_close,
-            "volume": self.volume,
-        }
+        if self.base_obj.quote_units == 'cents':
+            return {
+                "date_stamp": self.date_stamp,
+                "open": self._open * 100.0,
+                "close": self._close * 100.0,
+                "high": self._high * 100.0,
+                "low": self._low * 100.0,
+                "adjusted_close": self._adjusted_close * 100.0,
+                "volume": self._volume, }
+        else:
+            return {
+                "date_stamp": self.date_stamp,
+                "open": self._open,
+                "close": self._close,
+                "high": self._high,
+                "low": self._low,
+                "adjusted_close": self._adjusted_close,
+                "volume": self._volume, }
 
 
 class ListedEOD(TradeEOD):
@@ -825,10 +837,10 @@ class Dividend(TimeSeriesBase):
     record_date = Column(Date, nullable=True)
     """datetime: The date the dividend was recorded. """
 
-    unadjusted_value = Column(Float, nullable=True)
+    _unadjusted_value = Column(Float, nullable=True)
     """float: The unadjusted value of the dividend in indicated currency. """
 
-    adjusted_value = Column(Float, nullable=True)
+    _adjusted_value = Column(Float, nullable=True)
     """float: The adjusted value of the dividend in indicated currency. """
 
     date_column_names = [
@@ -847,8 +859,8 @@ class Dividend(TimeSeriesBase):
         self.payment_date = payment_date
         self.period = period
         self.record_date = record_date
-        self.unadjusted_value = unadjusted_value
-        self.adjusted_value = adjusted_value
+        self._unadjusted_value = unadjusted_value
+        self._adjusted_value = adjusted_value
 
     @classmethod
     def _get_last_date(cls, security):
@@ -857,18 +869,26 @@ class Dividend(TimeSeriesBase):
 
     def to_dict(self):
         """Convert all class dividend attributes to a dictionary."""
-        data = {
-            "date_stamp": self.date_stamp,
-            "currency": self.currency,
-            "declaration_date": self.declaration_date,
-            "payment_date": self.payment_date,
-            "period": self.period,
-            "record_date": self.record_date,
-            "unadjusted_value": self.unadjusted_value,
-            "adjusted_value": self.adjusted_value,
-        }
-
-        return data
+        if self.base_obj.quote_units == 'cents':
+            return {
+                "date_stamp": self.date_stamp,
+                "currency": self.currency,
+                "declaration_date": self.declaration_date,
+                "payment_date": self.payment_date,
+                "period": self.period,
+                "record_date": self.record_date,
+                "unadjusted_value": self._unadjusted_value * 100.0,
+                "adjusted_value": self._adjusted_value * 100.0, }
+        else:
+            return {
+                "date_stamp": self.date_stamp,
+                "currency": self.currency,
+                "declaration_date": self.declaration_date,
+                "payment_date": self.payment_date,
+                "period": self.period,
+                "record_date": self.record_date,
+                "unadjusted_value": self._unadjusted_value,
+                "adjusted_value": self._adjusted_value, }
 
     @classmethod
     def update_all(cls, session, get_method):
@@ -914,125 +934,3 @@ class Dividend(TimeSeriesBase):
         super().update_all(session, asset_class, get_method, securities_list)
 
 
-class LivePrices(Base):
-    """Container for live prices
-    """
-    __tablename__ = 'live_prices'
-
-    date_stamp = Column(Date, nullable=False)
-    """datetime: The date-time stamp of the last trade."""
-
-    price = Column(Float, nullable=False)
-    """float: The last trade price."""
-
-    open = Column(Float)
-    """float: The market opening price."""
-
-    high = Column(Float)
-    """float: The current highest price for the day."""
-
-    low = Column(Float)
-    """float: The current lowest price for the day."""
-
-    value = Column(Float)
-    """float: The value traded for thr last trade."""
-
-    volume = Column(Integer)
-    """float: The units traded for the last trade."""
-
-    bid = Column(Float)
-    """float: The current highest bid price to buy."""
-
-    offer = Column(Float)
-    """float: The current lowest offer price to sell."""
-
-    # There is a one-to-one relationship between listed and LivePrices. Also,
-    # the id column needs to be last for the fast insert in the
-    # LivePrices.update method to work.
-    id = Column(Integer, ForeignKey('asset.id'), primary_key=True)
-
-    def __init__(self, date_stamp, price,
-                 open=None, high=None, low=None,
-                 value=None, volume=None,
-                 bid=None, offer=None,
-                 ):
-        """Instance initialization."""
-        self.date_stamp = date_stamp
-        self.price = price
-        self.open = open
-        self.high = high
-        self.low = low
-        self.value = value
-        self.volume = volume
-        self.bid = bid
-        self.offer = offer
-
-    def to_dict(self):
-        """Convert all class price attributes to a dictionary."""
-        return {
-            "date_stamp": self.date_stamp,
-            "price": self.price,
-            "open": self.open,
-            "high": self.high,
-            "low": self.low,
-            "value": self.value,
-            "volume": self.volume,
-            "bid": self.bid,
-            "offer": self.offer,
-        }
-
-    @classmethod
-    def update(cls, session, data_frame):
-        """Update multiple class instances price data in the session from a
-        data set.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            The database session.
-        data_frame : pandas.DataFrame
-            A DataFrame object with columns of price data and rows for each
-            listed security.
-        """
-        engine = session.bind
-
-        # From the data_frame create a translation DataFrame of (isin,
-        # Asset.id) so we can add and Asset.id column to the data_frame.
-        translate_table = list()
-        for i, row in data_frame.iterrows():
-            # Retrieve the ListedEquity instance by its ISIN and create a
-            # (ticker, mic, id) entry. Warn if not found in database.
-            try:
-                # FIXME: I assume `asset.Listed` means the same as `asset_class`
-                entity = asset.Listed.factory(
-                    session,
-                    ticker=row['ticker'], mic=row['mic'],
-                    create=False)
-            except FactoryError:
-                logger.warning(
-                    "LivePrices: Security {mic}.{ticker} "
-                    "not found in session.".format(**row.to_dict()))
-            else:
-                translate_table.append((row['ticker'], row['mic'], entity.id))
-        # Create the translation DataFrame
-        translate_table = pd.DataFrame(
-            translate_table, columns=['ticker', 'mic', 'id'])
-
-        # Join the translate_table to the data_frame so that the data_frame has
-        # an id column.
-        translate_table.set_index(['mic', 'ticker'], inplace=True)
-        data_table = data_frame.join(translate_table, on=['mic', 'ticker'])
-        # Drop appropriate columns so that the data_table may be directly
-        # updated into LivePrices via the Asset.id column.
-        data_table.drop(['mic', 'ticker'], axis=1, inplace=True)
-
-        # Add the data_table to the database as a temporary table. Use the
-        # SQLAlchemy CORE operation as we need speed due to the large data sets.
-        # Then use the temporary table to update the time-series table.
-        data_table.to_sql(con=engine, name='temp_tbl', index=False,
-                          if_exists='replace')
-
-        # Insert the data directly using sqlalchemy CORE capability for speed.
-        session.execute("INSERT OR REPLACE INTO {0} SELECT * FROM temp_tbl;"
-                        .format(LivePrices.__tablename__))
-        session.execute("DROP TABLE temp_tbl")
