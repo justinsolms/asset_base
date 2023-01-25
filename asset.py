@@ -197,7 +197,17 @@ class Base(Common):
             Last date for the ``.time_series.TimeSeriesBase`` (or child class)
             time series .
         """
-        return self._get_last_eod().date_stamp
+        try:
+            date = self._get_last_eod().date_stamp
+        except TimeSeriesNoData:
+            # There is no data so the date is None. Anything that gets a date
+            # that is None must prepare a default substitute date and continue
+            # processing without an exception. An example would be a from_date
+            # detected as None and then a distantly historical date such as
+            # 1900-01-01 is substituted and processing continues.
+            date = None
+
+        return date
 
 
 class Asset(Base):

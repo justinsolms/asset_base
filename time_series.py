@@ -409,7 +409,7 @@ class SimpleEOD(TimeSeriesBase):
         if self.base_obj.quote_units == 'cents':
             return {
                 "date_stamp": self.date_stamp,
-                "close": self._close * 100.0, }
+                "close": self._close / 100.0, }
         else:
             return {
                 "date_stamp": self.date_stamp,
@@ -492,11 +492,11 @@ class TradeEOD(SimpleEOD):
         if self.base_obj.quote_units == 'cents':
             return {
                 "date_stamp": self.date_stamp,
-                "open": self._open * 100.0,
-                "close": self._close * 100.0,
-                "high": self._high * 100.0,
-                "low": self._low * 100.0,
-                "adjusted_close": self._adjusted_close * 100.0,
+                "open": self._open / 100.0,
+                "close": self._close / 100.0,
+                "high": self._high / 100.0,
+                "low": self._low / 100.0,
+                "adjusted_close": self._adjusted_close / 100.0,
                 "volume": self._volume, }
         else:
             return {
@@ -877,8 +877,8 @@ class Dividend(TimeSeriesBase):
                 "payment_date": self.payment_date,
                 "period": self.period,
                 "record_date": self.record_date,
-                "unadjusted_value": self._unadjusted_value * 100.0,
-                "adjusted_value": self._adjusted_value * 100.0, }
+                "unadjusted_value": self._unadjusted_value / 100.0,
+                "adjusted_value": self._adjusted_value / 100.0, }
         else:
             return {
                 "date_stamp": self.date_stamp,
