@@ -361,6 +361,10 @@ class AssetBase(object):
             _test_isin_list=_test_isin_list,
             _test_forex_list=_test_forex_list)
 
+        # Try to commit all results
+        self.commit()
+
+
     def tear_down(self, delete_dump_data=False):
         """Tear down the environment for operation of the module.
 
