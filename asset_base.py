@@ -62,6 +62,7 @@ See also
 
 """
 import os
+import logging
 import yaml
 import datetime
 import pandas as pd
@@ -79,7 +80,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from asset_base.common import Base
 from asset_base.entity import Domicile, Exchange
-from asset_base.asset import Forex, ListedEquity, Currency, Cash
+from asset_base.asset import Asset, Forex, ListedEquity, Currency, Cash
 from asset_base.exceptions import TimeSeriesNoData
 
 import asset_base.financial_data as fd
@@ -87,10 +88,7 @@ import asset_base.financial_data as fd
 from asset_base.__init__ import get_var_path
 
 # Get module-named logger.
-import logging
 logger = logging.getLogger(__name__)
-# Change logging level here.
-# logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 # Pull in the meta data
 metadata = MetaData()
@@ -252,10 +250,17 @@ class AssetBase(object):
 
         # Create a new database and engine if not existing
         if not hasattr(self, 'session'):
-            self.make_database_session()
+            self.make_session()
 
         # Data dumper - dumps to dump folder - indicate testing or not.
         self.dumper = fd.Dump(testing=testing)
+
+    def close(self):
+        """Close the database session."""
+        self.session.close()
+        logger.debug('Closed database session %s' % self.db_url)
+        self.engine.dispose()
+        logger.debug('Disposed of database engine %s' % self.db_url)
 
     def commit(self):
         """Session try-commit, exception-rollback."""
@@ -268,7 +273,7 @@ class AssetBase(object):
             # Rethrow the exception
             raise ex
 
-    def make_database_session(self):
+    def make_session(self):
         self._db_name = 'asset_base'
         # Select database platform.
         if self._dialect == 'mysql':
@@ -302,15 +307,15 @@ class AssetBase(object):
                 Base.metadata.create_all(self.engine)
             except Exception as ex:
                 drop_database(db_url)
-                logger.info('Failed to create new database %s' % db_url)
+                logger.debug('Failed to create new database %s' % self.db_url)
                 raise ex
             else:
-                logger.info('Created new database %s' % db_url)
+                logger.debug('Created new database %s' % self.db_url)
         else:
-            logger.info('Use existing database %s' % db_url)
+            logger.debug('Use existing database %s' % self.db_url)
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.info('New database session %s' % db_url)
+        logger.debug('New database session %s' % self.db_url)
 
     def set_up(self, reuse=True, update=True,
                _test_isin_list=None, _test_forex_list=None):
@@ -328,7 +333,7 @@ class AssetBase(object):
         """
         # Create a new database and engine if not existing
         if not hasattr(self, 'session'):
-            self.make_database_session()
+            self.make_session()
 
         # Record creation moment as a string (item, value) pair if it does not
         # already exist.
@@ -363,7 +368,6 @@ class AssetBase(object):
 
         # Try to commit all results
         self.commit()
-
 
     def tear_down(self, delete_dump_data=False):
         """Tear down the environment for operation of the module.
