@@ -222,6 +222,9 @@ class AssetBase(object):
         'mysql':
             A MySQL session.
 
+    testing : bool
+        Set to `True` for testing.
+
     """
     # These must only be `Asset` polymorphs.
     classes_to_dump = [ListedEquity]
@@ -720,3 +723,27 @@ class AssetBase(object):
 
     # TODO: Add a method to flag mixed currencies==True that a dataframe has
     # mixed currency time series.
+
+
+class AssetBaseManager(AssetBase):
+    """A context manager that manages the AssetBase session opening and closing.
+
+    Parameters
+    ----------
+    dialect : str
+        The SQL database dialect to be used:
+
+        'memory':
+            A memory database session. Is destroyed after use.
+        'sqlite':
+            A SQLite session.
+        'mysql':
+            A MySQL session.
+
+    """
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
+
