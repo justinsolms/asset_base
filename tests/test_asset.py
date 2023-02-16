@@ -146,6 +146,12 @@ class TestCash(TestAsset):
         cash = Cash(currency)
         self.assertEqual(self.identity_code, cash.ticker)
 
+    def test_get_locality(self):
+        currency = Currency.factory(self.session, self.currency_ticker)
+        cash = Cash(currency)
+        self.assertTrue(cash.get_locality('US') == 'domestic')
+        self.assertTrue(cash.get_locality('UK') == 'foreign')
+
     def test_factory(self):
         """Test session add entity with domicile and currency already added."""
         # Create new Cash instance

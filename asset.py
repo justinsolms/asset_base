@@ -97,7 +97,7 @@ class Base(Common):
 
     def __repr__(self):
         """Return the official string output."""
-        return '<{}(name="{}", currency={!r})>'.format(
+        return '{}(name="{}", currency={!r})'.format(
             self._class_name, self.name, self.currency)
 
     @property
@@ -324,7 +324,7 @@ class Asset(Base):
         if self.owner is None:
             msg = super().__repr__()
         else:
-            msg = '<{}(name="{}", currency={!r}, owner={!r})>'.format(
+            msg = '{}(name="{}", currency={!r}, owner={!r})'.format(
                 self._class_name, self.name, self.currency, self.owner)
 
         return msg
@@ -504,7 +504,7 @@ class Cash(Asset):
 
     def __repr__(self):
         """Return the official string output."""
-        msg = '<{}(currency={!r})>'.format(
+        msg = '{}(currency={!r})'.format(
             self._class_name, self.currency)
 
         return msg
@@ -531,6 +531,42 @@ class Cash(Asset):
             self.name, self._class_name, self.currency_ticker)
 
         return msg
+
+    def get_locality(self, domicile_code):
+        """Return the locality "domestic" or "foreign".
+
+        The "domestic" or "foreign" status of an asset in a current account is
+        determined as:
+
+        Parameters
+        ----------
+        domicile_code : str(2)
+            ISO 3166-1 Alpha-2 two letter country code of the current account's
+            domicile. The asset's domestic or foreign status shall be determined
+            relative to this.
+
+        Return
+        ------
+        str
+            The asset's domestic or foreign status relative to the current
+            account domicile. The possible values are:
+
+            'domestic':
+                If the domicile code of the current account and the asset agree.
+                An example would be a South African custody account holding an
+                domestic asset of South African domicile.
+            'foreign':
+                If the domicile code of the current account and the asset
+                disagree. An example would be a South African custody account
+                holding an foreign asset of German domicile.
+
+        """
+        if self.currency.in_domicile(domicile_code):
+            locality = 'domestic'
+        else:
+            locality = 'foreign'
+
+        return locality
 
     @classmethod
     def factory(cls, session, ticker, create=True, **kwargs):
@@ -751,7 +787,7 @@ class Forex(Cash):
 
     def __repr__(self):
         """Return the official string output."""
-        return '<{}(base_currency={!r}, price_currency={!r})>'.format(
+        return '{}(base_currency={!r}, price_currency={!r})'.format(
             self._class_name, self.base_currency.ticker, self.currency.ticker)
 
     @property
@@ -1032,7 +1068,7 @@ class Share(Asset):
 
     @property
     def domicile(self):
-        """.entity.Domicile : ``Domicile`` of the ``Share`` ``Issuer``."""
+        """.entity.Domicile : Same as that of ``Share`` ``Issuer``."""
         return self.issuer.domicile
 
     @property
@@ -1058,15 +1094,6 @@ class Share(Asset):
         The "domestic" or "foreign" status of an asset in a current account is
         determined as:
 
-        'domestic'
-            If the domicile code of the current account and the asset agree. An
-            example would be a South African custody account holding an domestic
-            asset of South African domicile.
-        'foreign'
-            If the domicile code of the current account and the asset disagree.
-            An example would be a South African custody account holding an
-            foreign asset of German domicile.
-
         Parameters
         ----------
         domicile_code : str(2)
@@ -1078,7 +1105,16 @@ class Share(Asset):
         ------
         str
             The asset's domestic or foreign status relative to the current
-            account domicile. See above examples.
+            account domicile. The possible values are:
+
+            'domestic':
+                If the domicile code of the current account and the asset agree.
+                An example would be a South African custody account holding an
+                domestic asset of South African domicile.
+            'foreign':
+                If the domicile code of the current account and the asset
+                disagree. An example would be a South African custody account
+                holding an foreign asset of German domicile.
 
         """
         share_domicile_code = self.domicile.country_code
@@ -2184,7 +2220,7 @@ class Index(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        msg = '<{}(name="{}", ticker="{}", currency={!r})>'.format(
+        msg = '{}(name="{}", ticker="{}", currency={!r})'.format(
             self._class_name, self.name, self.ticker, self.currency)
 
         return msg
@@ -2440,9 +2476,6 @@ class ExchangeTradeFund(ListedEquity):
         'foreign':
             If the domicile code of the current account and the fund's
             underlying securities domicile codes all disagree.
-        'undefined':
-            If the domicile code of the current account and only some of the
-            fund's underlying securities domicile codes disagree.
 
         Note
         ----
