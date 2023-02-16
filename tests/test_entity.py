@@ -21,16 +21,18 @@ class TestCurrency(unittest.TestCase):
         # Currency data
         cls.get_method = Static().get_currency
         cls.currency_dataframe = cls.get_method()
-        # A single currency
+        # A single currency  - a list of countries use USD
         cls.currency_item = cls.currency_dataframe[
             cls.currency_dataframe.ticker == 'USD']
         cls.ticker = cls.currency_item.ticker.to_list()[0]
         cls.name = cls.currency_item.name.to_list()[0]
-        # A second single currency
+        cls.country_code_list = cls.currency_item.country_code_list.to_list()[0]
+        # A second single currency - a list of countries use GBP
         cls.currency_item1 = cls.currency_dataframe[
             cls.currency_dataframe.ticker == 'GBP']
         cls.ticker1 = cls.currency_item1.ticker.to_list()[0]
         cls.name1 = cls.currency_item1.name.to_list()[0]
+        cls.country_code_list1 = cls.currency_item1.country_code_list.to_list()[0]
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -39,29 +41,52 @@ class TestCurrency(unittest.TestCase):
 
     def test___init__(self):
         """Initialization."""
-        obj = Currency(ticker=self.ticker, name=self.name)
+        # Use GBP - a list of countries use GBP
+        obj = Currency(
+            ticker=self.ticker, name=self.name,
+            country_code_list=self.country_code_list)
         self.assertIsInstance(obj, Currency)
         self.assertEqual(obj.ticker, self.ticker)
         self.assertEqual(obj.name, self.name)
+        self.assertEqual(obj.country_code_list, self.country_code_list)
 
     def test___str__(self):
         """String output."""
-        obj = Currency(ticker=self.ticker, name=self.name)
+        obj = Currency(
+            ticker=self.ticker, name=self.name,
+            country_code_list=self.country_code_list)
         self.assertEqual(obj.__str__(), 'Currency is U.S. Dollar (USD)')
 
     def test_key_code(self):
-        obj = Currency(ticker=self.ticker, name=self.name)
+        obj = Currency(
+            ticker=self.ticker, name=self.name,
+            country_code_list=self.country_code_list)
         self.assertEqual(obj.key_code, 'USD')
 
     def test_identity_code(self):
-        obj = Currency(ticker=self.ticker, name=self.name)
+        obj = Currency(
+            ticker=self.ticker, name=self.name,
+            country_code_list=self.country_code_list)
         self.assertEqual(obj.identity_code, 'USD')
+
+    # Write a test for Currency.in_domicile
+    def test_in_domicile(self):
+        """Check if the currency is domiciled in the specified country."""
+        obj = Currency(
+            ticker=self.ticker, name=self.name,
+            country_code_list=self.country_code_list)
+        self.assertTrue(obj.in_domicile('US'))
+        self.assertFalse(obj.in_domicile('GB'))
 
     def test_factory(self):
         """Factory create."""
         # Despite using factory twice there should be only one instance
-        obj = Currency.factory(self.session, self.ticker, self.name)
-        obj = Currency.factory(self.session, self.ticker, self.name)
+        obj = Currency.factory(
+            self.session, self.ticker, self.name,
+            country_code_list=self.country_code_list)
+        obj = Currency.factory(
+            self.session, self.ticker, self.name,
+            country_code_list=self.country_code_list)
         self.assertEqual(len(self.session.query(Currency).all()), 1)
         self.assertEqual(obj.ticker, self.ticker)
         self.assertEqual(obj.name, self.name)
@@ -73,10 +98,12 @@ class TestCurrency(unittest.TestCase):
 
     def test_factory_change(self):
         """Currency name changed."""
-        obj = Currency.factory(self.session, self.ticker, self.name)
+        obj = Currency.factory(self.session, self.ticker, self.name, country_code_list=self.country_code_list)
         new_name = 'A Changed Currency Name for Testing'
         with self.assertRaises(FactoryError):
-            obj = Currency.factory(self.session, self.ticker, new_name)
+            obj = Currency.factory(
+                self.session, self.ticker, new_name,
+                country_code_list=self.country_code_list)
 
     def test_factory_fail(self):
         """Instance Factory Fails."""
@@ -88,11 +115,11 @@ class TestCurrency(unittest.TestCase):
         """Get data from a pandas.DataFrame."""
         Currency.from_data_frame(self.session, self.currency_dataframe)
         # Test a currency
-        obj = Currency.factory(self.session, self.ticker)
+        obj = Currency.factory(self.session, self.ticker, country_code_list=self.country_code_list)
         self.assertEqual(obj.ticker, self.ticker)
         self.assertEqual(obj.name, self.name)
         # Test a a second currency
-        obj = Currency.factory(self.session, self.ticker1)
+        obj = Currency.factory(self.session, self.ticker1, country_code_list=self.country_code_list1)
         self.assertEqual(obj.ticker, self.ticker1)
         self.assertEqual(obj.name, self.name1)
 
@@ -100,11 +127,11 @@ class TestCurrency(unittest.TestCase):
         """Create/update all Currency objects from the financial_data module"""
         Currency.update_all(self.session, self.get_method)
         # Test a currency
-        obj = Currency.factory(self.session, self.ticker)
+        obj = Currency.factory(self.session, self.ticker, country_code_list=self.country_code_list)
         self.assertEqual(obj.ticker, self.ticker)
         self.assertEqual(obj.name, self.name)
         # Test a a second currency
-        obj = Currency.factory(self.session, self.ticker1)
+        obj = Currency.factory(self.session, self.ticker1, country_code_list=self.country_code_list1)
         self.assertEqual(obj.ticker, self.ticker1)
         self.assertEqual(obj.name, self.name1)
 

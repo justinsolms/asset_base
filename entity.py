@@ -10,7 +10,7 @@ import sys
 import datetime
 
 
-from sqlalchemy import Integer, String
+from sqlalchemy import Integer, String, ARRAY
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
 
@@ -98,7 +98,9 @@ class Currency(Base):
         ISO 4217 3-letter currency codes.
     name : str
         ISO 4217 currency names.
-
+    country_code_list : list
+        List of ISO 3166 2-letter country codes which domicile the currency
+        (apply for domestic use).
 
     See also
     --------
@@ -114,12 +116,14 @@ class Currency(Base):
 
     # Data.
     ticker = Column(String(3), nullable=False)
-    name = Column(String(256), nullable=False)
+    name = Column(String, nullable=False)
+    country_code_list = Column(String)
 
-    def __init__(self, ticker, name):
+    def __init__(self, ticker: str, name: str, country_code_list: list):
         """Instance initialization."""
         self.ticker = ticker
         self.name = name
+        self.country_code_list = country_code_list
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
@@ -127,7 +131,7 @@ class Currency(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        return '<{}(ticker="{}", name="{}")>'.format(
+        return '{}(ticker="{}", name="{}")'.format(
             self._class_name, self.ticker, self.name)
 
     @classmethod
@@ -145,8 +149,26 @@ class Currency(Base):
         """A human readable string unique to the class instance."""
         return self.ticker
 
+    def in_domicile(self, country_code: str):
+        """Check if the currency is domiciled in the specified country.
+
+        Parameters
+        ----------
+        country_code : str(2)
+            ISO 3166 2-letter country code.
+
+        Return
+        ------
+        bool
+            True if the currency is domiciled in the specified country, else
+            False.
+
+        """
+        country_code_list = self.country_code_list.split(',')
+        return country_code in country_code_list
+
     @classmethod
-    def factory(cls, session, ticker, name=None):
+    def factory(cls, session, ticker, name=None, country_code_list=None):
         """Manufacture/retrieve an instance from the given parameters.
 
         If a record of the specified class instance does not exist then add it,
@@ -164,6 +186,9 @@ class Currency(Base):
             the instance still needs to be created. If the instance does exist
             then this name must match that of the instance or an  exception
             shall be raised.
+        country_code_list : list
+            List of ISO 3166 2-letter country codes which domicile the currency
+            (apply for domestic use).
 
         Return
         ------
@@ -174,13 +199,19 @@ class Currency(Base):
         assert len(ticker) == 3, \
             'Expected ISO 4217 3-letter currency code.'
 
+        if country_code_list:
+            real_list = country_code_list.split(',')
+            assert all(
+                len(country_code) == 2 for country_code in real_list), \
+                    'Expected ISO 3166 2-letter country codes.'
+
         # Check if currency exists in the session and if not then add it.
         try:
             obj = session.query(cls).filter(cls.ticker == ticker).one()
         except NoResultFound:
             # Create a new instance if possible
-            if all([ticker, name]):
-                obj = cls(ticker, name)
+            if all([ticker, name, country_code_list]):
+                obj = cls(ticker, name, country_code_list)
                 session.add(obj)
             else:
                 raise FactoryError(
@@ -308,7 +339,7 @@ class Domicile(Base):
 
     # Data.
     country_code = Column(String(3), nullable=False)
-    country_name = Column(String(256), nullable=False)
+    country_name = Column(String, nullable=False)
 
     # The ISO 3166-1 Alpha-2 two letter country code is a unique identifier of a
     # country
@@ -564,7 +595,7 @@ class Entity(Common):
 
     def __repr__(self):
         """Return the official string output."""
-        return '<{}(name="{}", domicile={!r})>'.format(
+        return '{}(name="{}", domicile={!r})'.format(
             self._class_name, self.name, self.domicile)
 
     @property
@@ -828,7 +859,7 @@ class Exchange(Institution):
 
     def __repr__(self):
         """Return the official string output."""
-        return '<{}(name="{}", domicile={!r}, mic="{}")>'.format(
+        return '{}(name="{}", domicile={!r}, mic="{}")'.format(
             self._class_name, self.name, self.domicile, self.mic)
 
     @property
