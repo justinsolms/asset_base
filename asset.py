@@ -2398,8 +2398,7 @@ class ExchangeTradeFund(ListedEquity):
     #  A short class name for use in naming
     _name_appendix = 'ETF'
 
-    def __init__(self, domicile, name, issuer, isin, exchange, ticker,
-                 **kwargs):
+    def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
         # Optional parameters.
         if 'index' in kwargs:
@@ -2419,9 +2418,7 @@ class ExchangeTradeFund(ListedEquity):
         if 'ter' in kwargs:
             self.ter = kwargs.pop('ter')
 
-        super().__init__(
-            domicile, name, issuer, isin, exchange, ticker,
-            **kwargs)
+        super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".
