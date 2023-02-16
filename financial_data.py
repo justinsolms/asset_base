@@ -250,12 +250,13 @@ class Static(_Feed):
 
     def get_currency(self):
         """Fetch currencies from the local file."""
-        file_name = 'Currency.csv'
+        file_name = 'CurrencyCountry.csv'
         path = self._path(file_name)
 
         column_dict = {
             'CurrencyCode': 'ticker',
             'CurrencyName': 'name',
+            'CountryCode': 'country_code',
         }
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
@@ -267,8 +268,17 @@ class Static(_Feed):
         # check for expected columns.
         data = data[list(column_dict.keys())]
         data.rename(columns=column_dict, inplace=True)
-        # Multiple countries often use a common currency
-        data.drop_duplicates(subset='ticker', inplace=True)
+
+        # Convert multiple country codes to a list.
+        country_codes_list = list()
+        data_thinned = data.drop_duplicates(subset='ticker').copy()
+        for ticker in data_thinned['ticker']:
+            mask = data['ticker'] == ticker
+            country_codes = data[mask]['country_code'].tolist()
+            country_codes = ','.join(country_codes)
+            country_codes_list.append(country_codes)
+        data_thinned['country_code_list'] = country_codes_list
+        data = data_thinned.drop(columns='country_code')
 
         return data
 

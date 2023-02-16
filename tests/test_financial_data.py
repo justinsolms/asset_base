@@ -42,8 +42,9 @@ class TestStatic(unittest.TestCase):
 
     def test_get_currency(self):
         """Get currency data from local static file."""
-        columns = ['ticker', 'name']
+        columns = ['ticker', 'name', 'country_code_list']
         data = self.feed.get_currency()
+        country_code_list = 'GB,GG,IM,JE'  # for GPB
         self.assertListEqual(data.columns.tolist(), columns)
         for i, row in data.iterrows():
             item0 = row[columns[0]]
@@ -51,6 +52,10 @@ class TestStatic(unittest.TestCase):
             self.assertIsInstance(item0, str)
             self.assertIsInstance(item1, str)
             self.assertEqual(len(item0), 3)
+        # Test country code list
+        self.assertEqual(
+            set(data[data.ticker == 'GBP']['country_code_list'].tolist()[0]),
+            set(country_code_list))
 
     def test_get_domicile(self):
         """Get currency data from local static file."""
