@@ -52,13 +52,13 @@ class TestTestData(unittest.TestCase):
                               issuer_name='Ze Modeller',
                               issuer_domicile_code='ZA'
                               )
-        self.assertEqual('%r' % model, '<Model:ZA:Ze Modeller:MODTICK1>')
+        self.assertEqual('%r' % model, 'Model:ZA:Ze Modeller:MODTICK1')
         copy = Model.factory(session,
                              ticker='COPYTICK1',
                              issuer_name='Ze Ozzer Modeller',
                              issuer_domicile_code='ZA'
                              )
-        self.assertEqual('%r' % copy, '<Model:ZA:Ze Ozzer Modeller:COPYTICK1>')
+        self.assertEqual('%r' % copy, 'Model:ZA:Ze Ozzer Modeller:COPYTICK1')
 
 
 class TestModelFeed(unittest.TestCase):
@@ -97,13 +97,13 @@ class TestModelFeed(unittest.TestCase):
                               issuer_name='Ze Modeller',
                               issuer_domicile_code='ZA'
                               )
-        self.assertEqual('%r' % parent, '<Model.ZA.Ze Modeller.MODTICK1>')
+        self.assertEqual('%r' % parent, 'Model.ZA.Ze Modeller.MODTICK1')
         child = Model.factory(session,
                              ticker='COPYTICK1',
                              issuer_name='Ze Ozzer Modeller',
                              issuer_domicile_code='ZA'
                              )
-        self.assertEqual('%r' % child, '<Model.ZA.Ze Ozzer Modeller.COPYTICK1>')
+        self.assertEqual('%r' % child, 'Model.ZA.Ze Ozzer Modeller.COPYTICK1')
         # Test inherited parameters
         parent_parameters = parent.get_parameter_dict()
         child_parameters = child.get_parameter_dict()

@@ -106,7 +106,7 @@ class TimeSeriesBase(Base):
         asset = self.base_obj
         date = self.date_stamp
 
-        return f'<{name}(asset={asset!r}, date_stamp={date})>'
+        return f'{name}(asset={asset!r}, date_stamp={date})'
 
     @classmethod
     @property
