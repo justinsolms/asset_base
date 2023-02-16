@@ -156,7 +156,7 @@ class TestAssetBase(unittest.TestCase):
         from_date = datetime.date(1900, 1, 1)  # Get all history
         # Test data - get all history and should be the same as the data direct
         # from the database with reused data
-        securities_test_data = fundamentals.get_securities(
+        securities_test_data = fundamentals.get_etfs(
             _test_isin_list=self.isin_list)
         eod_test_data = history.get_eod(securities_list, from_date=from_date)
         dividend_test_data = history.get_dividends(securities_list, from_date=from_date)

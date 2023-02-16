@@ -22,7 +22,7 @@ class TestTimeSeriesBase(unittest.TestCase):
         cls.Cls = TimeSeriesBase
         # Similar set up to test_financial_data
         # Securities meta-data
-        cls.get_method = MetaData().get_securities
+        cls.get_method = MetaData().get_etfs
         cls.securities_dataframe = cls.get_method()
         # Securities feed
         cls.feed = History()

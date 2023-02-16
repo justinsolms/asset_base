@@ -106,12 +106,12 @@ class TestMetaData(unittest.TestCase):
             'mic': str, 'listed_name': str, 'asset_class': str, 'domicile_code': str,
             'industry_class': str, 'industry_code': str,
             'industry_name': str, 'isin': str, 'issuer_domicile_code': str,
-            'issuer_name': str, 'locality': str, 
+            'issuer_name': str, 'locality': str,
             'sector_code': str, 'sector_name': str,
             'sub_sector_code': str, 'sub_sector_name': str,
             'super_sector_code': str, 'super_sector_name': str, 'ter': float,
             'ticker': str, 'status': str, 'quote_units': str}
-        data = self.feed.get_securities()
+        data = self.feed.get_etfs()
         self.assertEqual(set(data.columns.tolist()), set(columns_dict.keys()))
 
     def test_get_indices(self):
@@ -131,7 +131,7 @@ class TestSecuritiesHistory(unittest.TestCase):
     def setUpClass(cls):
         """Set up test class fixtures."""
         # Securities meta-data
-        securities_dataframe = MetaData().get_securities()
+        securities_dataframe = MetaData().get_etfs()
         # Securities feed
         cls.feed = History()
         # Select Test security symbol identities subset

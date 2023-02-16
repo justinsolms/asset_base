@@ -80,7 +80,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from asset_base.common import Base
 from asset_base.entity import Domicile, Exchange
-from asset_base.asset import Asset, Forex, ListedEquity, Currency, Cash
+from asset_base.asset import Asset, ExchangeTradeFund, Forex, ListedEquity, Currency, Cash
 from asset_base.exceptions import TimeSeriesNoData
 
 import asset_base.financial_data as fd
@@ -417,9 +417,10 @@ class AssetBase(object):
         fundamentals = fd.MetaData()
         history = fd.History()
         # NOTE: Future security classes place their update_all() methods here.
-        ListedEquity.update_all(
+        # NOTE: ListedEquity.update_all() here
+        ExchangeTradeFund.update_all(
             self.session,
-            get_meta_method=fundamentals.get_securities,
+            get_meta_method=fundamentals.get_etfs,
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
             _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!

@@ -421,7 +421,7 @@ class TestListed(TestShare):
         # inherited.
         cls.Cls = Listed
         # Securities meta-data
-        cls.get_meta_method = MetaData().get_securities
+        cls.get_meta_method = MetaData().get_etfs
         cls.securities_dataframe = cls.get_meta_method()
         # Securities EOD-data
         cls.get_eod_method = History().get_eod

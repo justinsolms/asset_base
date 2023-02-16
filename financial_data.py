@@ -434,7 +434,7 @@ class MetaData(_Feed):
         """Instance initialization."""
         super().__init__()
 
-    def get_securities(self, **kwargs):
+    def get_etfs(self, **kwargs):
         """Fetch JSE securities mata-data from a local file. """
         universe_file_name = 'ETFMeta.csv'
         path = self._path(universe_file_name)
@@ -454,7 +454,6 @@ class MetaData(_Feed):
             'isin': 'isin',
             'issuer_domicile': 'issuer_domicile_code',
             'issuer_name': 'issuer_name',
-            'roll_up': 'roll_up',
             'sector_code': 'sector_code',
             'sector_name': 'sector_name',
             'sub_sector_code': 'sub_sector_code',
