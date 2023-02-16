@@ -2388,10 +2388,6 @@ class ExchangeTradeFund(ListedEquity):
     _asset_class = Column(Enum(*_classes))
     _locality = Column(String)
 
-    # If True then the fund roll up distributions by reinvesting them, i.e.,
-    # this is a total return fund.
-    roll_up = Column(Boolean)
-
     # Published Total Expense Ratio of the fund.
     ter = Column(Float)
 
@@ -2407,14 +2403,6 @@ class ExchangeTradeFund(ListedEquity):
             self._asset_class = kwargs.pop('asset_class')
         if 'locality' in kwargs:
             self._locality = kwargs.pop('locality')
-        if 'roll_up' in kwargs:
-            roll_up = kwargs.pop('roll_up')
-            if roll_up in (True, 'TRUE', 'True', 'true'):
-                self.roll_up = True
-            elif roll_up in (False, 'FALSE', 'False', 'false'):
-                self.roll_up = False
-            else:
-                raise ValueError('Unexpected "roll_up" argument.')
         if 'ter' in kwargs:
             self.ter = kwargs.pop('ter')
 
