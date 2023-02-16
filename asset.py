@@ -1033,7 +1033,7 @@ class Share(Asset):
     @property
     def domicile(self):
         """.entity.Domicile : ``Domicile`` of the ``Share`` ``Issuer``."""
-        return self.domicile
+        return self.issuer.domicile
 
     @property
     def key_code(self):
@@ -1305,7 +1305,8 @@ class Listed(Share):
             account domicile. See above examples.
 
         """
-        if self.exchange.domicile.country_code == domicile_code:
+        listed_domicile_code = self.exchange.domicile.country_code
+        if listed_domicile_code == domicile_code:
             locality = 'domestic'
         else:
             locality = 'foreign'

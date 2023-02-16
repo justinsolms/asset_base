@@ -72,7 +72,6 @@ class Common(Base):
     date_mod_stamp = Column(Date, nullable=True)
     """sqlalchemy.DateTime: Modification date stamp. May be in the past."""
 
-
     def __init__(self, name, **kwargs):
         """Instance initialization."""
         self.name = name
