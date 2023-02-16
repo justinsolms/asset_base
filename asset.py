@@ -2389,7 +2389,7 @@ class ExchangeTradeFund(ListedEquity):
     _locality = Column(String)
 
     # Published Total Expense Ratio of the fund.
-    ter = Column(Float)
+    ter = Column(Float, nullable=True)
 
     #  A short class name for use in naming
     _name_appendix = 'ETF'
@@ -2405,6 +2405,10 @@ class ExchangeTradeFund(ListedEquity):
             self._locality = kwargs.pop('locality')
         if 'ter' in kwargs:
             self.ter = kwargs.pop('ter')
+            if self.ter == '':
+                self.ter = float('nan')
+        else:  # Default to zero.
+            self.ter = float('nan')
 
         super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
 
