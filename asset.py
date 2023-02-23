@@ -2493,7 +2493,7 @@ class ExchangeTradeFund(ListedEquity):
 
     def time_series(self,
                     series='price', price_item='close', return_type='price',
-                    tidy=False, include_index=True):
+                    tidy=False, include_index=False):
         """Retrieve historic time-series for this instance.
 
         Parameters
@@ -2526,6 +2526,12 @@ class ExchangeTradeFund(ListedEquity):
                 is the same as the price start value.
         tidy : bool
             When ``True`` then prices are tidied up by removing outliers.
+        include_index : bool
+            When ``True`` then the price series is back-filled with the index
+            price series to proxy longer price history. The ``series`` argument
+            must be set to 'price' or an exception is raised. This is due to the
+            fact that indexes that ETFs replicate typically carry only price
+            information.
 
         Note
         ----
@@ -2548,16 +2554,20 @@ class ExchangeTradeFund(ListedEquity):
         # Is there a replicated index with which we can back-fill with the
         # replicated index time-series history
         if self.index is None:
+            id_code = self.identity_code
             logger.warning(
-                'This ExchangeTradeFund has no replicated Index.')
+                f'The ExchangeTradeFund {id_code} has no Index reference.')
             return data
 
-        # Back-fill the the replicated index time-series history.
+        # Now we can back-fill the price with the index time-series history to
+        # produce longer histories.
 
         # Check we are using prices series only
         if series == 'price':
+            pass
+        else:
             raise Exception(
-                'Can back-fill only `price` series, not `{series}` series.')
+                f'Can back-fill only `price` series, not `{series}` series.')
 
         # Check that we are using like with like, i.e., price and total
         # return price are different indices.
