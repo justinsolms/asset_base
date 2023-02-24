@@ -71,16 +71,16 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
 from sqlalchemy import String
-from sqlalchemy import MetaData, Column
+from sqlalchemy import Column
+from sqlalchemy import MetaData as SQLAlchemyMetaData
 
 from sqlalchemy_utils import drop_database
 from sqlalchemy_utils import create_database
 from sqlalchemy_utils import database_exists
 from sqlalchemy.orm.exc import NoResultFound
 
-from .financial_data import Dump, DumpReadError, History, Static
-
 from .__init__ import get_var_path
+from .financial_data import Dump, DumpReadError, History, MetaData, Static
 from .common import Base
 from .entity import Domicile, Exchange
 from .asset import Asset, ExchangeTradeFund, Forex, ListedEquity, Currency, Cash
@@ -91,7 +91,7 @@ from .exceptions import TimeSeriesNoData
 logger = logging.getLogger(__name__)
 
 # Pull in the meta data
-metadata = MetaData()
+metadata = SQLAlchemyMetaData()
 
 
 def replace_time_series_labels(data_frame, identifier, inplace=False):
