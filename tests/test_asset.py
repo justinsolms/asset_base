@@ -402,6 +402,11 @@ class TestShare(TestAsset):
         self.assertEqual(share.issuer, self.issuer)
         self.assertEqual(share.currency, self.issuer.currency)
         self.assertEqual(share.quote_units, self.quote_units)
+        # Distributions attribute
+        share = Share(self.name, self.issuer)
+        self.assertEqual(share.distributions, False)
+        share = Share(self.name, self.issuer, distributions=True)
+        self.assertEqual(share.distributions, True)
 
     def test___str__(self):
         share = Share(self.name, self.issuer)

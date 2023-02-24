@@ -453,6 +453,7 @@ class MetaData(_Feed):
             'ticker': 'ticker',
             'name': 'listed_name',
             'status': 'status',
+            'distributions': 'distributions',
             'asset_class': 'asset_class',
             'locality': 'locality',
             'domicile': 'domicile_code',

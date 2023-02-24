@@ -1043,6 +1043,9 @@ class Share(Asset):
     # Number of share units issued byu the Issuer
     shares_in_issue = Column(Integer, nullable=True)
 
+    # Does the share pay distributions or not
+    distributions = Column(Boolean, nullable=False, default=False)
+
     #  A short class name for use in naming
     _name_appendix = 'Share'
 
@@ -1063,6 +1066,14 @@ class Share(Asset):
             self.shares_in_issue = kwargs.pop('shares_in_issue')
         else:
             self.shares_in_issue = None
+
+        # Does the share pay distributions or not
+        if 'distributions' in kwargs:
+            self.distributions = kwargs.pop('distributions')
+        else:
+            # Not sure why the default is not set to False as specified in the
+            # column attribute definition, so we do it here anyway
+            self.distributions = False
 
     @property
     def domicile(self):
@@ -2011,12 +2022,18 @@ class ListedEquity(Listed):
             try:
                 dividend = get_dividend_series()
             except TimeSeriesNoData:
-                # New securities may not have dividends yet so warn.
-                logger.warning(f'No dividend data for {self.identity_code}.')
+                if self.distributions == True:
+                    logger.warning(
+                        f'No dividend data for {self.identity_code}.')
                 # No dividends
                 numerator = price
             else:
-                # With dividends
+                # Warn if not supposed to have dividends
+                if self.distributions == False:
+                    logger.warning(
+                        f'Unexpected dividend data for {self.identity_code}. '
+                        'Adding dividends anyway.')
+                # If dividends then add them to the price
                 numerator = price.add(dividend, fill_value=0.0)
             # Total one period returns
             total_returns = numerator / price_shift
