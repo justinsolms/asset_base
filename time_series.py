@@ -6,12 +6,6 @@
 """
 # Allows  in type hints to use class names instead of class name strings
 from __future__ import annotations
-# Used to avoid ImportError (most likely due to a circular import)
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from asset_base.asset import Asset
 
 import sys
 import pandas as pd
@@ -19,15 +13,15 @@ import pandas as pd
 from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
-
 from sqlalchemy.orm import relationship
 
-from asset_base.financial_data import Dump
+# Used to avoid ImportError (most likely due to a circular import)
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .asset import Asset
 
-from asset_base.exceptions import FactoryError
-
-# Import the common declarative base
-from asset_base.common import Base
+from .common import Base
+from .financial_data import Dump
 
 # Get module-named logger.
 import logging

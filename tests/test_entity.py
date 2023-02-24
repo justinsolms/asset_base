@@ -1,12 +1,11 @@
 import unittest
 import pandas as pd
 
-from asset_base.financial_data import Static
-
-from asset_base.common import TestSession
-from asset_base.exceptions import FactoryError, ReconcileError
-from asset_base.entity import Currency, Domicile
-from asset_base.entity import Entity, Exchange
+from ..financial_data import Static
+from ..common import TestSession
+from ..exceptions import FactoryError, ReconcileError
+from ..entity import Currency, Domicile
+from ..entity import Entity, Exchange
 
 
 class TestCurrency(unittest.TestCase):

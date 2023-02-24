@@ -10,7 +10,6 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
-
 from ._version import get_versions
 
 import logging

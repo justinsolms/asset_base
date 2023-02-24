@@ -12,18 +12,18 @@ distributed without the express permission of Justin Solms.
 """
 import asyncio
 import unittest
-from aiohttp import ClientConnectorError, ContentTypeError
 import aiounittest
 
-import pandas as pd
 import datetime
+import pandas as pd
+
+from fundmanage3.utils import date_to_str
 
 # Classes to be tested
-from asset_base.eod_historical_data import _API, Exchanges
-from asset_base.eod_historical_data import Historical
-from asset_base.eod_historical_data import Bulk
-from asset_base.eod_historical_data import MultiHistorical
-from fundmanage3.utils import date_to_str
+from ..eod_historical_data import _API, Exchanges
+from ..eod_historical_data import Historical
+from ..eod_historical_data import Bulk
+from ..eod_historical_data import MultiHistorical
 
 import warnings
 warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)

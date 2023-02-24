@@ -10,18 +10,19 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
+import os
 import datetime
 import unittest
-import os
 import pandas as pd
-from asset_base.common import TestSession
 
-from asset_base.financial_data import Dump, DumpReadError, Static
-from asset_base.financial_data import MetaData
-from asset_base.financial_data import History
-from asset_base.entity import Currency, Domicile, Exchange
-from asset_base.asset import Forex, Index, Listed
 from fundmanage3.utils import date_to_str
+
+from ..common import TestSession
+from ..financial_data import Dump, DumpReadError, Static
+from ..financial_data import MetaData
+from ..financial_data import History
+from ..entity import Currency, Domicile, Exchange
+from ..asset import Forex, Index, Listed
 
 
 class TestStatic(unittest.TestCase):
@@ -282,7 +283,18 @@ class TestSecuritiesHistory(unittest.TestCase):
         df = df[columns]
         df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
         pd.testing.assert_frame_equal(df, test_df)
-
+        # FIXME: fails above test. Why? Note wrong tickers in test_df
+        # ipdb> df
+        # date_stamp ticker       close      high         low      open      volume
+        # 0 2020-12-30   J200  54615.3300  54973.53  54196.1300  54196.13           0
+        # 1 2020-12-31   GSPC   3756.0701   3760.20   3726.8799   3733.27  3172510000
+        # 2 2020-12-31   J200  54379.5800  54615.33  53932.8800  54615.33           0
+        # ipdb> test_df
+        # date_stamp ticker       close      high         low      open      volume
+        # 0 2020-12-31    ASX   3673.6300   3723.98   3664.6900   3723.98    49334000
+        # 1 2020-12-31   GSPC   3756.0701   3760.20   3726.8799   3733.27  3172510000
+        # 2 2020-12-31   J200  54379.5800  54615.33  53932.8800  54615.33           0
+        # ipdb>
 
 class TestDump(unittest.TestCase):
 

@@ -3,14 +3,16 @@ import datetime
 import pandas as pd
 import pandas
 
-from asset_base.financial_data import Dump, MetaData
-from asset_base.financial_data import History, Static
+from ..common import TestSession
 
-from asset_base.common import TestSession
-from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
-from asset_base.entity import Currency, Domicile, Issuer, Exchange
-from asset_base.asset import Asset, Base, Cash, Forex, Index, Listed, ListedEquity, Share
-from asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
+from ..financial_data import Dump, MetaData
+from ..financial_data import History, Static
+
+from ..exceptions import FactoryError, BadISIN, ReconcileError
+from ..entity import Currency, Domicile, Issuer, Exchange
+from ..asset import Asset, Base, Cash, Forex, Index, Listed, ListedEquity, Share
+from ..time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
+
 from fundmanage3.utils import date_to_str
 
 
@@ -405,7 +407,7 @@ class TestShare(TestAsset):
         share = Share(self.name, self.issuer)
         self.assertEqual(
             share.__str__(),
-            'Test Share is a Share issued by The Issuer in United States.')
+            'US.The Issuer.Test Share')
 
     def test_key_code(self):
         share = Share(self.name, self.issuer)

@@ -23,15 +23,13 @@ from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from asset_base.exceptions import FactoryError, TimeSeriesNoData, ReconcileError
-from asset_base.exceptions import BadISIN
-
-from asset_base.financial_data import Dump
-
-from asset_base.common import Common
-from asset_base.entity import Currency, Exchange, Issuer
-from asset_base.industry_class import IndustryClassICB
-from asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD, SimpleEOD, TimeSeriesBase
+from .exceptions import FactoryError, TimeSeriesNoData, ReconcileError
+from .exceptions import BadISIN
+from .financial_data import Dump
+from .common import Common
+from .entity import Currency, Exchange, Issuer
+from .industry_class import IndustryClassICB
+from .time_series import Dividend, ForexEOD, IndexEOD, ListedEOD, SimpleEOD, TimeSeriesBase
 
 # Get module-named logger.
 import logging

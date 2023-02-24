@@ -19,7 +19,6 @@ dictionaries for ease of maintenance.
 
 """
 import datetime
-import asset_base.eod_historical_data as eod
 
 import pandas as pd
 import os
@@ -27,9 +26,9 @@ import os
 # Abstract base class.
 import abc
 
-from asset_base.exceptions import _BaseException
-
-from asset_base.__init__ import get_data_path, get_var_path
+from .eod_historical_data import Exchanges, MultiHistorical
+from .exceptions import _BaseException
+from .__init__ import get_data_path, get_var_path
 
 # Get module-named logger.
 import logging
@@ -501,7 +500,7 @@ class MetaData(_Feed):
         """Fetch indices mete data from the feeds."""
 
         if feed == 'EOD':
-            feed = eod.Exchanges()
+            feed = Exchanges()
             column_dict = {
                 'Name': 'index_name',
                 'Code': 'ticker',
@@ -632,7 +631,7 @@ class History(_Feed):
 
         # Pick feed
         if feed == 'EOD':
-            feed = eod.MultiHistorical()
+            feed = MultiHistorical()
             column_dict = {
                 'date': 'date_stamp',
                 'ticker': 'ticker',
@@ -712,7 +711,7 @@ class History(_Feed):
 
         # Pick feed
         if feed == 'EOD':
-            feed = eod.MultiHistorical()
+            feed = MultiHistorical()
             column_dict = {
                 'date': 'date_stamp',
                 'ticker': 'ticker',
@@ -797,7 +796,7 @@ class History(_Feed):
 
         # Pick feed
         if feed == 'EOD':
-            feed = eod.MultiHistorical()
+            feed = MultiHistorical()
             column_dict = {
                 'date': 'date_stamp',
                 'ticker': 'ticker',
@@ -863,7 +862,7 @@ class History(_Feed):
 
         # Pick feed
         if feed == 'EOD':
-            feed = eod.MultiHistorical()
+            feed = MultiHistorical()
             column_dict = {
                 'date': 'date_stamp',
                 'ticker': 'ticker',
