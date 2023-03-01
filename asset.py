@@ -8,6 +8,7 @@
 # TODO: Decide upon key_code and identity_code formats
 
 import sys
+import functools
 import datetime
 import numpy as np
 import pandas as pd
@@ -43,8 +44,21 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 metadata = MetaData()
 
 
+
+@functools.total_ordering
 class Base(Common):
-    """Base class for the module."""
+    """Base class for the module.
+
+    Note
+    ----
+    This class uses the ``@functools.total_ordering`` decorator and implements
+    ``__lt__`` ("<" operator) overloading so that when these class instances are
+    used in a list or other ordered collection they are sorted by their ``id``.
+    A critical application example is when using class instances in a
+    ``pandas.MultiIndex`` and applying a ``groupby`` operation we avoid the
+    `TypeError: '<' not supported between instances of <Base polymorph> and
+    <other Base polymorph>` error.
+    """
 
     __tablename__ = 'base'
     __mapper_args__ = {'polymorphic_identity': __tablename__, }
@@ -97,6 +111,11 @@ class Base(Common):
         """Return the official string output."""
         return '{}(name="{}", currency={!r})'.format(
             self._class_name, self.name, self.currency)
+
+    def __lt__(self, other):
+        """Use primarily key ``id`` for sorting. (See Note in class docstring).
+        """
+        return self.id < other.id
 
     @property
     def long_name(self):
