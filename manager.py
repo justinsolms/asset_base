@@ -80,11 +80,11 @@ from sqlalchemy_utils import database_exists
 from sqlalchemy.orm.exc import NoResultFound
 
 from .__init__ import get_var_path
+from .exceptions import TimeSeriesNoData
 from .financial_data import Dump, DumpReadError, History, MetaData, Static
 from .common import Base
 from .entity import Domicile, Exchange
 from .asset import Asset, ExchangeTradeFund, Forex, ListedEquity, Currency, Cash
-from .exceptions import TimeSeriesNoData
 
 
 # Get module-named logger.
@@ -531,6 +531,8 @@ class AssetBase(object):
                     tidy=True, identifier='id', date_index=None):
         """Return historic time-series for a list of entities.
 
+        TODO: Remove `series` argument and use to get price series only
+
         Note
         ----
         The values of `Cash` entities shall always be equivalent to a price of
@@ -624,11 +626,9 @@ class AssetBase(object):
             for asset in non_cash:
                 # Slip and warn for absent time-series.
                 try:
-                    data = asset.time_series(
-                        series, price_item, return_type, tidy)
-                except TimeSeriesNoData:
-                    logger.warning(
-                        f'No time-series for security {asset.identity_code}')
+                    data = asset.time_series(series, price_item, return_type, tidy)
+                except TimeSeriesNoData as ex:
+                    logger.warning(ex)
                 else:
                     data_list.append(data)
             data = pd.concat(data_list, axis=1, sort=True)

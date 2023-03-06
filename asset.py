@@ -24,7 +24,8 @@ from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from .exceptions import FactoryError, TimeSeriesNoData, ReconcileError
+from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData
+from .exceptions import ReconcileError
 from .exceptions import BadISIN
 from .financial_data import Dump
 from .common import Common
@@ -42,7 +43,6 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 # Pull in the meta data
 metadata = MetaData()
-
 
 
 @functools.total_ordering
@@ -162,6 +162,8 @@ class Base(Common):
     def get_eod(self):
         """Return the EOD time series for the asset.
 
+        # TODO: Rename to `get_eod_series`
+
         Returns
         -------
         pandas.DataFrame
@@ -174,8 +176,7 @@ class Base(Common):
         """
         trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
         if len(trade_eod_dict_list) == 0:
-            raise TimeSeriesNoData(
-                f'No EOD trade data for asset {self.identity_code}.')
+            raise EODSeriesNoData(f'Expected EOD data for {self}.')
         data_frame = pd.DataFrame(trade_eod_dict_list)
         data_frame['date_stamp'] = pd.to_datetime(data_frame['date_stamp'])
         data_frame.set_index('date_stamp', inplace=True)
@@ -185,12 +186,12 @@ class Base(Common):
         return data_frame
 
     def _get_last_eod(self):
-        """Common method for get_last_<whatever>."""
-        if len(self._eod_series) != 0:
-            # Note that _eod_series is ordered by ListedEOD.last_date
+        """Helper method."""
+
+        try:
             last_eod = self._eod_series[-1]
-        else:
-            raise TimeSeriesNoData(f'Empty EOD data for {self}.')
+        except IndexError:
+            raise EODSeriesNoData(f'Expected EOD data for {self}.')
 
         return last_eod
 
@@ -214,17 +215,7 @@ class Base(Common):
             Last date for the ``.time_series.TimeSeriesBase`` (or child class)
             time series .
         """
-        try:
-            date = self._get_last_eod().date_stamp
-        except TimeSeriesNoData:
-            # There is no data so the date is None. Anything that gets a date
-            # that is None must prepare a default substitute date and continue
-            # processing without an exception. An example would be a from_date
-            # detected as None and then a distantly historical date such as
-            # 1900-01-01 is substituted and processing continues.
-            date = None
-
-        return date
+        return self._get_last_eod().date_stamp
 
 
 class Asset(Base):
@@ -1940,38 +1931,39 @@ class ListedEquity(Listed):
         """
         dividend_dict_list = [s.to_dict() for s in self._dividend_series]
         if len(dividend_dict_list) == 0:
-            raise TimeSeriesNoData(
-                'No dividend data for  %s' % self.identity_code)
+            raise DividendSeriesNoData(f'Expected dividend data for {self}')
         series = pd.DataFrame(dividend_dict_list)
         series['date_stamp'] = pd.to_datetime(series['date_stamp'])
         series.set_index('date_stamp', inplace=True)
         series.sort_index(inplace=True)  # Assure ascending
         series.name = self
+
         return series
 
-    def get_last_dividend_date(self):
-        """Return the dividend last date for the listed asset.
-
-        Returns
-        -------
-        datetime.date
-            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
-            time series .
-        """
+    def _get_last_dividend(self):
+        """Return the dividend last date for the listed asset."""
         # Note that _dividend_series is ordered by Dividend.last_date
         try:
             last_dividend = self._dividend_series[-1]
-            last_dividend_date = last_dividend.date_stamp
         except IndexError:
-            last_dividend_date = None
+            raise DividendSeriesNoData(f'Expected dividend data for {self}')
 
-        # Return the dictionary of price items
-        return last_dividend_date
+        return last_dividend
+
+    def get_last_dividend(self):
+        """Return the dividend last date for the listed asset."""
+        return self._get_last_dividend().to_dict()
+
+    def get_last_dividend_date(self):
+        """Return the dividend last date for the listed asset."""
+        return self._get_last_dividend().date_stamp
 
     def time_series(self,
                     series='price', price_item='close', return_type='price',
                     tidy=False):
         """Retrieve historic time-series for this instance.
+
+        TODO: Remove `series` argument and use to get price series only
 
         Parameters
         ----------
@@ -2015,7 +2007,7 @@ class ListedEquity(Listed):
         Cash.time_series
 
         """
-        def get_price_series(price_item):
+        def get_prices(price_item):
             eod = self.get_eod()
             try:
                 price_series = eod[price_item]
@@ -2024,33 +2016,33 @@ class ListedEquity(Listed):
                     'Unexpected `price_item` argument {price_item}.')
             return price_series
 
-        def get_volume_series():
+        def get_volumes():
             eod = self.get_eod()
             volume_series = eod['volume']
             return volume_series
 
-        def get_dividend_series():
+        def get_dividends():
             dividends = self.get_dividend_series()
             dividend_series = dividends['unadjusted_value']
             return dividend_series
 
         def get_total_returns(price_item):
-            price = get_price_series(price_item)
+            price = get_prices(price_item)
             price_shift = price.shift(1)
             # Try to get dividends if any
             try:
-                dividend = get_dividend_series()
-            except TimeSeriesNoData:
-                if self.distributions == True:
-                    logger.warning(
-                        f'No dividend data for {self.identity_code}.')
+                dividend = get_dividends()
+            except DividendSeriesNoData:
+                if self.distributions is True:
+                    raise DividendSeriesNoData(
+                        f'Expected dividend data for {self}.')
                 # No dividends
                 numerator = price
             else:
                 # Warn if not supposed to have dividends
-                if self.distributions == False:
+                if self.distributions is False:
                     logger.warning(
-                        f'Unexpected dividend data for {self.identity_code}. '
+                        f'Unexpected dividend data for {self}.'
                         'Adding dividends anyway.')
                 # If dividends then add them to the price
                 numerator = price.add(dividend, fill_value=0.0)
@@ -2119,9 +2111,9 @@ class ListedEquity(Listed):
         if series == 'price':
             # Get the price view.
             if return_type == 'price':
-                result = get_price_series(price_item)
+                result = get_prices(price_item)
             elif return_type == 'return':
-                price = get_price_series(price_item)
+                price = get_prices(price_item)
                 returns = price / price.shift(1)
                 # Remove leading and any other NaN with no-returns=1.0.
                 result = returns.fillna(1.0)
@@ -2137,10 +2129,10 @@ class ListedEquity(Listed):
                 raise ValueError(
                     f'Unexpected return_type argument value `{return_type}`.')
         elif series == 'dividend':
-            result = get_dividend_series()
+            result = get_dividends()
         elif series == 'volume':
             # Get the volume series.
-            result = get_volume_series()
+            result = get_volumes()
         else:
             raise ValueError(
                 f'Unexpected series argument value `{series}`.')

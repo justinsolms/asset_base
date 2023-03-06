@@ -72,6 +72,14 @@ class TimeSeriesNoData(_BaseException):
     """Time series data returns empty."""
 
 
+class EODSeriesNoData(TimeSeriesNoData):
+    """EOD data returns empty."""
+
+
+class DividendSeriesNoData(TimeSeriesNoData):
+    """Dividends data returns empty."""
+
+
 class BadISIN(_BaseException):
     """A Listed ISIN number exception.
 
