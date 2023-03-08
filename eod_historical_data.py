@@ -688,6 +688,7 @@ class MultiHistorical(object):
         # Use EOD API
         table = asyncio.run(
             self._get_eod(Historical._historical_eod, symbol_list))
+
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
@@ -720,6 +721,7 @@ class MultiHistorical(object):
         # Use EOD API
         table = asyncio.run(
             self._get_eod(Historical._historical_dividends, symbol_list))
+
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
             table = pd.DataFrame()
@@ -758,8 +760,6 @@ class MultiHistorical(object):
         # Use EOD API
         table = asyncio.run(
             self._get_eod(Historical._historical_forex, symbol_list))
-        # As the exchange is always 'FOREX' it is unnecessary.
-        table = table.droplevel(level='exchange')
 
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
@@ -767,6 +767,8 @@ class MultiHistorical(object):
         else:
             # The security and date info is in the index
             table = table[columns_names]
+            # As the exchange suffix is always 'FOREX' it is unnecessary.
+            table = table.droplevel(level='exchange')
 
         return table
 
@@ -799,8 +801,6 @@ class MultiHistorical(object):
         # Use EOD API
         table = asyncio.run(
             self._get_eod(Historical._historical_forex, symbol_list))
-        # As the exchange is always 'FOREX' it is unnecessary.
-        table = table.droplevel(level='exchange')
 
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
@@ -808,6 +808,8 @@ class MultiHistorical(object):
         else:
             # The security and date info is in the index
             table = table[columns_names]
+            # As the exchange suffix is always 'INDX' it is unnecessary.
+            table = table.droplevel(level='exchange')
 
         return table
 

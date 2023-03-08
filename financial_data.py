@@ -27,7 +27,7 @@ import os
 import abc
 
 from .eod_historical_data import Exchanges, MultiHistorical
-from .exceptions import _BaseException
+from .exceptions import _BaseException, TimeSeriesNoData
 from .__init__ import get_data_path, get_var_path
 
 # Get module-named logger.
@@ -552,50 +552,59 @@ class History(_Feed):
 
     @staticmethod
     def date_preprocessor(obj_list, from_date, to_date, series):
-        """ Generate date lists with date ranges for each asset.
+        """ Get date ranges based on arguments and last available data series.
 
         Parameters
         ----------
         obj_list : .asset.Base (or polymorph child class)
-            The list of asset instances.
+            The list of asset instances for which the last data series date
+            should be queried.
         from_date : datetime.date
-            If a from date argument is not provided then the time series of each
-            asset is inspected and the from date generated according to the
-            latest date of the individual time series.
+            If provided then a list of `len(obj_list) * [from_date]` is
+            returned. If a ``from_date`` argument is not provided then the time
+            series of each ``Asset`` in the ``obj_list`` is inspected and the
+            ``from_date`` generated according to the latest available data date
+            of the ``Asset``'s time series.
         from_date : datetime.date
-            If not provided then the date returned shl be that of today.
+            If provided then a list of `len(obj_list) * [to_date]` is returned.
+            If not provided then the date returned shall be that of today.
+        series : str
+            A string indicator of the type of series required ('eod',
+            'dividend', 'forex', 'index').
 
         Returns
         -------
         from_date_list
-            The list of dates per asset instance.
+            The list of `from_dates` the length of ``obj_list``.
         to_date_list
-            The list of dates per asset instance.
+            The list of `to_dates` the length of ``obj_list``.
 
         """
         # From date list, one per Asset instance
         if from_date is None:
-            # One asset, one date
-            if series == 'eod':
-                from_date_list = [s.get_last_eod_date() for s in obj_list]
-            elif series == 'dividend':
-                from_date_list = [s.get_last_dividend_date() for s in obj_list]
-            elif series == 'forex':
-                from_date_list = [s.get_last_eod_date() for s in obj_list]
-            elif series == 'index':
-                from_date_list = [s.get_last_eod_date() for s in obj_list]
-            else:
-                raise Exception('Unexpected `series` argument.')
+            # for each `Asset` object in the list default to the last data date
+            # for the Asset object
+            from_date_list = list()
+            for asset in obj_list:
+                try:
+                    if series in ['eod', 'forex', 'index']:
+                        from_date = asset.get_last_eod_date()
+                    elif series in ['dividend']:
+                        from_date = asset.get_last_dividend_date()
+                    else:
+                        raise ValueError(
+                            f'Unexpected value {series} for `series` argument.')
+                except TimeSeriesNoData:
+                    from_date = None
+                from_date_list.append(from_date)
         else:
-            from_date_list = [from_date for s in obj_list]
-        # To date list, one per Asset instance. As such to future accommodate
-        # one asset, one date, mixed to_date(s) lists, as seen in the from_date
-        # above.
+            from_date_list = [from_date] * len(obj_list)
+
         if to_date is None:
             # Default to today
-            to_date_list = [datetime.date.today() for s in obj_list]
+            to_date_list = [datetime.date.today()] * len(obj_list)
         else:
-            to_date_list = [to_date for s in obj_list]
+            to_date_list = [to_date] * len(obj_list)
 
         return from_date_list, to_date_list
 
@@ -619,7 +628,7 @@ class History(_Feed):
                 'EOD' - eod_historical_data
 
         """
-        # Generate date list with date ranges for each asset.
+        # Generate (or default) date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
             asset_list, from_date, to_date, series='eod')
 
