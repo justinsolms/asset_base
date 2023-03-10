@@ -167,12 +167,14 @@ class Base(Common):
         Returns
         -------
         pandas.DataFrame
-            An EOD trade data time series with a ``datetime.date`` date index
-            sorted in ascending order. The class' respective time series class
-            in the ``time_series`` shall have a ``to_dict()`` method which shall
-            inform the ``pandas.DataFrame`` columns returned, in addition to the
-            data frame `date_stamp` index.
+            An End-Of-Day (EOD) ``pandas.DataFrame`` with columns identical to
+            the keys from the ``time_series.SimpleEOD.to_dict()`` or
+            ``time_series.ListedEOD.to_dict()`` or polymorph class method.
 
+        Raises
+        ------
+        EODSeriesNoData
+            If no time series exists.
         """
         trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
         if len(trade_eod_dict_list) == 0:
@@ -186,8 +188,13 @@ class Base(Common):
         return data_frame
 
     def _get_last_eod(self):
-        """Helper method."""
+        """Helper method.
 
+        Raises
+        ------
+        EODSeriesNoData
+            If no time series exists.
+        """
         try:
             last_eod = self._eod_series[-1]
         except IndexError:
@@ -202,7 +209,12 @@ class Base(Common):
         -------
         dict
             An End-Of-Day (EOD) price data dictionary with keys from the
-            ``ListedEOD.to_dict()`` method.
+            ``time_series.ListedEOD.to_dict()`` method.
+
+        Raises
+        ------
+        EODSeriesNoData
+            If no time series exists.
         """
         return self._get_last_eod().to_dict()
 
@@ -211,11 +223,16 @@ class Base(Common):
 
         Returns
         -------
-        datetime.date
+        datetime.date or None
             Last date for the ``.time_series.TimeSeriesBase`` (or child class)
-            time series .
+            time series. Returns `None` if no data series exists.
         """
-        return self._get_last_eod().date_stamp
+        try:
+            last_date = self._get_last_eod().date_stamp
+        except EODSeriesNoData:
+            last_date = None
+
+        return last_date
 
 
 class Asset(Base):
@@ -1928,6 +1945,17 @@ class ListedEquity(Listed):
 
     def get_dividend_series(self):
         """Return the dividends data series for the security.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A dividend ``pandas.DataFrame`` with columns identical to the keys
+            from the ``time_series.Dividend.to_dict()`` polymorph class method.
+
+        Raises
+        ------
+        DividendSeriesNoData
+            If no time series exists.
         """
         dividend_dict_list = [s.to_dict() for s in self._dividend_series]
         if len(dividend_dict_list) == 0:
@@ -1941,7 +1969,13 @@ class ListedEquity(Listed):
         return series
 
     def _get_last_dividend(self):
-        """Return the dividend last date for the listed asset."""
+        """Return the dividend last date for the listed asset.
+
+        Raises
+        ------
+        DividendSeriesNoData
+            If no time series exists.
+        """
         # Note that _dividend_series is ordered by Dividend.last_date
         try:
             last_dividend = self._dividend_series[-1]
@@ -1951,12 +1985,36 @@ class ListedEquity(Listed):
         return last_dividend
 
     def get_last_dividend(self):
-        """Return the dividend last date for the listed asset."""
+        """Return the dividend last date for the listed asset.
+
+        Returns
+        -------
+        dict
+            A Dividend price data dictionary with keys from the
+            ``time_series.Dividend.to_dict()`` method.
+
+        Raises
+        ------
+        DividendSeriesNoData
+            If no time series exists.
+        """
         return self._get_last_dividend().to_dict()
 
     def get_last_dividend_date(self):
-        """Return the dividend last date for the listed asset."""
-        return self._get_last_dividend().date_stamp
+        """Return the dividend last date for the listed asset.
+
+        Returns
+        -------
+        datetime.date or None
+            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
+            time series. Returns `None` if no data series exists.
+        """
+        try:
+            last_date = self._get_last_dividend().date_stamp
+        except DividendSeriesNoData:
+            last_date = None
+
+        return last_date
 
     def time_series(self,
                     series='price', price_item='close', return_type='price',
@@ -2447,7 +2505,7 @@ class ExchangeTradeFund(ListedEquity):
 
     # HACK: These are are workarounds for not having data for all the underlying
     # securities for our ETFs.
-    _classes = ('money', 'bond', 'property', 'equity', 'commodity')
+    _classes = ('money', 'bond', 'property', 'equity', 'commodity', 'multi')
     _asset_class = Column(Enum(*_classes))
     _locality = Column(String)
 

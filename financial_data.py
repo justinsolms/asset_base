@@ -408,15 +408,8 @@ class StaticIndices(_Feed):
             file_name = f'INDX.{ticker}.csv'
             path = self._path(file_name)
             # Read CSV history file
-            try:
-                file = open(path)
-            except FileNotFoundError:
-                raise FileNotFoundError(
-                    f'Index file {path} could not be found.')
-            else:
+            with open(path) as file:
                 data = pd.read_csv(file)
-            finally:
-                file.close()
             # Try extract by columns names and rename to a standard. This is
             # also then a check for expected columns.
             try:

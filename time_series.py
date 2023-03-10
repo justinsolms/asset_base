@@ -399,7 +399,14 @@ class SimpleEOD(TimeSeriesBase):
         self._close = close
 
     def to_dict(self):
-        """Convert all class price attributes to a dictionary."""
+        """Convert all class price attributes to a dictionary.
+
+        Returns
+        -------
+        dict
+            date_stamp : datetime.date
+            close : float (in currency units)
+        """
         if self.base_obj.quote_units == 'cents':
             return {
                 "date_stamp": self.date_stamp,
@@ -482,7 +489,19 @@ class TradeEOD(SimpleEOD):
         self._volume = volume
 
     def to_dict(self):
-        """Convert all class price attributes to a dictionary."""
+        """Convert all class price attributes to a dictionary.
+
+        Returns
+        -------
+        dict
+            date_stamp : datetime.date
+            open: float (in currency units)
+            close : float (in currency units)
+            high : float (in currency units)
+            low : float (in currency units)
+            adjusted_close : float (in currency units)
+            volume : int (number of units traded)
+        """
         if self.base_obj.quote_units == 'cents':
             return {
                 "date_stamp": self.date_stamp,
@@ -862,7 +881,20 @@ class Dividend(TimeSeriesBase):
         return security.get_last_dividend_date()
 
     def to_dict(self):
-        """Convert all class dividend attributes to a dictionary."""
+        """Convert all class dividend attributes to a dictionary.
+
+        Returns
+        -------
+        dict
+            date_stamp : datetime.date
+            currency : str (ISO 4217 3-letter currency code)
+            declaration_date : str (yyyy-mm-dd)
+            payment_date : str (yyyy-mm-dd)
+            period : str ('Quarterly', 'semi-annually' or 'annually')
+            record_date : str (yyyy-mm-dd)
+            unadjusted_value : float (in currency units)
+            adjusted_value : float (in currency units)
+        """
         if self.base_obj.quote_units == 'cents':
             return {
                 "date_stamp": self.date_stamp,

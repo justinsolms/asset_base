@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 
 class _API(aiohttp.ClientSession):
     # TODO: DO not inherit from aiohttp.ClientSession
+    # TODO: Refactor into a context manager
     """ Direct API query, response and result checking.
 
     Parameters
