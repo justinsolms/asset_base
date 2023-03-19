@@ -3,6 +3,9 @@
 # <nbformat>3.0</nbformat>
 
 """ Define classes describing entities such as legal and natural persons.
+
+This module also defines currency and domicile classes that are used to manage
+currency and exchange rates.
 """
 # TODO: Decide upon key_code and identity_code formats
 

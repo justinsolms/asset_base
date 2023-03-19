@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-"""Test suite for the financial_feed module.
+"""Test suite for the ``eod_historical_data`` module.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
 This file is part of the fundmanage module.
@@ -20,13 +20,10 @@ import pandas as pd
 from fundmanage3.utils import date_to_str
 
 # Classes to be tested
-from ..eod_historical_data import _API, Exchanges
+from ..eod_historical_data import APISessionManager, Exchanges
 from ..eod_historical_data import Historical
 from ..eod_historical_data import Bulk
 from ..eod_historical_data import MultiHistorical
-
-import warnings
-warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)
 
 
 class TestAPI(aiounittest.AsyncTestCase):
@@ -37,19 +34,19 @@ class TestAPI(aiounittest.AsyncTestCase):
         """ Set up class test fixtures. """
         domain = 'eodhistoricaldata.com'
         service = '/api/eod'
-        ticker1 = 'AAPL'
-        ticker2 = 'MCD'
+        ticker1 = 'STX40'
+        ticker2 = 'STXIND'
         ticker_bad = 'BADTICKER'
-        exchange = 'US'
+        exchange = 'JSE'
 
         # Path must append ticker and short exchange code to service
-        path1 = '{}/{}.{}'.format(service, ticker1, exchange)
-        path2 = '{}/{}.{}'.format(service, ticker2, exchange)
-        path_bad = '{}/{}.{}'.format(service, ticker_bad, exchange)
+        endpoint1 = '{}/{}.{}'.format(service, ticker1, exchange)
+        endpoint2 = '{}/{}.{}'.format(service, ticker2, exchange)
+        endpoint_bad = '{}/{}.{}'.format(service, ticker_bad, exchange)
 
-        cls.url1 = f'https://{domain}{path1}'
-        cls.url2 = f'https://{domain}{path2}'
-        cls.url_bad = f'https://{domain}{path_bad}'
+        cls.url1 = f'https://{domain}{endpoint1}'
+        cls.url2 = f'https://{domain}{endpoint2}'
+        cls.url_bad = f'https://{domain}{endpoint_bad}'
 
         from_date = '2022-01-01'
         to_date = '2022-01-07'
@@ -60,9 +57,9 @@ class TestAPI(aiounittest.AsyncTestCase):
             period='d',  # Default to daily sampling period
             order='a',  # Default to ascending order
         )
-        cls.path1 = path1
-        cls.path2 = path2
-        cls.path_bad = path_bad
+        cls.endpoint1 = endpoint1
+        cls.endpoint2 = endpoint2
+        cls.endpoint_bad = endpoint_bad
 
     @classmethod
     def tearDownClass(cls):
@@ -79,14 +76,14 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     async def test___init__(self):
         """ Test Initialization. """
-        async with _API() as api:
-            self.assertIsInstance(api, _API)
+        async with APISessionManager() as api:
+            self.assertIsInstance(api, APISessionManager)
 
-    async def test__get_retries(self):
+    async def test_get(self):
         """Get with the possibility of retries to the API."""
         index_names = ['date', 'open', 'high', 'low', 'close']
-        async with _API() as api:
-            response = await api._get_retries(self.path1, self.params)
+        async with APISessionManager() as api:
+            response = await api.get(self.endpoint1, self.params)
             # Check
             self.assertIsInstance(response, pd.DataFrame)
             self.assertEqual(index_names, response.columns.to_list()[0:5])
@@ -94,8 +91,8 @@ class TestAPI(aiounittest.AsyncTestCase):
     async def test_bad_ticker(self):
         """Fail with ticker not found."""
         with self.assertRaises(Exception) as ex:
-            async with _API() as api:
-                await api._get_retries(self.path_bad, self.params)
+            async with APISessionManager() as api:
+                await api.get(self.endpoint_bad, self.params)
 
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
@@ -104,9 +101,9 @@ class TestAPI(aiounittest.AsyncTestCase):
 
         async def get_results():
             tasks_list = list()
-            async with _API() as api:
-                tasks_list.append(api._get_retries(self.path1, self.params))
-                tasks_list.append(api._get_retries(self.path2, self.params))
+            async with APISessionManager() as api:
+                tasks_list.append(api.get(self.endpoint1, self.params))
+                tasks_list.append(api.get(self.endpoint2, self.params))
                 results = await asyncio.gather(*tasks_list, return_exceptions=True)
             return results
 
@@ -140,7 +137,7 @@ class TestHistorical(aiounittest.AsyncTestCase):
         """ Test Initialization. """
         # Is this a subclass of _API?
         async with Historical() as historical:
-            self.assertIsInstance(historical, _API)
+            self.assertIsInstance(historical, APISessionManager)
 
     async def test_get_eod(self):
         """ Get daily, EOD historical over a date range. """
@@ -238,7 +235,7 @@ class TestBulk(aiounittest.AsyncTestCase):
         """ Test Initialization. """
         # Is this a subclass of _API?
         async with Bulk() as bulk:
-            self.assertIsInstance(bulk, _API)
+            self.assertIsInstance(bulk, APISessionManager)
 
     async def test_get_eod(self):
         """ Get bulk EOD price and volume for the exchange on a date. """

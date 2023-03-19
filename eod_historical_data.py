@@ -4,6 +4,11 @@
 
 """ Get financial data from the https://eodhistoricaldata.com/ API.
 
+Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
+This file is part of the fundmanage module.
+The fundmanage module can not be modified, copied and/or
+distributed without the express permission of Justin Solms.
+
 This module has different levels of abstraction classes:
 1. Direct API query, response and result checking.
 2. Generic classes for EOD and Bulk and Fundamental data.
@@ -39,99 +44,97 @@ from collections import defaultdict
 
 # Get module-named logger.
 import logging
-logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+logging.basicConfig(stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 
-class _API(aiohttp.ClientSession):
-    # TODO: DO not inherit from aiohttp.ClientSession
-    # TODO: Refactor into a context manager
+class APISessionManager():
     """ Direct API query, response and result checking.
-
-    Parameters
-    ----------
-    asset_base : fundmanage.asset_base.EntityBase
-        An ``asset_base`` database manager with a session to the database.
-
     """
-    # Feed
-    _domain = 'eodhistoricaldata.com'
-    _api_token = '60802039419943.54316578'
+    # API domain and security token
+    _DOMAIN = 'eodhistoricaldata.com'
+    _API_TOKEN = '60802039419943.54316578'
 
-    async def _get_retries(self, path, params):
-        """ Get and check a response form the API.
+    # Limiting connection pool size
+    _CONNECTION_LIMIT = 4
 
-        Note
-        ----
-        Retries by exception handling are implemented here.
+    # Client total timeout in seconds
+    _TIMEOUT = 5 * 60
 
-        Parameters
-        ----------
-        path : str
-            The service path in the domain. Must append the instrument code at
-            the end.
-        params : dict
-            Additional (key: value) pair parameters such as date range. The API
-            token _must not_ be included.
-
-        Returns
-        -------
-        csv
-            Response
-        """
+    def __init__(self) -> None:
         # Prepare the URL
-        url = 'https://{}{}'.format(self._domain, path)
-
-        # Add API token to params
-        params['api_token'] = self._api_token
+        self.url = f'https://{self._DOMAIN}'
         # Default to JSON format at the request of the service provider. There
         # is an issue that CSV includes a last line with the total number of
         # bytes which causes pandas read problems. Use JSON for now.
-        params['fmt'] = 'json'
+        self.base_params = {'api_token': self._API_TOKEN, 'fmt': 'json'}
 
-        # The API requires `from` and `to` as arguments.
-        if 'from_date' in params:
-            params['from'] = params.pop('from_date')
-        if 'to_date' in params:
-            params['to'] = params.pop('to_date')
+    def __enter__(self):
+        raise Exception('Use only "async with" instead of plain "with".')
 
-        # Retry loop
-        retry_list = [1, 2, 'last']
-        for retry in retry_list:
+    def __exit__(self, exc_type, exc_value, exc_tb):
+        raise Exception('Use only "async with" instead of plain "with".')
+
+    async def __aenter__(self):
+        # Get connector object
+        conn = aiohttp.TCPConnector(limit=self._CONNECTION_LIMIT)
+        # Specify timeouts - see StackOverflow (answer by glezo) url t.ly/VqKl
+        session_timeout = aiohttp.ClientTimeout(
+            total=None, sock_connect=self._TIMEOUT, sock_read=self._TIMEOUT)
+        # Get session object for starting a session with
+        self.session = aiohttp.ClientSession(
+            connector=conn, timeout=session_timeout)
+
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_tb):
+        await self.session.close()
+
+    async def close(self):
+        await self.session.close()
+
+    async def get(self, endpoint, params):
+        """Get API response with retries."""
+        url = f'{self.url}{endpoint}'
+
+        # Merge the base parameters with the specific parameters
+        all_params = {**self.base_params, **params}
+
+        # Try several times to get the response
+        for retry in [0, 1, 2, 'last']:
             try:
-                # TODO: Refer timeout to constant parameter
-                # TODO: Cose response object.
-                response = await self.get(url, params=params, timeout=20)
+                async with self.session.get(url, params=all_params) as response:
+                    logger.info('Initiated: %s', response.url)
+                    # Check response status
+                    if response.ok is True:
+                        json = await response.json()
+                    else:
+                        text = await response.text()
+                        status = response.status
+                        url = response.url
+                        msg = f'Failed response status={status}: text={text}: url={url}'
+                        logger.warning(msg)
+                        raise Exception(msg)
             except TimeoutError as ex:
                 # Test for retries
                 if retry == 'last':
-                    logger.info('Timeout (try-%s): %s', retry, url)
+                    msg = f'Fail (timeout retries exceeded): {url}'
+                    logger.warning(msg)
                     raise ex
                 else:
                     # Go around for a retry
-                    logger.info('Timeout (try-%s): %s', retry, url)
-                    continue
+                    logger.debug('Timeout (retry-%s): %s', retry, url)
+                    continue  # retry loop
             else:
-                logger.info('Initiated (try-%s): %s', retry, response.url)
-                if response.ok:
-                    json = await response.json()
-                    # Success - break out of retry loop
-                    logger.info('Success: %s', response.url)
-                    break
-                else:
-                    text = await response.text()
-                    status = response.status
-                    url = response.url
-                    raise Exception(
-                        'Failed response %s:%s for %s', status, text, url)
-
-        # JSON to DataFrame
-        table = pd.DataFrame(json)
+                # Success - break out of retry loop
+                logger.debug('Success: %s', response.url)
+                table = pd.DataFrame(json)
+                break  # out of retry loop
 
         return table
 
 
-class Historical(_API):
+class Historical(APISessionManager):
     """ Get EOD historical data sets. """
 
     _historical_eod = '/api/eod'
@@ -182,7 +185,7 @@ class Historical(_API):
             period='d',  # Default to daily sampling period
             order='a',  # Default to ascending order
         )
-        table = await self._get_retries(path, params=params)
+        table = await self.get(path, params=params)
 
         if table.empty:
             return table
@@ -269,7 +272,7 @@ class Historical(_API):
             from_date=from_date, to_date=to_date)
 
 
-class Bulk(_API):
+class Bulk(APISessionManager):
     """ Get Bulk data sets. """
 
     _bulk_eod = '/api/eod-bulk-last-day'
@@ -318,7 +321,7 @@ class Bulk(_API):
 
         params = dict(
             date=date.strftime('%Y-%m-%d'),
-            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
+            fmt='json',  # Default to CSV table. See NOTE in get!
             order='a',  # Default to ascending order
         )
         if type is not None:
@@ -327,7 +330,7 @@ class Bulk(_API):
         if symbols is not None:
             # The symbols=None is not liked by aiohttp.ClientSession() instance
             params['symbols'] = symbols
-        table = await self._get_retries(path, params=params)
+        table = await self.get(path, params=params)
 
         if table.empty:
             return table
@@ -417,7 +420,7 @@ class Bulk(_API):
         return table
 
 
-class Fundamentals(_API):
+class Fundamentals(APISessionManager):
     """ Get fundamental data API for stocks, ETFs, Mutual Funds, Indices. """
 
     # TODO: Add fundamental public methods
@@ -444,11 +447,11 @@ class Fundamentals(_API):
 
         # Get the API response
         params = dict(
-            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
+            fmt='json',  # Default to CSV table. See NOTE in get!
             period='d',  # Default to daily sampling period
             order='a',  # Default to ascending order
         )
-        table = await self._get_retries(path, params=params)
+        table = await self.get(path, params=params)
 
         return table
 
@@ -464,14 +467,14 @@ class Exchanges(object):
 
         # Get the API response
         params = dict(
-            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
+            fmt='json',  # Default to CSV table. See NOTE in get!
             period='d',  # Default to daily sampling period
             order='a',  # Default to ascending order
         )
 
         async def _get(path, params):
-            async with _API() as exchanges:
-                task = await exchanges._get_retries(path, params=params)
+            async with APISessionManager() as exchanges:
+                task = await exchanges.get(path, params=params)
             return task
 
         table = asyncio.run(_get(path, params))
@@ -493,14 +496,14 @@ class Exchanges(object):
 
         # Get the API response
         params = dict(
-            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
+            fmt='json',  # Default to CSV table. See NOTE in get!
             period='d',  # Default to daily sampling period
             order='a',  # Default to ascending order
         )
 
         async def _get(path, params):
-            async with _API() as exchanges:
-                task = await exchanges._get_retries(path, params=params)
+            async with APISessionManager() as exchanges:
+                task = await exchanges.get(path, params=params)
             return task
 
         table = asyncio.run(_get(path, params))
