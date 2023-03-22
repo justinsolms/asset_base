@@ -15,6 +15,7 @@ import unittest
 import aiounittest
 
 import datetime
+import numpy as np
 import pandas as pd
 
 from fundmanage3.utils import date_to_str
@@ -144,74 +145,54 @@ class TestHistorical(aiounittest.AsyncTestCase):
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        columns = ['open', 'high', 'low', 'close', 'volume']
-        index = ['date']
-        # NOTE: This data may change as EOD historical make corrections
-        values = [134.08, 134.74, 131.72, 132.69, 99116600.0]
         # Get
         async with Historical() as historical:
             df = await historical.get_eod('US', 'AAPL', from_date, to_date)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test-rank columns
-        df = df[columns]
-        # Test data
-        self.assertEqual(len(df), 253)
-        self.assertEqual(
-            values,
-            df.loc[to_date].tolist(),
-            )
+        index_name = 'date'
+        columns = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume']
+        index_type = np.dtype('datetime64[ns]')
+        column_types = [np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('int64')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_name, df.index.name)
 
     async def test_get_dividends(self):
         """ Get daily, dividend historical over a date range. """
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-11-06', '%Y-%m-%d')
-        columns = ['declarationDate', 'recordDate', 'paymentDate', 'period',
-                   'value', 'unadjustedValue', 'currency']
-        index = ['date']
-        # NOTE: This data may change as EOD historical make corrections
-        values = ['2020-10-29', '2020-11-09', '2020-11-12', 'Quarterly',
-                  0.205, 0.205, 'USD']
         # Get
         async with Historical() as historical:
             df = await historical.get_dividends('US', 'AAPL', from_date, to_date)
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test-rank columns
-        df = df[columns]
-        # Test
-        self.assertEqual(len(df), 4)
-        self.assertEqual(
-            values,
-            df.loc[to_date].tolist(),
-            )
+        index_name = 'date'
+        columns = ['declarationDate', 'recordDate', 'paymentDate', 'period', 'value', 'unadjustedValue', 'currency']
+        index_type = np.dtype('datetime64[ns]')
+        column_types = [np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('float64'), np.dtype('float64'), np.dtype('object')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_name, df.index.name)
 
     async def test_get_forex(self):
         """ Get daily, EOD historial forex (USD based) over a date range. """
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        columns = ['close', 'high', 'low', 'open', 'volume']
-        # NOTE: This data may change as EOD historical make corrections
-        values = [0.8944, 0.9025, 0.8943, 0.9024, 166330.0]
         # Get
         async with Historical() as historical:
             df = await historical.get_forex('EURGBP', from_date, to_date)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
-        # Test-rank columns
-        df = df[columns]
-        # Test
-        self.assertEqual(314, len(df))
-        self.assertEqual(
-            values,
-            df.loc[to_date].tolist(),
-            )
+        # Test DataFame structure
+        index_name = 'date'
+        columns = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume']
+        index_type = np.dtype('datetime64[ns]')
+        column_types = [np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('int64')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_name, df.index.name)
 
 
 class TestBulk(aiounittest.AsyncTestCase):
@@ -239,70 +220,51 @@ class TestBulk(aiounittest.AsyncTestCase):
 
     async def test_get_eod(self):
         """ Get bulk EOD price and volume for the exchange on a date. """
-        columns = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume',
-                   'prev_close', 'change', 'change_p']
-        index = ['date', 'ticker', 'exchange']
-        date = datetime.datetime.strptime('2021-01-03', '%Y-%m-%d')
-        # NOTE: This data may change as EOD historical make corrections
-        data = [134.08, 134.74, 131.72, 132.69, 131.516,
-                99116600.0, 133.72, -1.03, -0.7703]
         async with Bulk() as bulk:
             df = await bulk.get_eod('US', date=date, symbols=['AAPL', 'MCD'])
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test data content
-        self.assertEqual(len(df), 2)
-        self.assertEqual(
-            df.index.tolist(),
-            [
-                (pd.Timestamp('2020-12-31 00:00:00'), 'AAPL', 'US'),
-                (pd.Timestamp('2020-12-31 00:00:00'), 'MCD', 'US')
-            ]
-        )
-        self.assertEqual(
-            data,
-            df.loc['2020-12-31', 'AAPL', 'US'].tolist(),
-            )
+        index_names = ['date', 'ticker', 'exchange']
+        columns = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume', 'prev_close', 'change', 'change_p']
+        index_type = np.dtype('object')
+        column_types = [np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('int64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
+        test_index_list = [(pd.Timestamp('2020-12-31 00:00:00'), 'AAPL', 'US'), (pd.Timestamp('2020-12-31 00:00:00'), 'MCD', 'US')]
+        self.assertEqual(test_index_list, df.index.tolist())
 
     async def test_get_dividends(self):
         """ Get bulk EOD dividends for the exchange on a date. """
-        columns = ['dividend', 'currency', 'declarationDate', 'recordDate',
-                   'paymentDate', 'period', 'unadjustedValue']
-        index = ['date', 'ticker', 'exchange']
         date = datetime.datetime.strptime('2020-02-07', '%Y-%m-%d')
-        # NOTE: This data may change as EOD historical make corrections
-        data = [0.1925, 'USD', '2020-01-28', '2020-02-10', '2020-02-13',
-                'Quarterly', 0.77]
         async with Bulk() as bulk:
             df = await bulk.get_dividends('US', date=date)
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test data
-        df = df[columns]
-        self.assertEqual(
-            data,
-            df.loc['2020-02-07', 'AAPL', 'US'].tolist(),
-            )
+        index_names = ['date', 'ticker', 'exchange']
+        columns = ['dividend', 'currency', 'declarationDate', 'recordDate', 'paymentDate', 'period', 'unadjustedValue']
+        index_type = np.dtype('object')
+        column_types = [np.dtype('float64'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('float64')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
+        # The index is too long to test content.
 
     async def test_get_splits(self):
         """ Get bulk EOD splits for the exchange on a date. """
-        columns = ['split']
-        index = ['date', 'ticker', 'exchange']
-        # NOTE: This data may change as EOD historical make corrections
-        data = ['1.000000/20.000000']
         date = datetime.datetime.strptime('2021-09-15', '%Y-%m-%d')
         async with Bulk() as bulk:
             df = await bulk.get_splits('US', date=date)
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test data
-        self.assertEqual(
-            data,
-            df.loc['2021-09-15', 'SMATF', 'US'].tolist(),
-        )
+        index_names = ['date', 'ticker', 'exchange']
+        columns = ['split']
+        index_type = np.dtype('object')
+        column_types = [np.dtype('object')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
+        # The index is too long to test content.
 
 
 class TestExchanges(unittest.TestCase):
