@@ -48,6 +48,14 @@ logging.basicConfig(stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 
+date_index_name = 'date'
+eod_columns = [
+    'open', 'close', 'high', 'low', 'adjusted_close', 'volume']
+dividend_columns = [
+    'declarationDate', 'recordDate', 'paymentDate', 'period',
+    'value', 'unadjustedValue', 'currency']
+
+
 class APISessionManager():
     """ Direct API query, response and result checking.
     """
@@ -77,18 +85,19 @@ class APISessionManager():
 
     async def __aenter__(self):
         # Get connector object
-        conn = aiohttp.TCPConnector(limit=self._CONNECTION_LIMIT)
+        self.conn = aiohttp.TCPConnector(limit=self._CONNECTION_LIMIT)
         # Specify timeouts - see StackOverflow (answer by glezo) url t.ly/VqKl
         session_timeout = aiohttp.ClientTimeout(
             total=None, sock_connect=self._TIMEOUT, sock_read=self._TIMEOUT)
         # Get session object for starting a session with
         self.session = aiohttp.ClientSession(
-            connector=conn, timeout=session_timeout)
+            connector=self.conn, timeout=session_timeout)
 
         return self
 
     async def __aexit__(self, exc_type, exc_value, exc_tb):
         await self.session.close()
+        await self.conn.close()
 
     async def close(self):
         await self.session.close()
@@ -190,9 +199,9 @@ class Historical(APISessionManager):
         if table.empty:
             return table
 
-        # Condition date
-        table['date'] = pd.to_datetime(table['date'])
-        table.set_index('date', verify_integrity=True, inplace=True)
+        # Condition date, date-index and sort and check for duplicates
+        table[date_index_name] = pd.to_datetime(table[date_index_name])
+        table.set_index(date_index_name, verify_integrity=True, inplace=True)
         table.sort_index(inplace=True)
 
         return table
@@ -218,9 +227,12 @@ class Historical(APISessionManager):
         pandas.DataFrame
             The daily, EOD historical time-series.
         """
-        return await self._get(
+        table = await self._get(
             self._historical_eod, exchange, ticker,
             from_date=from_date, to_date=to_date)
+        table = table[eod_columns]
+
+        return table
 
     async def get_dividends(
             self, exchange, ticker, from_date=None, to_date=None):
@@ -244,9 +256,12 @@ class Historical(APISessionManager):
         pandas.DataFrame
             The daily, EOD historical time-series.
         """
-        return await self._get(
+        table = await self._get(
             self._historical_dividends, exchange, ticker,
             from_date=from_date, to_date=to_date)
+        table = table[dividend_columns]
+
+        return table
 
     async def get_forex(self, ticker, from_date=None, to_date=None):
         """ Get daily, EOD historial forex (USD based) over a date range.
@@ -267,9 +282,12 @@ class Historical(APISessionManager):
         pandas.DataFrame
             The daily, EOD historical time-series.
         """
-        return await self._get(
+        table = await self._get(
             self._historical_forex, 'FOREX', ticker,
             from_date=from_date, to_date=to_date)
+        table = table[eod_columns]
+
+        return table
 
 
 class Bulk(APISessionManager):
@@ -340,9 +358,9 @@ class Bulk(APISessionManager):
             table.rename(columns={'exchange_short_name': 'exchange'},
                          inplace=True)
         # Condition date
-        table['date'] = pd.to_datetime(table['date'])
+        table[date_index_name] = pd.to_datetime(table[date_index_name])
         table.rename(columns={'code': 'ticker'}, inplace=True)  # Fix API names
-        table.set_index(['date', 'ticker', 'exchange'], inplace=True)
+        table.set_index([date_index_name, 'ticker', 'exchange'], inplace=True)
         table.sort_index(inplace=True)  # MultiIndex must be sorted for slicing.
 
         return table
@@ -686,9 +704,6 @@ class MultiHistorical(object):
             thrown.
 
         """
-        columns_names = [
-            'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
-
         # Use EOD API
         table = asyncio.run(
             self._get_eod(Historical._historical_eod, symbol_list))
@@ -698,7 +713,7 @@ class MultiHistorical(object):
             table = pd.DataFrame()
         else:
             # The security and date info is in the index
-            table = table[columns_names]
+            table = table[eod_columns]
 
         return table
 
@@ -718,10 +733,6 @@ class MultiHistorical(object):
             thrown
 
         """
-        columns_names = [
-            'currency', 'declarationDate', 'paymentDate', 'period',
-            'recordDate', 'unadjustedValue', 'value']
-
         # Use EOD API
         table = asyncio.run(
             self._get_eod(Historical._historical_dividends, symbol_list))
@@ -731,7 +742,7 @@ class MultiHistorical(object):
             table = pd.DataFrame()
         else:
             # The security and date info is in the index
-            table = table[columns_names]
+            table = table[dividend_columns]
 
         return table
 
@@ -750,9 +761,6 @@ class MultiHistorical(object):
             the date must be `datetime.date` or an exception shall be thrown
 
         """
-        columns_names = [
-            'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
-
         # Re-construct a symbol list form the forex ticker list as (`exchange`,
         # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
         # part set to "FOREX". In other words, insert FOREX in the right
@@ -770,7 +778,7 @@ class MultiHistorical(object):
             table = pd.DataFrame()
         else:
             # The security and date info is in the index
-            table = table[columns_names]
+            table = table[eod_columns]
             # As the exchange suffix is always 'FOREX' it is unnecessary.
             table = table.droplevel(level='exchange')
 
@@ -791,9 +799,6 @@ class MultiHistorical(object):
             the date must be `datetime.date` or an exception shall be thrown
 
         """
-        columns_names = [
-            'adjusted_close', 'close', 'high', 'low', 'open', 'volume']
-
         # Re-construct a symbol list form the forex ticker list as (`exchange`,
         # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
         # part set to "FOREX". In other words, insert FOREX in the right
@@ -811,7 +816,7 @@ class MultiHistorical(object):
             table = pd.DataFrame()
         else:
             # The security and date info is in the index
-            table = table[columns_names]
+            table = table[eod_columns]
             # As the exchange suffix is always 'INDX' it is unnecessary.
             table = table.droplevel(level='exchange')
 
