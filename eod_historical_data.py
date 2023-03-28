@@ -77,12 +77,6 @@ class APISessionManager():
         # bytes which causes pandas read problems. Use JSON for now.
         self.base_params = {'api_token': self._API_TOKEN, 'fmt': 'json'}
 
-    def __enter__(self):
-        raise Exception('Use only "async with" instead of plain "with".')
-
-    def __exit__(self, exc_type, exc_value, exc_tb):
-        raise Exception('Use only "async with" instead of plain "with".')
-
     async def __aenter__(self):
         # Get connector object
         self.conn = aiohttp.TCPConnector(limit=self._CONNECTION_LIMIT)
@@ -98,9 +92,6 @@ class APISessionManager():
     async def __aexit__(self, exc_type, exc_value, exc_tb):
         await self.session.close()
         await self.conn.close()
-
-    async def close(self):
-        await self.session.close()
 
     async def get(self, endpoint, params):
         """Get API response with retries."""
