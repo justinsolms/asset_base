@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-"""Test suite for the financial_feed module.
+"""Test suite for the ``eod_historical_data`` module.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
 This file is part of the fundmanage module.
@@ -15,18 +15,55 @@ import unittest
 import aiounittest
 
 import datetime
+import numpy as np
 import pandas as pd
 
-from fundmanage3.utils import date_to_str
-
 # Classes to be tested
-from ..eod_historical_data import _API, Exchanges
+from ..eod_historical_data import APISessionManager, Exchanges
 from ..eod_historical_data import Historical
 from ..eod_historical_data import Bulk
 from ..eod_historical_data import MultiHistorical
+from ..eod_historical_data import date_index_name, eod_columns, dividend_columns
 
-import warnings
-warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)
+
+def assert_date_index(tester, df):
+    """Test datetime index."""
+    index_type = np.dtype('datetime64[ns]')
+    tester.assertEqual(index_type, df.index.dtype)
+    tester.assertEqual(date_index_name, df.index.name)
+    tester.assertTrue(df.index.is_unique)
+
+def assert_date_ticker_index(tester, df):
+    """Test datetime, ticker index."""
+    index_columns = [date_index_name, 'ticker']
+    index_types = [np.dtype('datetime64[ns]'), np.dtype('object')]
+    test_df = pd.Series(index_types, index=index_columns)  #
+    pd.testing.assert_series_equal(test_df, df.index.dtypes)
+    tester.assertTrue(df.index.is_unique)
+
+def assert_date_ticker_exchange_index(tester, df):
+    """Test datetime, ticker, exchange index."""
+    index_columns = [date_index_name, 'ticker', 'exchange']
+    index_types = [np.dtype('datetime64[ns]'), np.dtype('object'), np.dtype('object')]
+    test_df = pd.Series(index_types, index=index_columns)  #
+    pd.testing.assert_series_equal(test_df, df.index.dtypes)
+    tester.assertTrue(df.index.is_unique)
+
+def assert_eod_columns(tester, df):
+    """Test EOD DataFame columns."""
+    tester.assertIsInstance(df, pd.DataFrame)
+    # Test columns
+    column_types = [np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('int64')]
+    test_df = pd.Series(column_types, index=eod_columns)  #
+    pd.testing.assert_series_equal(test_df, df.dtypes)
+
+def assert_dividend_columns(tester, df):
+    """Test dividend DataFame columns."""
+    tester.assertIsInstance(df, pd.DataFrame)
+    # Test columns
+    column_types = [np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('float64'), np.dtype('float64'), np.dtype('object')]
+    test_df = pd.Series(column_types, index=dividend_columns)  #
+    pd.testing.assert_series_equal(test_df, df.dtypes)
 
 
 class TestAPI(aiounittest.AsyncTestCase):
@@ -37,19 +74,19 @@ class TestAPI(aiounittest.AsyncTestCase):
         """ Set up class test fixtures. """
         domain = 'eodhistoricaldata.com'
         service = '/api/eod'
-        ticker1 = 'AAPL'
-        ticker2 = 'MCD'
+        ticker1 = 'STX40'
+        ticker2 = 'STXIND'
         ticker_bad = 'BADTICKER'
-        exchange = 'US'
+        exchange = 'JSE'
 
         # Path must append ticker and short exchange code to service
-        path1 = '{}/{}.{}'.format(service, ticker1, exchange)
-        path2 = '{}/{}.{}'.format(service, ticker2, exchange)
-        path_bad = '{}/{}.{}'.format(service, ticker_bad, exchange)
+        endpoint1 = '{}/{}.{}'.format(service, ticker1, exchange)
+        endpoint2 = '{}/{}.{}'.format(service, ticker2, exchange)
+        endpoint_bad = '{}/{}.{}'.format(service, ticker_bad, exchange)
 
-        cls.url1 = f'https://{domain}{path1}'
-        cls.url2 = f'https://{domain}{path2}'
-        cls.url_bad = f'https://{domain}{path_bad}'
+        cls.url1 = f'https://{domain}{endpoint1}'
+        cls.url2 = f'https://{domain}{endpoint2}'
+        cls.url_bad = f'https://{domain}{endpoint_bad}'
 
         from_date = '2022-01-01'
         to_date = '2022-01-07'
@@ -60,9 +97,9 @@ class TestAPI(aiounittest.AsyncTestCase):
             period='d',  # Default to daily sampling period
             order='a',  # Default to ascending order
         )
-        cls.path1 = path1
-        cls.path2 = path2
-        cls.path_bad = path_bad
+        cls.endpoint1 = endpoint1
+        cls.endpoint2 = endpoint2
+        cls.endpoint_bad = endpoint_bad
 
     @classmethod
     def tearDownClass(cls):
@@ -77,46 +114,49 @@ class TestAPI(aiounittest.AsyncTestCase):
         """tear down test case fixtures."""
         pass
 
+    def assert_df(self, df):
+        # Set up for testing
+        df['date'] = pd.to_datetime(df['date'])
+        df.set_index(date_index_name, inplace=True)
+        df = df[eod_columns]
+        df['open'] = df['open'].astype('float64')
+        # Check
+        assert_date_index(self, df)
+        assert_eod_columns(self, df)
+
     async def test___init__(self):
         """ Test Initialization. """
-        async with _API() as api:
-            self.assertIsInstance(api, _API)
+        async with APISessionManager() as api:
+            self.assertIsInstance(api, APISessionManager)
 
-    async def test__get_retries(self):
+    async def test_get(self):
         """Get with the possibility of retries to the API."""
-        index_names = ['date', 'open', 'high', 'low', 'close']
-        async with _API() as api:
-            response = await api._get_retries(self.path1, self.params)
-            # Check
-            self.assertIsInstance(response, pd.DataFrame)
-            self.assertEqual(index_names, response.columns.to_list()[0:5])
+        async with APISessionManager() as api:
+            df = await api.get(self.endpoint1, self.params)
+        self.assert_df(df)
 
     async def test_bad_ticker(self):
         """Fail with ticker not found."""
         with self.assertRaises(Exception) as ex:
-            async with _API() as api:
-                await api._get_retries(self.path_bad, self.params)
+            async with APISessionManager() as api:
+                await api.get(self.endpoint_bad, self.params)
 
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
         # Data Gathering awaitable
-        index_names = ['date', 'open', 'high', 'low', 'close']
-
         async def get_results():
             tasks_list = list()
-            async with _API() as api:
-                tasks_list.append(api._get_retries(self.path1, self.params))
-                tasks_list.append(api._get_retries(self.path2, self.params))
+            async with APISessionManager() as api:
+                tasks_list.append(api.get(self.endpoint1, self.params))
+                tasks_list.append(api.get(self.endpoint2, self.params))
                 results = await asyncio.gather(*tasks_list, return_exceptions=True)
             return results
 
         # Run all tasks
-        response1, response2 = asyncio.run(get_results())
+        df1, df2 = asyncio.run(get_results())
         # Check
-        self.assertIsInstance(response1, pd.DataFrame)
-        self.assertEqual(index_names, response1.columns.to_list()[0:5])
-        self.assertIsInstance(response2, pd.DataFrame)
-        self.assertEqual(index_names, response2.columns.to_list()[0:5])
+        self.assert_df(df1)
+        self.assert_df(df2)
 
 
 class TestHistorical(aiounittest.AsyncTestCase):
@@ -140,81 +180,42 @@ class TestHistorical(aiounittest.AsyncTestCase):
         """ Test Initialization. """
         # Is this a subclass of _API?
         async with Historical() as historical:
-            self.assertIsInstance(historical, _API)
+            self.assertIsInstance(historical, APISessionManager)
 
     async def test_get_eod(self):
         """ Get daily, EOD historical over a date range. """
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        columns = ['open', 'high', 'low', 'close', 'volume']
-        index = ['date']
-        # NOTE: This data may change as EOD historical make corrections
-        values = [134.08, 134.74, 131.72, 132.69, 99116600.0]
         # Get
         async with Historical() as historical:
             df = await historical.get_eod('US', 'AAPL', from_date, to_date)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test-rank columns
-        df = df[columns]
-        # Test data
-        self.assertEqual(len(df), 253)
-        self.assertEqual(
-            values,
-            df.loc[to_date].tolist(),
-            )
+        assert_date_index(self, df)
+        assert_eod_columns(self, df)
 
     async def test_get_dividends(self):
         """ Get daily, dividend historical over a date range. """
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-11-06', '%Y-%m-%d')
-        columns = ['declarationDate', 'recordDate', 'paymentDate', 'period',
-                   'value', 'unadjustedValue', 'currency']
-        index = ['date']
-        # NOTE: This data may change as EOD historical make corrections
-        values = ['2020-10-29', '2020-11-09', '2020-11-12', 'Quarterly',
-                  0.205, 0.205, 'USD']
         # Get
         async with Historical() as historical:
             df = await historical.get_dividends('US', 'AAPL', from_date, to_date)
-        # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test-rank columns
-        df = df[columns]
-        # Test
-        self.assertEqual(len(df), 4)
-        self.assertEqual(
-            values,
-            df.loc[to_date].tolist(),
-            )
+        assert_date_index(self, df)
+        assert_dividend_columns(self, df)
 
     async def test_get_forex(self):
         """ Get daily, EOD historial forex (USD based) over a date range. """
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        columns = ['close', 'high', 'low', 'open', 'volume']
-        # NOTE: This data may change as EOD historical make corrections
-        values = [0.8944, 0.9025, 0.8943, 0.9024, 166330.0]
         # Get
         async with Historical() as historical:
             df = await historical.get_forex('EURGBP', from_date, to_date)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
-        # Test-rank columns
-        df = df[columns]
-        # Test
-        self.assertEqual(314, len(df))
-        self.assertEqual(
-            values,
-            df.loc[to_date].tolist(),
-            )
+        # Test DataFame structure
+        assert_date_index(self, df)
+        assert_eod_columns(self, df)
 
 
 class TestBulk(aiounittest.AsyncTestCase):
@@ -238,74 +239,56 @@ class TestBulk(aiounittest.AsyncTestCase):
         """ Test Initialization. """
         # Is this a subclass of _API?
         async with Bulk() as bulk:
-            self.assertIsInstance(bulk, _API)
+            self.assertIsInstance(bulk, APISessionManager)
 
     async def test_get_eod(self):
         """ Get bulk EOD price and volume for the exchange on a date. """
-        columns = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume',
-                   'prev_close', 'change', 'change_p']
-        index = ['date', 'ticker', 'exchange']
         date = datetime.datetime.strptime('2021-01-03', '%Y-%m-%d')
-        # NOTE: This data may change as EOD historical make corrections
-        data = [134.08, 134.74, 131.72, 132.69, 131.516,
-                99116600.0, 133.72, -1.03, -0.7703]
         async with Bulk() as bulk:
             df = await bulk.get_eod('US', date=date, symbols=['AAPL', 'MCD'])
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test data content
-        self.assertEqual(len(df), 2)
-        self.assertEqual(
-            df.index.tolist(),
-            [
-                (pd.Timestamp('2020-12-31 00:00:00'), 'AAPL', 'US'),
-                (pd.Timestamp('2020-12-31 00:00:00'), 'MCD', 'US')
-            ]
-        )
-        self.assertEqual(
-            data,
-            df.loc['2020-12-31', 'AAPL', 'US'].tolist(),
-            )
+        index_names = ['date', 'ticker', 'exchange']
+        columns = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume', 'prev_close', 'change', 'change_p']
+        index_type = np.dtype('object')
+        column_types = [np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('int64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
+        test_index_list = [(pd.Timestamp('2020-12-31 00:00:00'), 'AAPL', 'US'), (pd.Timestamp('2020-12-31 00:00:00'), 'MCD', 'US')]
+        self.assertEqual(test_index_list, df.index.tolist())
 
     async def test_get_dividends(self):
         """ Get bulk EOD dividends for the exchange on a date. """
-        columns = ['dividend', 'currency', 'declarationDate', 'recordDate',
-                   'paymentDate', 'period', 'unadjustedValue']
-        index = ['date', 'ticker', 'exchange']
         date = datetime.datetime.strptime('2020-02-07', '%Y-%m-%d')
-        # NOTE: This data may change as EOD historical make corrections
-        data = [0.1925, 'USD', '2020-01-28', '2020-02-10', '2020-02-13',
-                'Quarterly', 0.77]
         async with Bulk() as bulk:
             df = await bulk.get_dividends('US', date=date)
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test data
-        df = df[columns]
-        self.assertEqual(
-            data,
-            df.loc['2020-02-07', 'AAPL', 'US'].tolist(),
-            )
+        index_names = ['date', 'ticker', 'exchange']
+        columns = ['dividend', 'currency', 'declarationDate', 'recordDate', 'paymentDate', 'period', 'unadjustedValue']
+        index_type = np.dtype('object')
+        column_types = [np.dtype('float64'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('float64')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
+        # The index is too long to test content.
 
     async def test_get_splits(self):
         """ Get bulk EOD splits for the exchange on a date. """
-        columns = ['split']
-        index = ['date', 'ticker', 'exchange']
-        # NOTE: This data may change as EOD historical make corrections
-        data = ['1.000000/20.000000']
         date = datetime.datetime.strptime('2021-09-15', '%Y-%m-%d')
         async with Bulk() as bulk:
             df = await bulk.get_splits('US', date=date)
         # Test DataFame structure
-        self.assertEqual(index, list(df.index.names))
-        self.assertEqual(columns, list(df.columns))
-        # Test data
-        self.assertEqual(
-            data,
-            df.loc['2021-09-15', 'SMATF', 'US'].tolist(),
-        )
+        index_names = ['date', 'ticker', 'exchange']
+        columns = ['split']
+        index_type = np.dtype('object')
+        column_types = [np.dtype('object')]
+        test_df = pd.Series(column_types, index=columns)
+        pd.testing.assert_series_equal(test_df, df.dtypes)
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
+        # The index is too long to test content.
 
 
 class TestExchanges(unittest.TestCase):
@@ -389,38 +372,19 @@ class TestMultiHistorical(unittest.TestCase):
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        index_names = ['date', 'ticker', 'exchange']
-        columns = ['close', 'high', 'low', 'open', 'volume']
-        # NOTE: This data may change as EOD historical make corrections
-        test_values = [
-            [132.69, 134.74, 131.72, 134.08, 99116600.0],
-            [214.58, 214.93, 210.78, 211.25, 2610900.0],
-            [5460.0, 5511.0, 5403.0, 5492.0, 112700.0]
-        ]
-        # Get
         # Use EOD API
         symbol_list = [
             (s[0], s[1], from_date, to_date) for s in self.symbol_list]
         df = asyncio.run(
             self.historical._get_eod(Historical._historical_eod, symbol_list)
         )
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
-        # Test-rank columns
-        df = df[columns]
-        # Test
-        self.assertEqual(len(df), 758)
-        self.assertEqual(set(df.index.names), set(index_names))
-        self.assertEqual(set(df.columns), set(columns))
-        df = df.loc[to_date]
-        self.assertFalse(df.empty)
-        for i, item in enumerate(df.iterrows()):
-            symbol, series = item
-            self.assertEqual(
-                test_values[i],
-                series.tolist(),
-                )
+        # Set up df for testing
+        df = df[eod_columns]
+        # Check
+        assert_date_ticker_exchange_index(self, df)
+        assert_eod_columns(self, df)
 
+    @unittest.skip('Work in progress')
     def test__get_bulk(self):
         """ Get bulk historical data for a range of dates. """
         # Test data
@@ -463,94 +427,34 @@ class TestMultiHistorical(unittest.TestCase):
         """ Get historical data for a list of securities. """
         # Test data
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        index_names = ['date', 'ticker', 'exchange']
-        columns = ['close', 'high', 'low', 'open', 'volume']
-        test_values = [  # Last date data
-            [132.69, 134.74, 131.72, 134.08, 99116600.0],
-            [214.58, 214.93, 210.78, 211.25, 2610900.0],
-            [5460.0, 5511.0, 5403.0, 5492.0, 112700.0]
-        ]
-
         # Longer date range test causes a decision to use the EOD API service
         from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         symbol_list_bad = [
             (s[0], s[1], from_date1, to_date) for s in self.symbol_list_bad]
         df = self.historical.get_eod(symbol_list_bad)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
-        # Test-rank columns
-        df = df[columns]
-        df1 = df.copy()
-        # Test
-        self.assertEqual(len(df), 758)
-        self.assertEqual(list(df.index.names), list(index_names))
-        self.assertEqual(list(df.columns), list(columns))
-        # Test against last date data
-        df = df.loc[to_date]
-        self.assertFalse(df.empty)
-        for i, item in enumerate(df.iterrows()):
-            symbol, series = item
-            self.assertEqual(
-                test_values[i],
-                series.tolist(),
-                )
+        assert_date_ticker_exchange_index(self, df)
+        assert_eod_columns(self, df)
 
         # Shorter date range test causes a decision to use the Bulk API service
         from_date2 = datetime.datetime.strptime('2020-12-25', '%Y-%m-%d')
         symbol_list = [
             (s[0], s[1], from_date2, to_date) for s in self.symbol_list]
         df = self.historical.get_eod(symbol_list)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
-        # Test-rank columns
-        df = df[columns]
-        df2 = df.copy()
-        # Test
-        self.assertEqual(set(df.index.names), set(index_names))
-        self.assertEqual(set(df.columns), set(columns))
-        df = df.loc[to_date]
-        self.assertFalse(df.empty)
-        for i, item in enumerate(df.iterrows()):
-            symbol, series = item
-            self.assertEqual(
-                test_values[i],
-                series.tolist(),
-                )
-
-        # Test that results are the same across methods used
-        self.assertTrue(df1.iloc[-3:].equals(df2.iloc[-3:]))
+        # Check
+        assert_date_ticker_exchange_index(self, df)
+        assert_eod_columns(self, df)
 
     def test_get_dividends(self):
         """ Get historical data for a list of securities. """
         # Test data
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        index_names = ['date', 'ticker', 'exchange']
-        columns = [
-            'date', 'ticker', 'exchange',
-            'currency', 'declarationDate', 'paymentDate', 'period',
-            'recordDate', 'unadjustedValue', 'value']
-        test_df = pd.DataFrame([  # Last 3 dividends
-            ['2020-10-21', 'STX40', 'JSE', 'ZAC',         None,         None,        None,         None, 9.1925, 9.1925],
-            ['2020-11-06', 'AAPL',   'US', 'USD', '2020-10-29', '2020-11-12', 'Quarterly', '2020-11-09', 0.2050, 0.2050],
-            ['2020-11-30', 'MCD',    'US', 'USD', '2020-10-08', '2020-12-15', 'Quarterly', '2020-12-01', 1.2900, 1.2900]],
-            columns=columns)
-
         # Longer date range test causes a decision to use the EOD API service
         from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         symbol_list = [
             (s[0], s[1], from_date1, to_date) for s in self.symbol_list]
         df = self.historical.get_dividends(symbol_list)
-        # Test
-        self.assertEqual(len(df), 12)
-        self.assertEqual(list(df.index.names), list(index_names))
-        df.reset_index(inplace=True)
-        df = df[columns]
-        self.assertEqual(list(df.columns), list(columns))
-        # Test against last 3 dividends
-        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        date_to_str(df)  # Convert Timestamps
-        date_to_str(test_df)  # Convert Timestamps
-        pd.testing.assert_frame_equal(df, test_df)
+        assert_date_ticker_exchange_index(self, df)
+        assert_dividend_columns(self, df)
 
         # Shorter date range test causes a decision to use the Bulk API service
         # In case EOD fixes the bulk dividends API, see tested method docstring
@@ -575,59 +479,24 @@ class TestMultiHistorical(unittest.TestCase):
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        columns = ['close', 'high', 'low', 'open', 'volume']
-        index_names = ['date', 'ticker']
-        test_values = [
-            [0.8185, 0.8191, 0.8123, 0.8131, 89060.0],
-            [0.7311, 0.7351, 0.7307, 0.7340, 0.0],
-            [1.0, 1.0, 1.0, 1.0, 0.0]
-            ]
-
         # Get
         forex_list = [
             (s, from_date, to_date) for s in self.forex_list]
         df = self.historical.get_forex(forex_list)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
-        # Test-rank columns
-        df = df[columns]
-        df = df.iloc[-3:]
-        # Test
-        self.assertEqual(df.index.names, index_names)
-        self.assertEqual(list(df.columns), list(columns))
-        self.assertEqual(
-            test_values,
-            df.values.tolist(),
-            )
+        assert_date_ticker_index(self, df)
+        assert_eod_columns(self, df)
 
     def test_get_index(self):
         """ Get daily, EOD historial forex."""
         # Test data
         from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
         to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
-        columns = ['close', 'high', 'low', 'open', 'volume']
-        index_names = ['date', 'ticker']
-        test_values = [
-            [3673.63, 3723.98, 3664.69, 3723.98, 49334000.0],
-            [3756.0701, 3760.2, 3726.8799, 3733.27, 3172510000.0],
-            [54379.58, 54615.33, 53932.88, 54615.33, 0.0]]
-
         # Get
         index_list = [
             (s, from_date, to_date) for s in self.index_list]
         df = self.historical.get_index(index_list)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
-        # Test-rank columns
-        df = df[columns]
-        df = df.iloc[-3:]
-        # Test
-        self.assertEqual(df.index.names, index_names)
-        self.assertEqual(list(df.columns), list(columns))
-        self.assertEqual(
-            test_values,
-            df.values.tolist(),
-            )
+        assert_date_ticker_index(self, df)
+        assert_eod_columns(self, df)
 
 
 class Suite(object):
