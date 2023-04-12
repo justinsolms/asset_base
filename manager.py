@@ -604,7 +604,7 @@ class AssetBase(object):
 
         """
         if len(asset_list) == 0:
-            raise ValueError('Argument id_list may not be empty.')
+            raise ValueError('Argument `asset_list` may not be empty.')
 
         # Get a list of cash securities
         cash = [item for item in asset_list if isinstance(item, Cash)]
