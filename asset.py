@@ -667,7 +667,7 @@ class Cash(Asset):
         for currency in currency_list:
             Cash.factory(session, currency.ticker)
 
-    def time_series(self, date_index, *args):
+    def time_series(self, date_index, identifier='asset'):
         """Retrieve historic time-series for a set of class instances.
 
         Price time-series for cash is a unity time-series as the price of cash
@@ -684,10 +684,22 @@ class Cash(Asset):
             time-series are to be appended to. Without this parameter it is
             impossible to know in advance how long the cash time-series is
             required to be.
-        args : tuple of any number of positional arguments, optional
-            Dummy arguments to be compatible with general calls to all security
-            class ``time_series`` methods. These arguments will be ignored.
+        identifier : str, optional
+            By default the column labels of the returned ``pandas.DataFrame``
+            are ``asset.Asset`` (or polymorph child instances) provided by in
+            the ``asset_list`` argument. With the `identifier` argument one can
+            specify if these column labels are to be substituted:
 
+            'asset':
+                The default ``asset.Asset`` (or polymorph child instances)
+                provided by in the `asset_list` argument.
+            'id':
+                The database table `id` column entry.
+            'ticker':
+                The exchange ticker
+            'identify_code':
+                That which will be returned by the ``asset.Cash.identity_code``
+                attribute.
         """
         if not isinstance(date_index, pd.DatetimeIndex):
             raise ValueError('Unexpected date_index argument type.')
@@ -697,7 +709,18 @@ class Cash(Asset):
 
         # Add the entity (Cash) as the Series name for later use as column a
         # label in concatenation into a DataFrame
-        series.name = self
+        # TODO: Replace with a match statement
+        if identifier == 'asset':
+            series.name = self
+        elif identifier == 'id':
+            series.name = self.id
+        elif identifier == 'ticker':
+            series.name = self.ticker
+        elif identifier == 'identity_code':
+            series.name = self.identity_code
+        else:
+            raise ValueError(
+                f'Unexpected `identifier` argument `{identifier}`.')
 
         return series
 
@@ -2018,7 +2041,7 @@ class ListedEquity(Listed):
 
     def time_series(self,
                     series='price', price_item='close', return_type='price',
-                    tidy=False):
+                    identifier='asset'):
         """Retrieve historic time-series for this instance.
 
         TODO: Remove `series` argument and use to get price series only
@@ -2051,6 +2074,24 @@ class ListedEquity(Listed):
                 The price period-on-period price series inclusive of the extra
                 yield due to dividends paid. The total_price series start value
                 is the same as the price start value.
+        identifier : str, optional
+            By default the column labels of the returned ``pandas.DataFrame``
+            are ``asset.Asset`` (or polymorph child instances) provided by in
+            the ``asset_list`` argument. With the `identifier` argument one can
+            specify if these column labels are to be substituted:
+
+            'asset':
+                The default ``asset.Asset`` (or polymorph child instances)
+                provided by in the `asset_list` argument.
+            'id':
+                The database table `id` column entry.
+            'isin':
+                The standard security ISO 6166 ISIN number.
+            'ticker':
+                The exchange ticker
+            'identify_code':
+                That which will be returned by the
+                ``asset.ListedEquity.identity_code`` attribute.
         tidy : bool
             When ``True`` then prices are tidied up by removing outliers.
 
@@ -2197,7 +2238,20 @@ class ListedEquity(Listed):
 
         # Add the entity (ListedEquity) as the Series name for later use as
         # column a label in concatenation into a DataFrame
-        result.name = self
+        # TODO: Replace with a match statement
+        if identifier == 'asset':
+            result.name = self
+        elif identifier == 'id':
+            result.name = self.id
+        elif identifier == 'ticker':
+            result.name = self.ticker
+        elif identifier == 'isin':
+            result.name = self.isin
+        elif identifier == 'identity_code':
+            result.name = self.identity_code
+        else:
+            raise ValueError(
+                f'Unexpected `identifier` argument `{identifier}`.')
 
         return result
 

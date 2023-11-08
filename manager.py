@@ -528,8 +528,8 @@ class AssetBase(object):
 
     def time_series(self, asset_list,
                     series='price', price_item='close', return_type='price',
-                    tidy=True, identifier='id', date_index=None):
-        """Return historic time-series for a list of entities.
+                    identifier='asset', tidy=True, date_index=None):
+        """Return historic price or return, time-series for a list of assets.
 
         TODO: Remove `series` argument and use to get price series only
 
@@ -542,7 +542,7 @@ class AssetBase(object):
         ----------
         asset_list : list of Asset (or polymorph class) instances
             A list of securities or assets for which time series are required.
-        series : str
+        series : str, optional
             Which security series:
 
             'price':
@@ -551,7 +551,7 @@ class AssetBase(object):
                 The annualized distribution yield.
             'volume':
                 The volume of trade (total units of trade) in the period.
-        price_item : str
+        price_item : str, optional
             The specific item of price. Only valid for the `price` type:
 
             'close' :
@@ -562,7 +562,7 @@ class AssetBase(object):
                 The period's lowest price.
             'high' :
                 The period's highest price.
-        return_type : str
+        return_type : str, optional
             The specific view of the price series:
 
             'price':
@@ -576,57 +576,79 @@ class AssetBase(object):
                 The price period-on-period price series inclusive of the extra
                 yield due to dividends paid. The total_price series start value
                 is the same as the price start value.
-        tidy : bool
+        identifier : str, optional
+            By default the column labels of the returned ``pandas.DataFrame``
+            are ``asset.Asset`` (or polymorph child instances) provided by in
+            the ``asset_list`` argument. With the `identifier` argument one can
+            specify if these column labels are to be substituted:
+
+            'asset':
+                The default ``asset.Asset`` (or polymorph child instances)
+                provided by in the `asset_list` argument.
+            'id':
+                The database table `id` column entry.
+            'isin':
+                The standard security ISO 6166 ISIN number.
+            'ticker':
+                The exchange ticker
+            'identify_code':
+                That which will be returned by the ``asset.Asset.identity_code``
+                attribute.
+        tidy : bool, optional
             When ``True`` then prices are tidied up by removing outliers.
         date_index : pandas.DatetimeIndex, optional
-            If there are non-cash securities specified by `id_list` then this
-            argument is overridden by the resulting union of
-            `pandas.DatetimeIndex` of the time-series for all specified non-cash
-            securities. If the `id_list` argument specifies only `Cash` security
-            ids then this data range is not optional and is required . See
-            documentation on `Cash.time_series`.
+            If there are non-cash securities specified in the `asset_list` then
+            this argument is overridden by the union of the date index (the
+            `pandas.DatetimeIndex`) of all the non-`Cash` security time-series.
+            If the `asset_list` argument specifies only `Cash` securities then
+            this data range is not optional and is required. It could be
+            provided by the the index of another `time_series` result. See
+            documentation on ``Cash.time_series`` for the explanation.
 
         Returns
         -------
         pandas.DataFrame
-            A column of data for each  ``.asset.Asset`` instance in the
-            ``asset-list`` argument. The column labels are the ``.asset.Asset``
-            instances.
+            A column of data for each  ``.asset.Asset`` instance (or polymorph)
+            in the ``asset-list`` argument. The column labels are the
+            ``.asset.Asset`` instances.
 
         Raises
         ------
         ValueError
             Argument id_list may not be empty.
-        ValueError
-            Argument id_list has entries not found in session.
-        ValueError
-            Argument id_list must contain at least one non-cash security.
+        Exception
+            Expected non-cash securities in asset_list.
+
+        See also
+        --------
+        Cash.time_series
 
         """
         if len(asset_list) == 0:
             raise ValueError('Argument `asset_list` may not be empty.')
 
         # Get a list of cash securities
-        cash = [item for item in asset_list if isinstance(item, Cash)]
+        cash_list = [item for item in asset_list if isinstance(item, Cash)]
 
         # Get a list of non-cash securities
-        non_cash = [asset for asset in asset_list if not isinstance(asset, Cash)]
+        non_cash_list = [
+            asset for asset in asset_list if not isinstance(asset, Cash)]
 
         #  A date-index must be provided to specify the cash data date range if
         #  there are no non-cash securities from which the date range may be
         #  derived.
-        if len(non_cash) == 0 and date_index is None:
+        if len(non_cash_list) == 0 and date_index is None:
             raise Exception('Expected non-cash securities in asset_list.')
 
         data_list = list()
-        if len(non_cash) > 0:
+        if len(non_cash_list) > 0:
             # Create a pandas.DataFrame of non-cash securities
             data_list = list()
             # For non-Cash entities
-            for asset in non_cash:
+            for asset in non_cash_list:
                 # Slip and warn for absent time-series.
                 try:
-                    data = asset.time_series(series, price_item, return_type, tidy)
+                    data = asset.time_series(series, price_item, return_type)
                 except TimeSeriesNoData as ex:
                     logger.warning(ex)
                 else:
@@ -634,13 +656,13 @@ class AssetBase(object):
             data = pd.concat(data_list, axis=1, sort=True)
             # Any data_index  argument is ignored as non-cash security data date
             # range takes precedence.
-            date_index = data.index
-            data_list = [data]  # For appending to.
+            data_list = [data]  # List for appending Cash securities to.
 
         # For all non-Cash entities. We need the previous data DatetimeIndex to
         # construct Cash time series. See docs.
-        for asset in cash:
-            data = asset.time_series(date_index, identifier)
+        date_index = data.index
+        for asset in cash_list:
+            data = asset.time_series(date_index)
             data_list.append(data)
         # Concatenate the separate data in the list into one pandas.DataFrame.
         data = pd.concat(data_list, axis=1, sort=True)
@@ -651,6 +673,24 @@ class AssetBase(object):
         # Warning if a dataframe has mixed currency time series.
         if len(set(s.currency for s in data.columns)) > 1:
             logger.warning('The DataFrame data is of mixed currencies.')
+
+        # Replace column labels as specified by the identifier arg
+        # TODO: Replace with a match statement
+        if identifier == 'asset':
+            id_dict = {}
+        elif identifier == 'id':
+            id_dict = {asset:asset.id for asset in asset_list}
+        elif identifier == 'isin':
+            id_dict = {asset:asset.isin for asset in asset_list}
+        elif identifier == 'ticker':
+            id_dict = {asset:asset.ticker for asset in asset_list}
+        elif identifier == 'identity_code':
+            id_dict = {asset:asset.identity_code for asset in asset_list}
+        else:
+            raise ValueError(
+                f'Unexpected `identifier` argument `{identifier}`.')
+        data = data.rename(columns=id_dict)
+        data.columns.name = identifier
 
         # Return all time series in one pandas.DataFrame.
         return data
