@@ -2631,7 +2631,7 @@ class ExchangeTradeFund(ListedEquity):
 
     def time_series(self,
                     series='price', price_item='close', return_type='price',
-                    tidy=False, include_index=False):
+                    identifier='asset', tidy=False, include_index=False):
         """Retrieve historic time-series for this instance.
 
         Parameters
@@ -2662,6 +2662,24 @@ class ExchangeTradeFund(ListedEquity):
                 The price period-on-period price series inclusive of the extra
                 yield due to dividends paid. The total_price series start value
                 is the same as the price start value.
+        identifier : str, optional
+            By default the column labels of the returned ``pandas.DataFrame``
+            are ``asset.Asset`` (or polymorph child instances) provided by in
+            the ``asset_list`` argument. With the `identifier` argument one can
+            specify if these column labels are to be substituted:
+
+            'asset':
+                The default ``asset.Asset`` (or polymorph child instances)
+                provided by in the `asset_list` argument.
+            'id':
+                The database table `id` column entry.
+            'isin':
+                The standard security ISO 6166 ISIN number.
+            'ticker':
+                The exchange ticker
+            'identify_code':
+                That which will be returned by the
+                ``asset.ListedEquity.identity_code`` attribute.
         tidy : bool
             When ``True`` then prices are tidied up by removing outliers.
         include_index : bool
@@ -2683,7 +2701,7 @@ class ExchangeTradeFund(ListedEquity):
         ListedEquity.time_series
 
         """
-        data = super().time_series(series, price_item, return_type, tidy)
+        data = super().time_series(series, price_item, return_type, identifier)
 
         # Do we back-fill the the replicated index time-series history
         if not include_index:
