@@ -19,83 +19,102 @@ import numpy as np
 import pandas as pd
 
 # Classes to be tested
-from ..eod_historical_data import APISessionManager, Exchanges
-from ..eod_historical_data import Historical
-from ..eod_historical_data import Bulk
-from ..eod_historical_data import MultiHistorical
-from ..eod_historical_data import date_index_name, eod_columns, dividend_columns
+from asset_base.eod_historical_data import APISessionManager, Exchanges
+from asset_base.eod_historical_data import Historical
+from asset_base.eod_historical_data import Bulk
+from asset_base.eod_historical_data import MultiHistorical
+from asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns
 
 
 def assert_date_index(tester, df):
     """Test datetime index."""
-    index_type = np.dtype('datetime64[ns]')
+    index_type = np.dtype("datetime64[ns]")
     tester.assertEqual(index_type, df.index.dtype)
     tester.assertEqual(date_index_name, df.index.name)
     tester.assertTrue(df.index.is_unique)
 
+
 def assert_date_ticker_index(tester, df):
     """Test datetime, ticker index."""
-    index_columns = [date_index_name, 'ticker']
-    index_types = [np.dtype('datetime64[ns]'), np.dtype('object')]
+    index_columns = [date_index_name, "ticker"]
+    index_types = [np.dtype("datetime64[ns]"), np.dtype("object")]
     test_df = pd.Series(index_types, index=index_columns)  #
     pd.testing.assert_series_equal(test_df, df.index.dtypes)
     tester.assertTrue(df.index.is_unique)
 
+
 def assert_date_ticker_exchange_index(tester, df):
     """Test datetime, ticker, exchange index."""
-    index_columns = [date_index_name, 'ticker', 'exchange']
-    index_types = [np.dtype('datetime64[ns]'), np.dtype('object'), np.dtype('object')]
+    index_columns = [date_index_name, "ticker", "exchange"]
+    index_types = [np.dtype("datetime64[ns]"), np.dtype("object"), np.dtype("object")]
     test_df = pd.Series(index_types, index=index_columns)  #
     pd.testing.assert_series_equal(test_df, df.index.dtypes)
     tester.assertTrue(df.index.is_unique)
+
 
 def assert_eod_columns(tester, df):
     """Test EOD DataFame columns."""
     tester.assertIsInstance(df, pd.DataFrame)
     # Test columns
-    column_types = [np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('int64')]
+    column_types = [
+        np.dtype("float64"),
+        np.dtype("float64"),
+        np.dtype("float64"),
+        np.dtype("float64"),
+        np.dtype("float64"),
+        np.dtype("int64"),
+    ]
     test_df = pd.Series(column_types, index=eod_columns)  #
     pd.testing.assert_series_equal(test_df, df.dtypes)
+
 
 def assert_dividend_columns(tester, df):
     """Test dividend DataFame columns."""
     tester.assertIsInstance(df, pd.DataFrame)
     # Test columns
-    column_types = [np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('float64'), np.dtype('float64'), np.dtype('object')]
+    column_types = [
+        np.dtype("object"),
+        np.dtype("object"),
+        np.dtype("object"),
+        np.dtype("object"),
+        np.dtype("float64"),
+        np.dtype("float64"),
+        np.dtype("object"),
+    ]
     test_df = pd.Series(column_types, index=dividend_columns)  #
     pd.testing.assert_series_equal(test_df, df.dtypes)
 
 
 class TestAPI(aiounittest.AsyncTestCase):
-    """ Direct API query, response and result checking. """
+    """Direct API query, response and result checking."""
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
-        domain = 'eodhistoricaldata.com'
-        service = '/api/eod'
-        ticker1 = 'STX40'
-        ticker2 = 'STXIND'
-        ticker_bad = 'BADTICKER'
-        exchange = 'JSE'
+        """Set up class test fixtures."""
+        domain = "eodhistoricaldata.com"
+        service = "/api/eod"
+        ticker1 = "STX40"
+        ticker2 = "STXIND"
+        ticker_bad = "BADTICKER"
+        exchange = "JSE"
 
         # Path must append ticker and short exchange code to service
-        endpoint1 = '{}/{}.{}'.format(service, ticker1, exchange)
-        endpoint2 = '{}/{}.{}'.format(service, ticker2, exchange)
-        endpoint_bad = '{}/{}.{}'.format(service, ticker_bad, exchange)
+        endpoint1 = "{}/{}.{}".format(service, ticker1, exchange)
+        endpoint2 = "{}/{}.{}".format(service, ticker2, exchange)
+        endpoint_bad = "{}/{}.{}".format(service, ticker_bad, exchange)
 
-        cls.url1 = f'https://{domain}{endpoint1}'
-        cls.url2 = f'https://{domain}{endpoint2}'
-        cls.url_bad = f'https://{domain}{endpoint_bad}'
+        cls.url1 = f"https://{domain}{endpoint1}"
+        cls.url2 = f"https://{domain}{endpoint2}"
+        cls.url_bad = f"https://{domain}{endpoint_bad}"
 
-        from_date = '2022-01-01'
-        to_date = '2022-01-07'
+        from_date = "2022-01-01"
+        to_date = "2022-01-07"
         cls.params = dict(
             from_date=from_date,
             to_date=to_date,
-            fmt='json',  # Default to CSV table. See NOTE in _get_retries!
-            period='d',  # Default to daily sampling period
-            order='a',  # Default to ascending order
+            fmt="json",  # Default to CSV table. See NOTE in _get_retries!
+            period="d",  # Default to daily sampling period
+            order="a",  # Default to ascending order
         )
         cls.endpoint1 = endpoint1
         cls.endpoint2 = endpoint2
@@ -103,11 +122,11 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     def tearDown(self):
@@ -116,16 +135,16 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     def assert_df(self, df):
         # Set up for testing
-        df['date'] = pd.to_datetime(df['date'])
+        df["date"] = pd.to_datetime(df["date"])
         df.set_index(date_index_name, inplace=True)
         df = df[eod_columns]
-        df['open'] = df['open'].astype('float64')
+        df["open"] = df["open"].astype("float64")
         # Check
         assert_date_index(self, df)
         assert_eod_columns(self, df)
 
     async def test___init__(self):
-        """ Test Initialization. """
+        """Test Initialization."""
         async with APISessionManager() as api:
             self.assertIsInstance(api, APISessionManager)
 
@@ -137,12 +156,13 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     async def test_bad_ticker(self):
         """Fail with ticker not found."""
-        with self.assertRaises(Exception) as ex:
+        with self.assertRaises(Exception):
             async with APISessionManager() as api:
                 await api.get(self.endpoint_bad, self.params)
 
     def test_runner(self):
         """Get multiple requests tasks in the runner."""
+
         # Data Gathering awaitable
         async def get_results():
             tasks_list = list()
@@ -160,114 +180,153 @@ class TestAPI(aiounittest.AsyncTestCase):
 
 
 class TestHistorical(aiounittest.AsyncTestCase):
-    """ Using security AAPL.US (Apple Inc.). """
+    """Using security AAPL.US (Apple Inc.)."""
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         pass
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     async def test___init__(self):
-        """ Test Initialization. """
+        """Test Initialization."""
         # Is this a subclass of _API?
         async with Historical() as historical:
             self.assertIsInstance(historical, APISessionManager)
 
     async def test_get_eod(self):
-        """ Get daily, EOD historical over a date range. """
+        """Get daily, EOD historical over a date range."""
         # Test data
-        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Get
         async with Historical() as historical:
-            df = await historical.get_eod('US', 'AAPL', from_date, to_date)
+            df = await historical.get_eod("US", "AAPL", from_date, to_date)
         # Test DataFame structure
         assert_date_index(self, df)
         assert_eod_columns(self, df)
 
     async def test_get_dividends(self):
-        """ Get daily, dividend historical over a date range. """
+        """Get daily, dividend historical over a date range."""
         # Test data
-        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        to_date = datetime.datetime.strptime('2020-11-06', '%Y-%m-%d')
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-11-06", "%Y-%m-%d")
         # Get
         async with Historical() as historical:
-            df = await historical.get_dividends('US', 'AAPL', from_date, to_date)
+            df = await historical.get_dividends("US", "AAPL", from_date, to_date)
         assert_date_index(self, df)
         assert_dividend_columns(self, df)
 
     async def test_get_forex(self):
-        """ Get daily, EOD historial forex (USD based) over a date range. """
+        """Get daily, EOD historial forex (USD based) over a date range."""
         # Test data
-        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Get
         async with Historical() as historical:
-            df = await historical.get_forex('EURGBP', from_date, to_date)
+            df = await historical.get_forex("EURGBP", from_date, to_date)
         # Test DataFame structure
         assert_date_index(self, df)
         assert_eod_columns(self, df)
 
 
 class TestBulk(aiounittest.AsyncTestCase):
-    """ Using security AAPL.US (Apple Inc.) and MCD.US (McDonald's Inc.). """
+    """Using security AAPL.US (Apple Inc.) and MCD.US (McDonald's Inc.)."""
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         pass
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     async def test___init__(self):
-        """ Test Initialization. """
+        """Test Initialization."""
         # Is this a subclass of _API?
         async with Bulk() as bulk:
             self.assertIsInstance(bulk, APISessionManager)
 
     async def test_get_eod(self):
-        """ Get bulk EOD price and volume for the exchange on a date. """
-        date = datetime.datetime.strptime('2021-01-03', '%Y-%m-%d')
+        """Get bulk EOD price and volume for the exchange on a date."""
+        date = datetime.datetime.strptime("2021-01-03", "%Y-%m-%d")
         async with Bulk() as bulk:
-            df = await bulk.get_eod('US', date=date, symbols=['AAPL', 'MCD'])
+            df = await bulk.get_eod("US", date=date, symbols=["AAPL", "MCD"])
         # Test DataFame structure
-        index_names = ['date', 'ticker', 'exchange']
-        columns = ['open', 'high', 'low', 'close', 'adjusted_close', 'volume', 'prev_close', 'change', 'change_p']
-        index_type = np.dtype('object')
-        column_types = [np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64'), np.dtype('int64'), np.dtype('float64'), np.dtype('float64'), np.dtype('float64')]
+        index_names = ["date", "ticker", "exchange"]
+        columns = [
+            "open",
+            "high",
+            "low",
+            "close",
+            "adjusted_close",
+            "volume",
+            "prev_close",
+            "change",
+            "change_p",
+        ]
+        index_type = np.dtype("object")
+        column_types = [
+            np.dtype("float64"),
+            np.dtype("float64"),
+            np.dtype("float64"),
+            np.dtype("float64"),
+            np.dtype("float64"),
+            np.dtype("int64"),
+            np.dtype("float64"),
+            np.dtype("float64"),
+            np.dtype("float64"),
+        ]
         test_df = pd.Series(column_types, index=columns)
         pd.testing.assert_series_equal(test_df, df.dtypes)
         self.assertEqual(index_type, df.index.dtype)
         self.assertEqual(index_names, df.index.names)
-        test_index_list = [(pd.Timestamp('2020-12-31 00:00:00'), 'AAPL', 'US'), (pd.Timestamp('2020-12-31 00:00:00'), 'MCD', 'US')]
+        test_index_list = [
+            (pd.Timestamp("2020-12-31 00:00:00"), "AAPL", "US"),
+            (pd.Timestamp("2020-12-31 00:00:00"), "MCD", "US"),
+        ]
         self.assertEqual(test_index_list, df.index.tolist())
 
     async def test_get_dividends(self):
-        """ Get bulk EOD dividends for the exchange on a date. """
-        date = datetime.datetime.strptime('2020-02-07', '%Y-%m-%d')
+        """Get bulk EOD dividends for the exchange on a date."""
+        date = datetime.datetime.strptime("2020-02-07", "%Y-%m-%d")
         async with Bulk() as bulk:
-            df = await bulk.get_dividends('US', date=date)
+            df = await bulk.get_dividends("US", date=date)
         # Test DataFame structure
-        index_names = ['date', 'ticker', 'exchange']
-        columns = ['dividend', 'currency', 'declarationDate', 'recordDate', 'paymentDate', 'period', 'unadjustedValue']
-        index_type = np.dtype('object')
-        column_types = [np.dtype('float64'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('object'), np.dtype('float64')]
+        index_names = ["date", "ticker", "exchange"]
+        columns = [
+            "dividend",
+            "currency",
+            "declarationDate",
+            "recordDate",
+            "paymentDate",
+            "period",
+            "unadjustedValue",
+        ]
+        index_type = np.dtype("object")
+        column_types = [
+            np.dtype("float64"),
+            np.dtype("object"),
+            np.dtype("object"),
+            np.dtype("object"),
+            np.dtype("object"),
+            np.dtype("object"),
+            np.dtype("float64"),
+        ]
         test_df = pd.Series(column_types, index=columns)
         pd.testing.assert_series_equal(test_df, df.dtypes)
         self.assertEqual(index_type, df.index.dtype)
@@ -275,15 +334,15 @@ class TestBulk(aiounittest.AsyncTestCase):
         # The index is too long to test content.
 
     async def test_get_splits(self):
-        """ Get bulk EOD splits for the exchange on a date. """
-        date = datetime.datetime.strptime('2021-09-15', '%Y-%m-%d')
+        """Get bulk EOD splits for the exchange on a date."""
+        date = datetime.datetime.strptime("2021-09-15", "%Y-%m-%d")
         async with Bulk() as bulk:
-            df = await bulk.get_splits('US', date=date)
+            df = await bulk.get_splits("US", date=date)
         # Test DataFame structure
-        index_names = ['date', 'ticker', 'exchange']
-        columns = ['split']
-        index_type = np.dtype('object')
-        column_types = [np.dtype('object')]
+        index_names = ["date", "ticker", "exchange"]
+        columns = ["split"]
+        index_type = np.dtype("object")
+        column_types = [np.dtype("object")]
         test_df = pd.Series(column_types, index=columns)
         pd.testing.assert_series_equal(test_df, df.dtypes)
         self.assertEqual(index_type, df.index.dtype)
@@ -296,85 +355,118 @@ class TestExchanges(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         cls.exchanges = Exchanges()
-        cls.exchange = 'JSE'
+        cls.exchange = "JSE"
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     def test_get_exchanges(self):
         """Get the full list of supported exchanges."""
         test_columns = [
-            'Name', 'Code', 'OperatingMIC', 'Country', 'Currency',
-            'CountryISO2', 'CountryISO3']
-        test_row = [
-            'USA Stocks', 'US', 'XNAS, XNYS', 'USA', 'USD', 'US','USA']
+            "Name",
+            "Code",
+            "OperatingMIC",
+            "Country",
+            "Currency",
+            "CountryISO2",
+            "CountryISO3",
+        ]
+        test_row = ["USA Stocks", "US", "XNAS, XNYS", "USA", "USD", "US", "USA"]
         table = self.exchanges.get_exchanges()
         self.assertEqual(test_columns, table.columns.tolist())
         self.assertEqual(
-            test_row, table[table['Name'] == 'USA Stocks'].values.tolist()[0])
+            test_row, table[table["Name"] == "USA Stocks"].values.tolist()[0]
+        )
 
     def test_get_exchange_symbol_list(self):
         """Get the full list symbols (tickers) on the exchange."""
         test_columns = [
-            'Code', 'Name', 'Country', 'Exchange', 'Currency', 'Type', 'Isin']
+            "Code",
+            "Name",
+            "Country",
+            "Exchange",
+            "Currency",
+            "Type",
+            "Isin",
+        ]
         test_row = [
-            'WHL', 'Woolworths Holdings Ltd', 'South Africa', 'JSE', 'ZAC',
-            'Common Stock', 'ZAE000063863']
+            "WHL",
+            "Woolworths Holdings Ltd",
+            "South Africa",
+            "JSE",
+            "ZAC",
+            "Common Stock",
+            "ZAE000063863",
+        ]
         table = self.exchanges.get_exchange_symbols(self.exchange)
         self.assertEqual(test_columns, table.columns.tolist())
-        self.assertEqual(
-            test_row, table[table['Code'] == 'WHL'].values.tolist()[0])
+        self.assertEqual(test_row, table[table["Code"] == "WHL"].values.tolist()[0])
 
     def test_get_indices_list(self):
         """Get a list of supported indices."""
         test_columns = [
-            'Code', 'Name', 'Country', 'Exchange', 'Currency', 'Type', 'Isin']
+            "Code",
+            "Name",
+            "Country",
+            "Exchange",
+            "Currency",
+            "Type",
+            "Isin",
+        ]
         test_row = [
-            'J200', 'FTSE/JSE Top 40', 'South Africa', 'INDX', 'ZAR',
-            'INDEX', None]
+            "J200",
+            "FTSE/JSE Top 40",
+            "South Africa",
+            "INDX",
+            "ZAR",
+            "INDEX",
+            None,
+        ]
         table = self.exchanges.get_indices()
         self.assertEqual(test_columns, table.columns.tolist())
-        self.assertEqual(
-            test_row, table[table['Code'] == 'J200'].values.tolist()[0])
+        self.assertEqual(test_row, table[table["Code"] == "J200"].values.tolist()[0])
 
 
 class TestMultiHistorical(unittest.TestCase):
-    """ Get bulk histories across exchanges, securities and date ranges."""
+    """Get bulk histories across exchanges, securities and date ranges."""
 
     @classmethod
     def setUpClass(cls):
-        """ Set up class test fixtures. """
+        """Set up class test fixtures."""
         cls.historical = MultiHistorical()
-        cls.symbol_list = (('AAPL', 'US'), ('MCD', 'US'), ('STX40', 'JSE'))
-        cls.forex_list = ('USDEUR', 'USDGBP', 'USDUSD')
-        cls.index_list = ('GSPC', 'ASX', 'J200')
+        cls.symbol_list = (("AAPL", "US"), ("MCD", "US"), ("STX40", "JSE"))
+        cls.forex_list = ("USDEUR", "USDGBP", "USDUSD")
+        cls.index_list = ("GSPC", "ASX", "J200")
         cls.symbol_list_bad = (
-            ('AAPL', 'US'), ('MCD', 'US'), ('BADONE', 'JSE'), ('STX40', 'JSE'))
+            ("AAPL", "US"),
+            ("MCD", "US"),
+            ("BADONE", "JSE"),
+            ("STX40", "JSE"),
+        )
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
-        """ Set up one test. """
+        """Set up one test."""
         pass
 
     def test___init__(self):
-        """ Test Initialization. """
+        """Test Initialization."""
         self.assertIsInstance(self.historical, MultiHistorical)
 
     def test__get_eod(self):
-        """ Get historical data for a list of securities. """
+        """Get historical data for a list of securities."""
         # Test data
-        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Use EOD API
-        symbol_list = [
-            (s[0], s[1], from_date, to_date) for s in self.symbol_list]
+        symbol_list = [(s[0], s[1], from_date, to_date) for s in self.symbol_list]
         df = asyncio.run(
             self.historical._get_eod(Historical._historical_eod, symbol_list)
         )
@@ -384,15 +476,23 @@ class TestMultiHistorical(unittest.TestCase):
         assert_date_ticker_exchange_index(self, df)
         assert_eod_columns(self, df)
 
-    @unittest.skip('Work in progress')
+    @unittest.skip("Work in progress")
     def test__get_bulk(self):
-        """ Get bulk historical data for a range of dates. """
+        """Get bulk historical data for a range of dates."""
         # Test data
-        from_date = datetime.datetime.strptime('2020-12-24', '%Y-%m-%d')
-        to_date = datetime.datetime.strptime('2020-12-30', '%Y-%m-%d')
+        from_date = datetime.datetime.strptime("2020-12-24", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-12-30", "%Y-%m-%d")
         columns = [
-            'change', 'change_p', 'close', 'high', 'low', 'open', 'prev_close', 'volume']
-        index_names = ['date', 'ticker', 'exchange']
+            "change",
+            "change_p",
+            "close",
+            "high",
+            "low",
+            "open",
+            "prev_close",
+            "volume",
+        ]
+        index_names = ["date", "ticker", "exchange"]
         # NOTE: This data may change as EOD historical make corrections
         test_values = [
             [-1.15, -0.8527, 133.72, 135.99, 133.4, 135.58, 134.87, 96452100.0],
@@ -401,14 +501,10 @@ class TestMultiHistorical(unittest.TestCase):
         ]
         # Get Bulk EOD (Type=None)
         df = asyncio.run(
-            self.historical._get_bulk(
-                self.symbol_list,
-                from_date, to_date,
-                type=None
-                )
-            )
+            self.historical._get_bulk(self.symbol_list, from_date, to_date, type=None)
+        )
         # Do not test for 'adjusted_close' as it changes
-        df.drop(columns='adjusted_close', inplace=True)
+        df.drop(columns="adjusted_close", inplace=True)
         # Test-rank columns
         df = df[columns]
         # Test
@@ -421,37 +517,36 @@ class TestMultiHistorical(unittest.TestCase):
             self.assertEqual(
                 test_values[i],
                 series.tolist(),
-                )
+            )
 
     def test_get_eod(self):
-        """ Get historical data for a list of securities. """
+        """Get historical data for a list of securities."""
         # Test data
-        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Longer date range test causes a decision to use the EOD API service
-        from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
+        from_date1 = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
         symbol_list_bad = [
-            (s[0], s[1], from_date1, to_date) for s in self.symbol_list_bad]
+            (s[0], s[1], from_date1, to_date) for s in self.symbol_list_bad
+        ]
         df = self.historical.get_eod(symbol_list_bad)
         assert_date_ticker_exchange_index(self, df)
         assert_eod_columns(self, df)
 
         # Shorter date range test causes a decision to use the Bulk API service
-        from_date2 = datetime.datetime.strptime('2020-12-25', '%Y-%m-%d')
-        symbol_list = [
-            (s[0], s[1], from_date2, to_date) for s in self.symbol_list]
+        from_date2 = datetime.datetime.strptime("2020-12-25", "%Y-%m-%d")
+        symbol_list = [(s[0], s[1], from_date2, to_date) for s in self.symbol_list]
         df = self.historical.get_eod(symbol_list)
         # Check
         assert_date_ticker_exchange_index(self, df)
         assert_eod_columns(self, df)
 
     def test_get_dividends(self):
-        """ Get historical data for a list of securities. """
+        """Get historical data for a list of securities."""
         # Test data
-        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Longer date range test causes a decision to use the EOD API service
-        from_date1 = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        symbol_list = [
-            (s[0], s[1], from_date1, to_date) for s in self.symbol_list]
+        from_date1 = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        symbol_list = [(s[0], s[1], from_date1, to_date) for s in self.symbol_list]
         df = self.historical.get_dividends(symbol_list)
         assert_date_ticker_exchange_index(self, df)
         assert_dividend_columns(self, df)
@@ -475,25 +570,23 @@ class TestMultiHistorical(unittest.TestCase):
         # self.assertTrue(df1.iloc[-N:].equals(df2.iloc[-N:]))
 
     def test_get_forex(self):
-        """ Get daily, EOD historial forex."""
+        """Get daily, EOD historial forex."""
         # Test data
-        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Get
-        forex_list = [
-            (s, from_date, to_date) for s in self.forex_list]
+        forex_list = [(s, from_date, to_date) for s in self.forex_list]
         df = self.historical.get_forex(forex_list)
         assert_date_ticker_index(self, df)
         assert_eod_columns(self, df)
 
     def test_get_index(self):
-        """ Get daily, EOD historial forex."""
+        """Get daily, EOD historial forex."""
         # Test data
-        from_date = datetime.datetime.strptime('2020-01-01', '%Y-%m-%d')
-        to_date = datetime.datetime.strptime('2020-12-31', '%Y-%m-%d')
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Get
-        index_list = [
-            (s, from_date, to_date) for s in self.index_list]
+        index_list = [(s, from_date, to_date) for s in self.index_list]
         df = self.historical.get_index(index_list)
         assert_date_ticker_index(self, df)
         assert_eod_columns(self, df)
@@ -527,7 +620,6 @@ class Suite(object):
         runner.run(self.suite)
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     suite = Suite()
     suite.run()

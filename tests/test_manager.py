@@ -26,19 +26,21 @@ import unittest
 import datetime
 import pandas as pd
 
-from ..financial_data import Dump, History, MetaData
-from ..asset import Forex, ListedEquity
-from ..time_series import Dividend, ListedEOD
-from ..manager import AssetBase, replace_time_series_labels
-from ..exceptions import TimeSeriesNoData
+from asset_base.financial_data import Dump, History, MetaData
+from asset_base.asset import Forex, ListedEquity
+from asset_base.time_series import Dividend, ListedEOD
+from asset_base.manager import AssetBase, replace_time_series_labels
+from asset_base.exceptions import TimeSeriesNoData
+
+import warnings
 
 # Get module-named logger.
 import logging
+
 logger = logging.getLogger(__name__)
 
-import warnings
-warnings.filterwarnings(
-    action="ignore", message="unclosed", category=ResourceWarning)
+
+warnings.filterwarnings(action="ignore", message="unclosed", category=ResourceWarning)
 
 # TODO: Test all __table_args__.UniqueConstraint attributes
 
@@ -46,7 +48,7 @@ warnings.filterwarnings(
 def assert_no_index_duplicates(security, security1, security2):
     """Assert no duplicate time series entries."""
     security_list = [security, security1, security2]
-    series_list = ['price', 'dividend', 'volume']
+    series_list = ["price", "dividend", "volume"]
     for sec in security_list:
         for series in series_list:
             try:
@@ -57,8 +59,9 @@ def assert_no_index_duplicates(security, security1, security2):
             index = data.index.duplicated(keep=False)
             self.assertFalse(  # BUG: We cannot use `self` here
                 index.any(),
-                f'The {series} series of {sec.identity_code} '
-                'has duplicates in it\'s index.')
+                f"The {series} series of {sec.identity_code} "
+                "has duplicates in it's index.",
+            )
 
 
 class TestAssetBase(unittest.TestCase):
@@ -76,23 +79,23 @@ class TestAssetBase(unittest.TestCase):
 
         # Make a memory based asset_base session with test data.
         # Set up with only AAPL, MCD and STX40 respectively
-        cls.isin = 'US0378331005'
-        cls.isin1 = 'US5801351017'
-        cls.isin2 = 'ZAE000027108'
+        cls.isin = "US0378331005"
+        cls.isin1 = "US5801351017"
+        cls.isin2 = "ZAE000027108"
         cls.isin_list = [cls.isin, cls.isin1, cls.isin2]
-        cls.foreign_currencies_list = ['USD', 'EUR', 'ZAR']
+        cls.foreign_currencies_list = ["USD", "EUR", "ZAR"]
 
         # Cash is USD
-        cls.cash_ticker = 'USD'
+        cls.cash_ticker = "USD"
 
     @classmethod
     def tearDownClass(cls):
-        """ Tear down class test fixtures. """
+        """Tear down class test fixtures."""
         pass
 
     def setUp(self):
         """Set up test case fixtures."""
-        self.asset_base = AssetBase(dialect='memory', testing=True)
+        self.asset_base = AssetBase(dialect="memory", testing=True)
         self.session = self.asset_base.session
         # For a fresh test delete any previously dumped data. Do not delete the
         # folder which was set up as a required test fixture.
@@ -100,7 +103,8 @@ class TestAssetBase(unittest.TestCase):
         # Set-up the database with selected test securities
         self.asset_base.set_up(
             _test_isin_list=self.isin_list,
-            _test_forex_list=self.foreign_currencies_list)
+            _test_forex_list=self.foreign_currencies_list,
+        )
         # This is also a test of AssetBase.set_up() and AssetBase.tear_down()
 
     def tearDown(self):
@@ -119,11 +123,11 @@ class TestAssetBase(unittest.TestCase):
         self.asset_base.dump()
         # Must have dumped ListedEquity data for this test to work!
         dumper = Dump(testing=True)
-        data = dumper.read(['ListedEquity', 'ListedEOD', 'Dividend'])
+        data = dumper.read(["ListedEquity", "ListedEOD", "Dividend"])
         self.assertIsInstance(data, dict)
-        self.assertIn('ListedEquity', data.keys())
-        self.assertIn('ListedEOD', data.keys())
-        self.assertIn('Dividend', data.keys())
+        self.assertIn("ListedEquity", data.keys())
+        self.assertIn("ListedEOD", data.keys())
+        self.assertIn("Dividend", data.keys())
 
     def test_reuse(self):
         """Reuse dumped data as a database initialization resource."""
@@ -148,71 +152,74 @@ class TestAssetBase(unittest.TestCase):
         from_date = datetime.date(1900, 1, 1)  # Get all history
         # Test data - get all history and should be the same as the data direct
         # from the database with reused data
-        securities_test_data = fundamentals.get_etfs(
-            _test_isin_list=self.isin_list)
+        securities_test_data = fundamentals.get_etfs(_test_isin_list=self.isin_list)
         eod_test_data = history.get_eod(securities_list, from_date=from_date)
         dividend_test_data = history.get_dividends(securities_list, from_date=from_date)
         # Test - reused data should be same as feed data
         pd.testing.assert_frame_equal(
-            securities_test_data[
-                securities_data.columns].reset_index(drop=True),
-            securities_data.reset_index(drop=True))
+            securities_test_data[securities_data.columns].reset_index(drop=True),
+            securities_data.reset_index(drop=True),
+        )
         pd.testing.assert_frame_equal(
-            eod_test_data.drop(
-                columns='adjusted_close').sort_index(axis=1).sort_values(
-                    ['date_stamp', 'isin']).reset_index(drop=True),
-            eod_data.drop(
-                columns='adjusted_close').sort_index(axis=1).sort_values(
-                    ['date_stamp', 'isin']).reset_index(drop=True))
+            eod_test_data.drop(columns="adjusted_close")
+            .sort_index(axis=1)
+            .sort_values(["date_stamp", "isin"])
+            .reset_index(drop=True),
+            eod_data.drop(columns="adjusted_close")
+            .sort_index(axis=1)
+            .sort_values(["date_stamp", "isin"])
+            .reset_index(drop=True),
+        )
         pd.testing.assert_frame_equal(
-            dividend_test_data.drop(
-                columns='adjusted_value').sort_index(axis=1).sort_values(
-                    ['date_stamp', 'isin']).reset_index(drop=True),
-            dividend_data.drop(
-                columns='adjusted_value').sort_index(axis=1).sort_values(
-                    ['date_stamp', 'isin']).reset_index(drop=True))
+            dividend_test_data.drop(columns="adjusted_value")
+            .sort_index(axis=1)
+            .sort_values(["date_stamp", "isin"])
+            .reset_index(drop=True),
+            dividend_data.drop(columns="adjusted_value")
+            .sort_index(axis=1)
+            .sort_values(["date_stamp", "isin"])
+            .reset_index(drop=True),
+        )
 
     def test_time_series(self):
-        """Test all securities time series. """
+        """Test all securities time series."""
         # Test total_return check-product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
-        data = self.asset_base.time_series(
-            securities_list, return_type='total_return')
-        replace_time_series_labels(data, 'ticker', inplace=True)
-        data = data.loc['2020-01-01':'2021-01-01']  # Fixed historical window
+        data = self.asset_base.time_series(securities_list, return_type="total_return")
+        replace_time_series_labels(data, "ticker", inplace=True)
+        data = data.loc["2020-01-01":"2021-01-01"]  # Fixed historical window
         data_check_prod = data.prod().to_dict()
         test_data = {
-            'STX40': 1.0807429980281673,
-            'AAPL': 0.4557730329977179,
-            'MCD': 1.113204809354809}
+            "STX40": 1.0807429980281673,
+            "AAPL": 0.4557730329977179,
+            "MCD": 1.113204809354809,
+        }
         self.assertEqual(test_data, data_check_prod)
 
     def test_time_series_forex(self):
         """Test all securities time series with currency transformed to ZAR."""
         # Test total_return check-product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
-        data = self.asset_base.time_series(
-            securities_list, return_type='total_return')
-        data_zar = self.asset_base.to_common_currency(data, 'ZAR')
-        data = replace_time_series_labels(data, 'ticker')
-        data_zar = replace_time_series_labels(data_zar, 'ticker')
-        forex = Forex.get_rates_data_frame(self.session, 'ZAR', ['USD'])
+        data = self.asset_base.time_series(securities_list, return_type="total_return")
+        data_zar = self.asset_base.to_common_currency(data, "ZAR")
+        data = replace_time_series_labels(data, "ticker")
+        data_zar = replace_time_series_labels(data_zar, "ticker")
+        forex = Forex.get_rates_data_frame(self.session, "ZAR", ["USD"])
 
         # Recover exchange rates. Correct recovery is the test that everything
         # works
         recover = data / data_zar
-        recover = recover[['STX40', 'AAPL', 'MCD']]
+        recover = recover[["STX40", "AAPL", "MCD"]]
         # Extract values
-        stx_40 = recover['STX40'][~recover['STX40'].isna()]
-        aapl = recover['AAPL'][~recover['AAPL'].isna()]
-        mcd = recover['MCD'][~recover['MCD'].isna()]
+        stx_40 = recover["STX40"][~recover["STX40"].isna()]
+        aapl = recover["AAPL"][~recover["AAPL"].isna()]
+        mcd = recover["MCD"][~recover["MCD"].isna()]
         # The MCD and APPL should, within rounding errors, correspond
         self.assertTrue(all(aapl.round(6) == mcd.round(6)))
         # This is ZAR to ZAR and should all be 1.0
         self.assertTrue(all(stx_40 == 1.0))
         # The ZARUSD exchange rate is properly recovered
-        self.assertTrue(
-            all(forex.reindex(aapl.index).USD.round(6) == aapl.round(6)))
+        self.assertTrue(all(forex.reindex(aapl.index).USD.round(6) == aapl.round(6)))
 
 
 class Suite(object):
@@ -241,7 +248,6 @@ class Suite(object):
         runner.run(self.suite)
 
 
-if __name__ == '__main__':
-
+if __name__ == "__main__":
     suite = Suite()
     suite.run()

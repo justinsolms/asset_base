@@ -10,7 +10,7 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
-from ._version import get_versions
+from asset_base._version import get_versions
 
 import logging
 import logging.config
@@ -21,10 +21,10 @@ import os
 _ROOT = os.path.abspath(os.path.dirname(__file__))
 
 # Data file parent path
-_DATA = 'data'
+_DATA = "data"
 
 # Variable data path
-_VAR = 'var'
+_VAR = "var"
 
 
 def get_data_path(sub_path):
@@ -57,12 +57,12 @@ def get_var_path(sub_path):
 
 # Open logging configuration YAML file and convert ot a dict.
 path = os.path.dirname(os.path.realpath(__file__))
-with open(os.path.join(path, 'logconf.yaml'), 'r') as stream:
+with open(os.path.join(path, "logconf.yaml"), "r") as stream:
     config = yaml.full_load(stream)
 # Use the dict to configure logging.
 logging.config.dictConfig(config)
 
 # Record the current version and log it.
-__version__ = get_versions()['version']
-logging.info('Version-%s' % __version__)
+__version__ = get_versions()["version"]
+logging.info("Version-%s" % __version__)
 del get_versions

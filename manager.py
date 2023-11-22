@@ -79,12 +79,19 @@ from sqlalchemy_utils import create_database
 from sqlalchemy_utils import database_exists
 from sqlalchemy.orm.exc import NoResultFound
 
-from .__init__ import get_var_path
-from .exceptions import TimeSeriesNoData
-from .financial_data import Dump, DumpReadError, History, MetaData, Static
-from .common import Base
-from .entity import Domicile, Exchange
-from .asset import Asset, ExchangeTradeFund, Forex, ListedEquity, Currency, Cash
+from asset_base.__init__ import get_var_path
+from asset_base.exceptions import TimeSeriesNoData
+from asset_base.financial_data import Dump, DumpReadError, History, MetaData, Static
+from asset_base.common import Base
+from asset_base.entity import Domicile, Exchange
+from asset_base.asset import (
+    Asset,
+    ExchangeTradeFund,
+    Forex,
+    ListedEquity,
+    Currency,
+    Cash,
+)
 
 
 # Get module-named logger.
@@ -130,18 +137,18 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
         data_frame = data_frame.copy()
 
     # Pick column label identifier.
-    if identifier == 'id':
+    if identifier == "id":
         columns = [s.id for s in data_frame.columns]
-    elif identifier == 'identity_code':
+    elif identifier == "identity_code":
         # Translation of column id to codes.
         columns = [s.identity_code for s in data_frame.columns]
-    elif identifier == 'ticker':
+    elif identifier == "ticker":
         # Translation of column id to codes.
         columns = [s.ticker for s in data_frame.columns]
-    elif identifier == 'isin':
+    elif identifier == "isin":
         # Translation of column id to codes.
         columns = [s.isin for s in data_frame.columns]
-    elif identifier == 'name':
+    elif identifier == "name":
         # Translation of column id to names.
         columns = [s.name for s in data_frame.columns]
     else:
@@ -182,7 +189,7 @@ class Meta(Base):
 
     """
 
-    __tablename__ = 'meta'
+    __tablename__ = "meta"
 
     # Parameter name string.
     name = Column(String(32), primary_key=True)
@@ -197,11 +204,11 @@ class Meta(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return f'Meta name={self.name}, value={self.value}'
+        return f"Meta name={self.name}, value={self.value}"
 
     def __repr__(self):
         """Return the official string output."""
-        return f'Meta(name={self.name}, value={self.value})'
+        return f"Meta(name={self.name}, value={self.value})"
 
 
 # TODO: Consider converting flush commands to try-commit-exception-rollback
@@ -226,10 +233,11 @@ class AssetBase(object):
         Set to `True` for testing.
 
     """
+
     # These must only be `Asset` polymorphs.
     classes_to_dump = [ListedEquity]
 
-    def __init__(self, dialect='sqlite', testing=False):
+    def __init__(self, dialect="sqlite", testing=False):
         """Instance initialization.
 
         Parameters
@@ -242,17 +250,17 @@ class AssetBase(object):
         """
         # Open main configuration YAML file and convert to a dict.
         path = os.path.dirname(os.path.realpath(__file__))
-        with open(path + '/' + 'conf.yaml', 'r') as stream:
+        with open(path + "/" + "conf.yaml", "r") as stream:
             self._config = yaml.full_load(stream)
 
         # Path for data dumps.
-        tmp_path = self._config['directories']['working']['tmp']
+        tmp_path = self._config["directories"]["working"]["tmp"]
         self._tmp_path = os.path.expanduser(tmp_path)  # Full path.
 
         self._dialect = dialect
 
         # Create a new database and engine if not existing
-        if not hasattr(self, 'session'):
+        if not hasattr(self, "session"):
             self.make_session()
 
         # Data dumper - dumps to dump folder - indicate testing or not.
@@ -261,40 +269,40 @@ class AssetBase(object):
     def close(self):
         """Close the database session."""
         self.session.close()
-        logger.debug('Closed database session %s' % self.db_url)
+        logger.debug("Closed database session %s" % self.db_url)
         self.engine.dispose()
-        logger.debug('Disposed of database engine %s' % self.db_url)
+        logger.debug("Disposed of database engine %s" % self.db_url)
 
     def commit(self):
         """Session try-commit, exception-rollback."""
         try:
             self.session.commit()
         except Exception as ex:
-            logger.critical('Commit failed - rolling back.')
+            logger.critical("Commit failed - rolling back.")
             self.session.rollback()
-            logger.info('Rolled back.')
+            logger.info("Rolled back.")
             # Rethrow the exception
             raise ex
 
     def make_session(self):
-        self._db_name = 'asset_base'
+        self._db_name = "asset_base"
         # Select database platform.
-        if self._dialect == 'mysql':
+        if self._dialect == "mysql":
             # MySQL URL.
-            db_url = self._config['backends']['database']
-            db_url = db_url['mysql']['asset_base'] % self._db_name
-        elif self._dialect == 'sqlite':
+            db_url = self._config["backends"]["database"]
+            db_url = db_url["mysql"]["asset_base"] % self._db_name
+        elif self._dialect == "sqlite":
             # Construct SQLite file name with path expansion for a URL
-            self._db_name = 'fundmanage.%s.db' % self._db_name
+            self._db_name = "fundmanage.%s.db" % self._db_name
             # Put files in a `cache`` folder under the `var` path scheme.
-            cache_path = get_var_path('cache')
+            cache_path = get_var_path("cache")
             if not os.path.exists(cache_path):
                 os.mkdir(cache_path)
             db_file_name = os.path.join(cache_path, self._db_name)
-            db_url = 'sqlite:///' + db_file_name
+            db_url = "sqlite:///" + db_file_name
             self._db_name = db_file_name
-        elif self._dialect == 'memory':
-            db_url = 'sqlite://'
+        elif self._dialect == "memory":
+            db_url = "sqlite://"
         else:
             raise ValueError('Unrecognised dialect "%s"' % self._dialect)
 
@@ -304,24 +312,25 @@ class AssetBase(object):
         self.engine = create_engine(db_url)
 
         # Create an empty database with all tables if it doesn't already exist.
-        if not database_exists(self.db_url) or self._dialect == 'memory':
+        if not database_exists(self.db_url) or self._dialect == "memory":
             try:
                 create_database(db_url)
                 Base.metadata.create_all(self.engine)
             except Exception as ex:
                 drop_database(db_url)
-                logger.debug('Failed to create new database %s' % self.db_url)
+                logger.debug("Failed to create new database %s" % self.db_url)
                 raise ex
             else:
-                logger.debug('Created new database %s' % self.db_url)
+                logger.debug("Created new database %s" % self.db_url)
         else:
-            logger.debug('Use existing database %s' % self.db_url)
+            logger.debug("Use existing database %s" % self.db_url)
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.debug('New database session %s' % self.db_url)
+        logger.debug("New database session %s" % self.db_url)
 
-    def set_up(self, reuse=True, update=True,
-               _test_isin_list=None, _test_forex_list=None):
+    def set_up(
+        self, reuse=True, update=True, _test_isin_list=None, _test_forex_list=None
+    ):
         """Set up the database for operations.
 
         Parameters
@@ -331,25 +340,24 @@ class AssetBase(object):
             initialise the database.
         update : bool
             FIXME: Not implemented, do so urgently.
-            When `True` then feeds will be checked for newer data.
+            When `True` then API feeds will be checked for newer data.
 
         """
         # Create a new database and engine if not existing
-        if not hasattr(self, 'session'):
+        if not hasattr(self, "session"):
             self.make_session()
 
         # Record creation moment as a string (item, value) pair if it does not
         # already exist.
         try:
-            meta = self.session.query(Meta).filter(
-                Meta.name == 'set_up_date').one()
+            meta = self.session.query(Meta).filter(Meta.name == "set_up_date").one()
         except NoResultFound:
             set_up_date = datetime.datetime.now().isoformat()
-            self.session.add(Meta('set_up_date', set_up_date))
+            self.session.add(Meta("set_up_date", set_up_date))
         else:
             set_up_date = meta.value
         finally:
-            logger.info(f'Set-up date of database is {set_up_date}')
+            logger.info(f"Set-up date of database is {set_up_date}")
 
         # Set up static data
         static_obj = Static()
@@ -364,10 +372,11 @@ class AssetBase(object):
         if reuse:
             self.reuse()
 
-        # Update all
-        self.update(
-            _test_isin_list=_test_isin_list,
-            _test_forex_list=_test_forex_list)
+        # Update all from API feeds
+        if update is True:
+            self.update(
+                _test_isin_list=_test_isin_list, _test_forex_list=_test_forex_list
+            )
 
         # Try to commit all results
         self.commit()
@@ -384,16 +393,16 @@ class AssetBase(object):
         """
         # Dump reusable data. Abort with CRITICAL logging if failed.
         if delete_dump_data:
-            logger.info('Deleted dump files and folder.')
+            logger.info("Deleted dump files and folder.")
             self.delete_dumps(delete_folder=True)
         else:
             try:
                 self.dump()
             except Exception as ex:
-                logger.critical('Dump asset_base failed. Tear-down aborted!!!')
+                logger.critical("Dump asset_base failed. Tear-down aborted!!!")
                 raise ex
             else:
-                logger.info('Dump important asset_base data for re-use.')
+                logger.info("Successful dump of important asset_base data for re-use.")
 
         # Delete database
         if database_exists(self.engine.url):
@@ -404,8 +413,7 @@ class AssetBase(object):
             del self.db_url
             del self.engine
             del self.session
-            logger.info(
-                'Dropped database and closed session and engine')
+            logger.info("Dropped database and closed session and engine")
 
     def update(self, _test_isin_list=None, _test_forex_list=None):
         """Update all non-static data.
@@ -424,14 +432,15 @@ class AssetBase(object):
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
             _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
-            )
+        )
 
         # Forex update - based on existing currencies and built in list
         # Forex.foreign_currencies
         Forex.update_all(
-            self.session, get_forex_method=history.get_forex,
+            self.session,
+            get_forex_method=history.get_forex,
             _test_forex_list=_test_forex_list,  # Hidden arg. For testing only!
-            )
+        )
 
     def dump(self):
         """Dump re-usable content to disk files.
@@ -468,7 +477,9 @@ class AssetBase(object):
             try:
                 cls.reuse(self.session, self.dumper)
             except DumpReadError:
-                logger.info(f'Unavailable dump data for {cls._class_name}')
+                logger.info(f"Unavailable dump data for {cls._class_name}")
+            else:
+                logger.info(f"Reused dumped data for {cls._class_name}")
 
     def delete_dumps(self, delete_folder=True):
         """Delete dumped data folder
@@ -493,8 +504,7 @@ class AssetBase(object):
         dict
             A dictionary of meta data strings.
         """
-        data = [(str(item.name), str(item.value))
-                for item in self.session.query(Meta)]
+        data = [(str(item.name), str(item.value)) for item in self.session.query(Meta)]
         return dict(data)
 
     def get_dict(self, id):
@@ -524,11 +534,18 @@ class AssetBase(object):
             entities = self.session.query(Asset).filter(Asset.id.in_(id))
             return dict([(asset.id, asset) for asset in entities])
         else:
-            raise Exception('Expected a list of asset id(s).')
+            raise Exception("Expected a list of asset id(s).")
 
-    def time_series(self, asset_list,
-                    series='price', price_item='close', return_type='price',
-                    identifier='asset', tidy=True, date_index=None):
+    def time_series(
+        self,
+        asset_list,
+        series="price",
+        price_item="close",
+        return_type="price",
+        identifier="asset",
+        tidy=True,
+        date_index=None,
+    ):
         """Return historic price or return, time-series for a list of assets.
 
         TODO: Remove `series` argument and use to get price series only
@@ -625,20 +642,19 @@ class AssetBase(object):
 
         """
         if len(asset_list) == 0:
-            raise ValueError('Argument `asset_list` may not be empty.')
+            raise ValueError("Argument `asset_list` may not be empty.")
 
         # Get a list of cash securities
         cash_list = [item for item in asset_list if isinstance(item, Cash)]
 
         # Get a list of non-cash securities
-        non_cash_list = [
-            asset for asset in asset_list if not isinstance(asset, Cash)]
+        non_cash_list = [asset for asset in asset_list if not isinstance(asset, Cash)]
 
         #  A date-index must be provided to specify the cash data date range if
         #  there are no non-cash securities from which the date range may be
         #  derived.
         if len(non_cash_list) == 0 and date_index is None:
-            raise Exception('Expected non-cash securities in asset_list.')
+            raise Exception("Expected non-cash securities in asset_list.")
 
         data_list = list()
         if len(non_cash_list) > 0:
@@ -672,23 +688,22 @@ class AssetBase(object):
 
         # Warning if a dataframe has mixed currency time series.
         if len(set(s.currency for s in data.columns)) > 1:
-            logger.warning('The DataFrame data is of mixed currencies.')
+            logger.warning("The DataFrame data is of mixed currencies.")
 
         # Replace column labels as specified by the identifier arg
         # TODO: Replace with a match statement
-        if identifier == 'asset':
+        if identifier == "asset":
             id_dict = {}
-        elif identifier == 'id':
-            id_dict = {asset:asset.id for asset in asset_list}
-        elif identifier == 'isin':
-            id_dict = {asset:asset.isin for asset in asset_list}
-        elif identifier == 'ticker':
-            id_dict = {asset:asset.ticker for asset in asset_list}
-        elif identifier == 'identity_code':
-            id_dict = {asset:asset.identity_code for asset in asset_list}
+        elif identifier == "id":
+            id_dict = {asset: asset.id for asset in asset_list}
+        elif identifier == "isin":
+            id_dict = {asset: asset.isin for asset in asset_list}
+        elif identifier == "ticker":
+            id_dict = {asset: asset.ticker for asset in asset_list}
+        elif identifier == "identity_code":
+            id_dict = {asset: asset.identity_code for asset in asset_list}
         else:
-            raise ValueError(
-                f'Unexpected `identifier` argument `{identifier}`.')
+            raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
         data = data.rename(columns=id_dict)
         data.columns.name = identifier
 
@@ -742,13 +757,14 @@ class AssetBase(object):
         foreign_tickers = [asset.currency.ticker for asset in data_frame.columns]
         foreign_tickers = list(set(foreign_tickers))  # Make list of unique
         forex = Forex.get_rates_data_frame(
-            self.session, currency_ticker, foreign_tickers)
+            self.session, currency_ticker, foreign_tickers
+        )
         # Match index of rate with index of series for correct division
         # later
         data_index = data_frame.index.copy()  # For reindex back to data index
         common_index = data_frame.index.union(forex.index)
-        data_frame = data_frame.reindex(index=common_index, method='ffill')
-        forex = forex.reindex(index=common_index, method='ffill')
+        data_frame = data_frame.reindex(index=common_index, method="ffill")
+        forex = forex.reindex(index=common_index, method="ffill")
         # Transform each column as per its asset (see column label) currency
         for asset, series in data_frame.items():
             rate = forex[asset.currency.ticker]
@@ -782,9 +798,9 @@ class AssetBaseManager(AssetBase):
             A MySQL session.
 
     """
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
         self.close()
-

@@ -13,18 +13,19 @@ import sys
 import datetime
 
 
-from sqlalchemy import Integer, String, ARRAY
+from sqlalchemy import Integer, String
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from .common import Base, Common
-from .exceptions import FactoryError, ReconcileError
+from asset_base.common import Base, Common
+from asset_base.exceptions import FactoryError, ReconcileError
 
 # Get module-named logger.
 import logging
+
 logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -110,8 +111,8 @@ class Currency(Base):
 
     """
 
-    __tablename__ = 'currency'
-    __table_args__ = (UniqueConstraint('ticker'),)
+    __tablename__ = "currency"
+    __table_args__ = (UniqueConstraint("ticker"),)
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
@@ -129,12 +130,13 @@ class Currency(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return '{} is {} ({})'.format(self._class_name, self.name, self.ticker)
+        return "{} is {} ({})".format(self._class_name, self.name, self.ticker)
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(ticker="{}", name="{}")'.format(
-            self._class_name, self.ticker, self.name)
+            self._class_name, self.ticker, self.name
+        )
 
     @classmethod
     @property
@@ -166,7 +168,7 @@ class Currency(Base):
             False.
 
         """
-        country_code_list = self.country_code_list.split(',')
+        country_code_list = self.country_code_list.split(",")
         return country_code in country_code_list
 
     @classmethod
@@ -198,14 +200,13 @@ class Currency(Base):
             The single instance that is in the session.
 
         """
-        assert len(ticker) == 3, \
-            'Expected ISO 4217 3-letter currency code.'
+        assert len(ticker) == 3, "Expected ISO 4217 3-letter currency code."
 
         if country_code_list:
-            real_list = country_code_list.split(',')
+            real_list = country_code_list.split(",")
             assert all(
-                len(country_code) == 2 for country_code in real_list), \
-                    'Expected ISO 3166 2-letter country codes.'
+                len(country_code) == 2 for country_code in real_list
+            ), "Expected ISO 3166 2-letter country codes."
 
         # Check if currency exists in the session and if not then add it.
         try:
@@ -217,15 +218,14 @@ class Currency(Base):
                 session.add(obj)
             else:
                 raise FactoryError(
-                    'Attempted instance creation. '
-                    'Expected all positional arguments',
-                    action='Creation failed')
+                    "Attempted instance creation. " "Expected all positional arguments",
+                    action="Creation failed",
+                )
         else:
             # Reconcile possible changes
             if name and name != obj.name:
                 raise FactoryError(
-                    'Unexpected name {} for currency {}'.format(
-                        name, obj.ticker)
+                    "Unexpected name {} for currency {}".format(name, obj.ticker)
                 )
 
         return obj
@@ -251,7 +251,7 @@ class Currency(Base):
 
     @classmethod
     def update_all(cls, session, get_method):
-        """ Update/create all the objects in the asset_base session.
+        """Update/create all the objects in the asset_base session.
 
         Parameters
         ----------
@@ -330,14 +330,14 @@ class Domicile(Base):
 
     """
 
-    __tablename__ = 'domicile'
+    __tablename__ = "domicile"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     """ int : Primary key."""
 
     # Official currency
-    _currency_id = Column(Integer, ForeignKey('currency.id'), nullable=False)
-    currency = relationship('Currency')
+    _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=False)
+    currency = relationship("Currency")
 
     # Data.
     country_code = Column(String(3), nullable=False)
@@ -345,7 +345,7 @@ class Domicile(Base):
 
     # The ISO 3166-1 Alpha-2 two letter country code is a unique identifier of a
     # country
-    __table_args__ = (UniqueConstraint('country_code'),)
+    __table_args__ = (UniqueConstraint("country_code"),)
 
     # Reference to domiciled entities
     # entity_list = relationship('Entity', back_populates='domicile')
@@ -358,15 +358,15 @@ class Domicile(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return '{} is {} ({})'.format(
-            self._class_name, self.country_name, self.country_code)
+        return "{} is {} ({})".format(
+            self._class_name, self.country_name, self.country_code
+        )
 
     def __repr__(self):
         """Return the official string output."""
-        return \
-            '{}(country_code="{}", country_code="{}", currency={!r})'.format(
-                self._class_name, self.country_code, self.country_name,
-                self.currency)
+        return '{}(country_code="{}", country_code="{}", currency={!r})'.format(
+            self._class_name, self.country_code, self.country_name, self.currency
+        )
 
     @classmethod
     @property
@@ -414,8 +414,9 @@ class Domicile(Base):
         .Currency.factory,
 
         """
-        assert len(country_code) == 2, \
-            'Expected ISO 3166-1 Alpha-2 two letter country code.'
+        assert (
+            len(country_code) == 2
+        ), "Expected ISO 3166-1 Alpha-2 two letter country code."
 
         # Check if domicile exists in the session and if not then add it.
         try:
@@ -424,9 +425,10 @@ class Domicile(Base):
             arg_list = [country_code, country_name, currency_ticker]
             if not all(arg_list):
                 raise FactoryError(
-                    'Attempted instance creation. '
-                    'Expected all positional arguments.',
-                    action='Create failed')
+                    "Attempted instance creation. "
+                    "Expected all positional arguments.",
+                    action="Create failed",
+                )
             currency = Currency.factory(session, currency_ticker)
             obj = cls(country_code, country_name, currency)
             session.add(obj)
@@ -434,12 +436,16 @@ class Domicile(Base):
             # Disallow changes
             if country_name and country_name != obj.country_name:
                 raise FactoryError(
-                    'Invalid country_name argument for country '
-                    '{}.'.format(obj.country_code))
+                    "Invalid country_name argument for country " "{}.".format(
+                        obj.country_code
+                    )
+                )
             if currency_ticker and currency_ticker != obj.currency.ticker:
                 raise FactoryError(
-                    'Invalid currency_ticker argument for country '
-                    '{}.'.format(obj.country_code))
+                    "Invalid currency_ticker argument for country " "{}.".format(
+                        obj.country_code
+                    )
+                )
 
         return obj
 
@@ -466,7 +472,7 @@ class Domicile(Base):
     @classmethod
     def update_all(cls, session, get_method):
         # FIXME: Convert to a mixin
-        """ Update/create all the objects in the asset_base session.
+        """Update/create all the objects in the asset_base session.
 
         Parameters
         ----------
@@ -509,8 +515,8 @@ class Entity(Common):
 
     This classes has the capability to render entity holding tree structures
     where entities hold one or more child entities and so on. A weight, or
-    rather a weighted graph *edge*, which connects a parent entity (*vertice*)
-    to child entity (*vertice*) by the holding weight is represented by an
+    rather a weighted graph *edge*, which connects a parent entity (*vertices*)
+    to child entity (*vertices*) by the holding weight is represented by an
     `EntityWeight` instance.
 
     Assume this `Entity` instance holds one or more child `Entity` instances,
@@ -570,16 +576,18 @@ class Entity(Common):
 
     """
 
-    __tablename__ = 'entity'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "entity"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('common.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("common.id"), primary_key=True)
     """ Primary key."""
 
     # Entity's domicile. Domicile has a reference list to many domiciled Entity
     # named `entity_list`
-    _domicile_id = Column(Integer, ForeignKey('domicile.id'), nullable=False)
-    domicile = relationship('Domicile', backref='entity_list')
+    _domicile_id = Column(Integer, ForeignKey("domicile.id"), nullable=False)
+    domicile = relationship("Domicile", backref="entity_list")
 
     def __init__(self, name, domicile, **kwargs):
         """Instance initialization."""
@@ -592,13 +600,15 @@ class Entity(Common):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return '{} is an {} in {}'.format(
-            self.name, self._class_name, self.domicile.country_name)
+        return "{} is an {} in {}".format(
+            self.name, self._class_name, self.domicile.country_name
+        )
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", domicile={!r})'.format(
-            self._class_name, self.name, self.domicile)
+            self._class_name, self.name, self.domicile
+        )
 
     @property
     def currency(self):
@@ -608,12 +618,12 @@ class Entity(Common):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.domicile.key_code + '.' + self.name
+        return self.domicile.key_code + "." + self.name
 
     @property
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return self.domicile.identity_code + '.' + self.name
+        return self.domicile.identity_code + "." + self.name
 
     def to_dict(self):
         """Convert class data attributes into a factory compatible dictionary.
@@ -627,13 +637,12 @@ class Entity(Common):
 
         """
         return {
-            'entity_name': self.name,
-            'country_code': self.domicile.country_code,
+            "entity_name": self.name,
+            "country_code": self.domicile.country_code,
         }
 
     @classmethod
-    def factory(cls, session, entity_name, country_code, create=True,
-                **kwargs):
+    def factory(cls, session, entity_name, country_code, create=True, **kwargs):
         """Manufacture/retrieve an instance from the given parameters.
 
         If a record of the specified class instance does not exist then add it,
@@ -685,15 +694,19 @@ class Entity(Common):
         # as Entity should ber an abstract class. Check if entity exists in the
         # session and if not then add it.
         try:
-            obj = session.query(cls).join(Domicile).filter(
-                cls.name == entity_name,
-                Domicile.country_code == country_code
-            ).one()
+            obj = (
+                session.query(cls)
+                .join(Domicile)
+                .filter(cls.name == entity_name, Domicile.country_code == country_code)
+                .one()
+            )
         except NoResultFound:
             if not create:
                 raise FactoryError(
                     'Entity "{}", domicile="{}", not found.'.format(
-                        entity_name, country_code))
+                        entity_name, country_code
+                    )
+                )
             domicile = Domicile.factory(session, country_code)
             obj = cls(entity_name, domicile, **kwargs)
             session.add(obj)
@@ -704,17 +717,16 @@ class Entity(Common):
 
         # TODO: Make this an add_children method instead & create a unittest.
         #  Check for children in keyword arguments.
-        if 'children' in kwargs:
+        if "children" in kwargs:
             # Find all child Entity instances specified by the children dict.
-            children = kwargs.pop('children')
+            children = kwargs.pop("children")
             child_list = list()
             for id, value in children.items():
                 # Query (find) and add.
                 try:
                     item = session.query(Entity).filter(Entity.id == id).one()
                 except NoResultFound:
-                    raise FactoryError(
-                        'Child Entity, id=%i, not found.' % id)
+                    raise FactoryError("Child Entity, id=%i, not found." % id)
                 else:
                     child_list.append((item, value))
             #  Add the list of children as `EntityWeight` instances.
@@ -747,10 +759,12 @@ class Institution(Entity):
 
     """
 
-    __tablename__ = 'institution'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "institution"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('entity.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("entity.id"), primary_key=True)
     """ Primary key."""
 
     def __init__(self, name, domicile, **kwargs):
@@ -774,10 +788,12 @@ class Issuer(Institution):
     .Institution,
     """
 
-    __tablename__ = 'issuer'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "issuer"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('institution.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("institution.id"), primary_key=True)
     """ Primary key."""
 
     # Collection of the issued Model instances.
@@ -827,10 +843,12 @@ class Exchange(Institution):
 
     """
 
-    __tablename__ = 'exchange'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "exchange"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('institution.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("institution.id"), primary_key=True)
     """ Primary key."""
 
     # List of listed Shares on the Exchange
@@ -840,7 +858,7 @@ class Exchange(Institution):
     mic = Column(String(4), nullable=False)
     eod_code = Column(String(6), nullable=True)
 
-    key_code_name = 'mic'
+    key_code_name = "mic"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -849,20 +867,22 @@ class Exchange(Institution):
         """Instance initialization."""
         self.mic = mic
 
-        if 'eod_code' in kwargs:
-            self.eod_code = kwargs.pop('eod_code')
+        if "eod_code" in kwargs:
+            self.eod_code = kwargs.pop("eod_code")
 
         super().__init__(name, domicile, **kwargs)
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return '{} ({}) is an {} in {}'.format(
-            self.name, self.mic, self._class_name, self.domicile.country_name)
+        return "{} ({}) is an {} in {}".format(
+            self.name, self.mic, self._class_name, self.domicile.country_name
+        )
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", domicile={!r}, mic="{}")'.format(
-            self._class_name, self.name, self.domicile, self.mic)
+            self._class_name, self.name, self.domicile, self.mic
+        )
 
     @property
     def key_code(self):
@@ -876,9 +896,8 @@ class Exchange(Institution):
 
     @classmethod
     def factory(
-            cls, session, mic, exchange_name=None, country_code=None,
-            create=True,
-            **kwargs):
+        cls, session, mic, exchange_name=None, country_code=None, create=True, **kwargs
+    ):
         """Manufacture/retrieve an instance from the given parameters.
 
         If a record of the specified class instance does not exist then add it,
@@ -932,23 +951,23 @@ class Exchange(Institution):
             obj = session.query(cls).filter(cls.mic == mic).one()
         except NoResultFound:
             if not create:
-                raise FactoryError(
-                    'Exchange, mic="{}", not found.'.format(mic))
+                raise FactoryError('Exchange, mic="{}", not found.'.format(mic))
             if all([country_code, exchange_name]):
                 domicile = Domicile.factory(session, country_code)
                 obj = cls(exchange_name, domicile, mic, **kwargs)
                 session.add(obj)
             else:
                 raise FactoryError(
-                    'Exchange, mic={}, not found. '
-                    'Need `country_code` and `exchange_name` arguments '
-                    'to create.'.format(mic))
+                    "Exchange, mic={}, not found. "
+                    "Need `country_code` and `exchange_name` arguments "
+                    "to create.".format(mic)
+                )
         else:
             # The country_code and exchange_name are not allowed to Exchange
             if country_code and country_code != obj.domicile.country_code:
-                raise ReconcileError(obj, 'country_code')
+                raise ReconcileError(obj, "country_code")
             if exchange_name and exchange_name != obj.name:
-                raise ReconcileError(obj, 'exchange_name')
+                raise ReconcileError(obj, "exchange_name")
         finally:
             session.flush()
 

@@ -44,24 +44,30 @@ from collections import defaultdict
 
 # Get module-named logger.
 import logging
+
 logging.basicConfig(stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 
-date_index_name = 'date'
-eod_columns = [
-    'open', 'close', 'high', 'low', 'adjusted_close', 'volume']
+date_index_name = "date"
+eod_columns = ["open", "close", "high", "low", "adjusted_close", "volume"]
 dividend_columns = [
-    'declarationDate', 'recordDate', 'paymentDate', 'period',
-    'value', 'unadjustedValue', 'currency']
+    "declarationDate",
+    "recordDate",
+    "paymentDate",
+    "period",
+    "value",
+    "unadjustedValue",
+    "currency",
+]
 
 
-class APISessionManager():
-    """ Direct API query, response and result checking.
-    """
+class APISessionManager:
+    """Direct API query, response and result checking."""
+
     # API domain and security token
-    _DOMAIN = 'eodhistoricaldata.com'
-    _API_TOKEN = '60802039419943.54316578'
+    _DOMAIN = "eodhistoricaldata.com"
+    _API_TOKEN = "60802039419943.54316578"
 
     # Limiting connection pool size
     _CONNECTION_LIMIT = 4
@@ -71,21 +77,23 @@ class APISessionManager():
 
     def __init__(self) -> None:
         # Prepare the URL
-        self.url = f'https://{self._DOMAIN}'
+        self.url = f"https://{self._DOMAIN}"
         # Default to JSON format at the request of the service provider. There
         # is an issue that CSV includes a last line with the total number of
         # bytes which causes pandas read problems. Use JSON for now.
-        self.base_params = {'api_token': self._API_TOKEN, 'fmt': 'json'}
+        self.base_params = {"api_token": self._API_TOKEN, "fmt": "json"}
 
     async def __aenter__(self):
         # Get connector object
         self.conn = aiohttp.TCPConnector(limit=self._CONNECTION_LIMIT)
         # Specify timeouts - see StackOverflow (answer by glezo) url t.ly/VqKl
         session_timeout = aiohttp.ClientTimeout(
-            total=None, sock_connect=self._TIMEOUT, sock_read=self._TIMEOUT)
+            total=None, sock_connect=self._TIMEOUT, sock_read=self._TIMEOUT
+        )
         # Get session object for starting a session with
         self.session = aiohttp.ClientSession(
-            connector=self.conn, timeout=session_timeout)
+            connector=self.conn, timeout=session_timeout
+        )
 
         return self
 
@@ -95,16 +103,16 @@ class APISessionManager():
 
     async def get(self, endpoint, params):
         """Get API response with retries."""
-        url = f'{self.url}{endpoint}'
+        url = f"{self.url}{endpoint}"
 
         # Merge the base parameters with the specific parameters
         all_params = {**self.base_params, **params}
 
         # Try several times to get the response
-        for retry in [0, 1, 2, 'last']:
+        for retry in [0, 1, 2, "last"]:
             try:
                 async with self.session.get(url, params=all_params) as response:
-                    logger.info('Initiated: %s', response.url)
+                    logger.info("Initiated: %s", response.url)
                     # Check response status
                     if response.ok is True:
                         json = await response.json()
@@ -112,22 +120,22 @@ class APISessionManager():
                         text = await response.text()
                         status = response.status
                         url = response.url
-                        msg = f'Failed response status={status}: text={text}: url={url}'
+                        msg = f"Failed response status={status}: text={text}: url={url}"
                         logger.warning(msg)
                         raise Exception(msg)
             except TimeoutError as ex:
                 # Test for retries
-                if retry == 'last':
-                    msg = f'Fail (timeout retries exceeded): {url}'
+                if retry == "last":
+                    msg = f"Fail (timeout retries exceeded): {url}"
                     logger.warning(msg)
                     raise ex
                 else:
                     # Go around for a retry
-                    logger.debug('Timeout (retry-%s): %s', retry, url)
+                    logger.debug("Timeout (retry-%s): %s", retry, url)
                     continue  # retry loop
             else:
                 # Success - break out of retry loop
-                logger.debug('Success: %s', response.url)
+                logger.debug("Success: %s", response.url)
                 table = pd.DataFrame(json)
                 break  # out of retry loop
 
@@ -135,15 +143,15 @@ class APISessionManager():
 
 
 class Historical(APISessionManager):
-    """ Get EOD historical data sets. """
+    """Get EOD historical data sets."""
 
-    _historical_eod = '/api/eod'
-    _historical_forex = '/api/eod'
-    _historical_index = '/api/eod'
-    _historical_dividends = '/api/div'
+    _historical_eod = "/api/eod"
+    _historical_forex = "/api/eod"
+    _historical_index = "/api/eod"
+    _historical_dividends = "/api/div"
 
     async def _get(self, path, exchange, ticker, from_date=None, to_date=None):
-        """ Generic getter, daily, EOD historical data table over a date range.
+        """Generic getter, daily, EOD historical data table over a date range.
 
         This is a common history `getter method used to get eod, dividend and
         forex history as specified by the ``path`` argument.
@@ -170,20 +178,20 @@ class Historical(APISessionManager):
             The daily, EOD historical time-series.
         """
         # Path must append ticker and short exchange code
-        path = '{}/{}.{}'.format(path, ticker, exchange)
+        path = "{}/{}.{}".format(path, ticker, exchange)
 
         # Substitute defaults for missing `form` and `to` dates
         if from_date is None:
-            from_date = datetime.datetime.strptime('1900-01-01', '%Y-%m-%d')
+            from_date = datetime.datetime.strptime("1900-01-01", "%Y-%m-%d")
         if to_date is None:
             to_date = datetime.datetime.today()
 
         # Get the API response
         params = dict(
-            from_date=from_date.strftime('%Y-%m-%d'),
-            to_date=to_date.strftime('%Y-%m-%d'),
-            period='d',  # Default to daily sampling period
-            order='a',  # Default to ascending order
+            from_date=from_date.strftime("%Y-%m-%d"),
+            to_date=to_date.strftime("%Y-%m-%d"),
+            period="d",  # Default to daily sampling period
+            order="a",  # Default to ascending order
         )
         table = await self.get(path, params=params)
 
@@ -198,7 +206,7 @@ class Historical(APISessionManager):
         return table
 
     async def get_eod(self, exchange, ticker, from_date=None, to_date=None):
-        """ Get daily, EOD historical over a date range.
+        """Get daily, EOD historical over a date range.
 
         Parameters
         ----------
@@ -219,15 +227,14 @@ class Historical(APISessionManager):
             The daily, EOD historical time-series.
         """
         table = await self._get(
-            self._historical_eod, exchange, ticker,
-            from_date=from_date, to_date=to_date)
+            self._historical_eod, exchange, ticker, from_date=from_date, to_date=to_date
+        )
         table = table[eod_columns]
 
         return table
 
-    async def get_dividends(
-            self, exchange, ticker, from_date=None, to_date=None):
-        """ Get daily, EOD historical dividends over a date range.
+    async def get_dividends(self, exchange, ticker, from_date=None, to_date=None):
+        """Get daily, EOD historical dividends over a date range.
 
         Parameters
         ----------
@@ -248,14 +255,18 @@ class Historical(APISessionManager):
             The daily, EOD historical time-series.
         """
         table = await self._get(
-            self._historical_dividends, exchange, ticker,
-            from_date=from_date, to_date=to_date)
+            self._historical_dividends,
+            exchange,
+            ticker,
+            from_date=from_date,
+            to_date=to_date,
+        )
         table = table[dividend_columns]
 
         return table
 
     async def get_forex(self, ticker, from_date=None, to_date=None):
-        """ Get daily, EOD historial forex (USD based) over a date range.
+        """Get daily, EOD historial forex (USD based) over a date range.
 
         Parameters
         ----------
@@ -274,20 +285,24 @@ class Historical(APISessionManager):
             The daily, EOD historical time-series.
         """
         table = await self._get(
-            self._historical_forex, 'FOREX', ticker,
-            from_date=from_date, to_date=to_date)
+            self._historical_forex,
+            "FOREX",
+            ticker,
+            from_date=from_date,
+            to_date=to_date,
+        )
         table = table[eod_columns]
 
         return table
 
 
 class Bulk(APISessionManager):
-    """ Get Bulk data sets. """
+    """Get Bulk data sets."""
 
-    _bulk_eod = '/api/eod-bulk-last-day'
+    _bulk_eod = "/api/eod-bulk-last-day"
 
     async def _get(self, exchange, date=None, symbols=None, type=None):
-        """ Generic getter, bulk EOD for the exchange for a particular day.
+        """Generic getter, bulk EOD for the exchange for a particular day.
 
         This is a common bulk `get` method used to get eod, dividend and
         splits across an exchange on a particular day.
@@ -313,7 +328,7 @@ class Bulk(APISessionManager):
 
         """
         # Path must append short exchange code
-        path = '{}/{}'.format(self._bulk_eod, exchange)
+        path = "{}/{}".format(self._bulk_eod, exchange)
 
         if date is None:
             # Find yesterday's date.
@@ -322,42 +337,39 @@ class Bulk(APISessionManager):
         if symbols is not None:
             # Create comma separated list after prepending with a `dot` and the
             # exchange symbol.
-            symbols = ','.join(
-                ['{}.{}'.format(sym, exchange) for sym in symbols]
-            )
+            symbols = ",".join(["{}.{}".format(sym, exchange) for sym in symbols])
 
         # Get the API response
 
         params = dict(
-            date=date.strftime('%Y-%m-%d'),
-            fmt='json',  # Default to CSV table. See NOTE in get!
-            order='a',  # Default to ascending order
+            date=date.strftime("%Y-%m-%d"),
+            fmt="json",  # Default to CSV table. See NOTE in get!
+            order="a",  # Default to ascending order
         )
         if type is not None:
             # The type=None is not liked by aiohttp.ClientSession() instance
-            params['type'] = type
+            params["type"] = type
         if symbols is not None:
             # The symbols=None is not liked by aiohttp.ClientSession() instance
-            params['symbols'] = symbols
+            params["symbols"] = symbols
         table = await self.get(path, params=params)
 
         if table.empty:
             return table
 
         # Fix the exchange column name
-        if 'exchange_short_name' in table.columns:
-            table.rename(columns={'exchange_short_name': 'exchange'},
-                         inplace=True)
+        if "exchange_short_name" in table.columns:
+            table.rename(columns={"exchange_short_name": "exchange"}, inplace=True)
         # Condition date
         table[date_index_name] = pd.to_datetime(table[date_index_name])
-        table.rename(columns={'code': 'ticker'}, inplace=True)  # Fix API names
-        table.set_index([date_index_name, 'ticker', 'exchange'], inplace=True)
+        table.rename(columns={"code": "ticker"}, inplace=True)  # Fix API names
+        table.set_index([date_index_name, "ticker", "exchange"], inplace=True)
         table.sort_index(inplace=True)  # MultiIndex must be sorted for slicing.
 
         return table
 
     async def get_eod(self, exchange, date=None, symbols=None):
-        """ Get bulk EOD price and volume for the exchange on a date.
+        """Get bulk EOD price and volume for the exchange on a date.
 
         Parameters
         ----------
@@ -374,7 +386,7 @@ class Bulk(APISessionManager):
         return await self._get(exchange, date=date, symbols=symbols)
 
     async def get_dividends(self, exchange, date=None):
-        """ Get bulk EOD dividends for the exchange on a date.
+        """Get bulk EOD dividends for the exchange on a date.
 
         Note
         ----
@@ -394,16 +406,15 @@ class Bulk(APISessionManager):
             yesterday.
 
         """
-        table = await self._get(
-            exchange, date=date, symbols=None, type='dividends')
+        table = await self._get(exchange, date=date, symbols=None, type="dividends")
         # Handle an anomaly in the EOD feed JSON API results.
-        table['dividend'] = table['dividend'].astype(float)
-        table['unadjustedValue'] = table['unadjustedValue'].astype(float)
+        table["dividend"] = table["dividend"].astype(float)
+        table["unadjustedValue"] = table["unadjustedValue"].astype(float)
 
         return table
 
     async def get_splits(self, exchange, date=None):
-        """ Get bulk EOD splits for the exchange on a date.
+        """Get bulk EOD splits for the exchange on a date.
 
         Note
         ----
@@ -423,20 +434,19 @@ class Bulk(APISessionManager):
             yesterday.
 
         """
-        table = await self._get(
-            exchange, date=date, symbols=None, type='splits')
+        table = await self._get(exchange, date=date, symbols=None, type="splits")
 
         return table
 
 
 class Fundamentals(APISessionManager):
-    """ Get fundamental data API for stocks, ETFs, Mutual Funds, Indices. """
+    """Get fundamental data API for stocks, ETFs, Mutual Funds, Indices."""
 
     # TODO: Add fundamental public methods
-    _fundamentals = '/api/fundamentals'
+    _fundamentals = "/api/fundamentals"
 
     async def _get(self, exchange, ticker):
-        """ Get fundamental data API for stocks, ETFs, Mutual Funds, Indices.
+        """Get fundamental data API for stocks, ETFs, Mutual Funds, Indices.
 
         Note
         ----
@@ -452,13 +462,13 @@ class Fundamentals(APISessionManager):
 
         """
         # Path must append ticker and short exchange code
-        path = '{}/{}.{}'.format(self._fundamentals, ticker, exchange)
+        path = "{}/{}.{}".format(self._fundamentals, ticker, exchange)
 
         # Get the API response
         params = dict(
-            fmt='json',  # Default to CSV table. See NOTE in get!
-            period='d',  # Default to daily sampling period
-            order='a',  # Default to ascending order
+            fmt="json",  # Default to CSV table. See NOTE in get!
+            period="d",  # Default to daily sampling period
+            order="a",  # Default to ascending order
         )
         table = await self.get(path, params=params)
 
@@ -471,14 +481,14 @@ class Exchanges(object):
     def get_exchanges(self):
         """Get the full list of supported exchanges."""
         # Path must append ticker and short exchange code
-        _exchanges = '/api/exchanges-list'
-        path = '{}'.format(_exchanges)
+        _exchanges = "/api/exchanges-list"
+        path = "{}".format(_exchanges)
 
         # Get the API response
         params = dict(
-            fmt='json',  # Default to CSV table. See NOTE in get!
-            period='d',  # Default to daily sampling period
-            order='a',  # Default to ascending order
+            fmt="json",  # Default to CSV table. See NOTE in get!
+            period="d",  # Default to daily sampling period
+            order="a",  # Default to ascending order
         )
 
         async def _get(path, params):
@@ -500,14 +510,14 @@ class Exchanges(object):
 
         """
         # Path must append ticker and short exchange code
-        _exchange_symbol_list = '/api/exchange-symbol-list'
-        path = '{}/{}'.format(_exchange_symbol_list, exchange)
+        _exchange_symbol_list = "/api/exchange-symbol-list"
+        path = "{}/{}".format(_exchange_symbol_list, exchange)
 
         # Get the API response
         params = dict(
-            fmt='json',  # Default to CSV table. See NOTE in get!
-            period='d',  # Default to daily sampling period
-            order='a',  # Default to ascending order
+            fmt="json",  # Default to CSV table. See NOTE in get!
+            period="d",  # Default to daily sampling period
+            order="a",  # Default to ascending order
         )
 
         async def _get(path, params):
@@ -521,11 +531,11 @@ class Exchanges(object):
 
     def get_indices(self):
         """Get a table of supported indices."""
-        return self.get_exchange_symbols('INDX')
+        return self.get_exchange_symbols("INDX")
 
 
 class MultiHistorical(object):
-    """ Get multiple histories across exchanges, securities and date ranges.
+    """Get multiple histories across exchanges, securities and date ranges.
 
     This class' public methods take a list of `(exchange, ticker)` tuples and
     generate a single call per `(exchange, ticker)` tuple from the appropriate
@@ -537,8 +547,9 @@ class MultiHistorical(object):
     (``pandas.DataFrame``) which is returned.
 
     """
+
     async def _get_eod(self, path, symbol_list):
-        """ Get historical data for a list of securities.
+        """Get historical data for a list of securities.
 
         This uses the EOD history API service (class ``Historical``) which means
         histories for all securities in the ``symbol_list` argument are
@@ -572,8 +583,8 @@ class MultiHistorical(object):
             for ticker, exchange, from_date, to_date in symbol_list:
                 # Call historical EOD
                 tasks.append(
-                    historical._get(
-                        path, exchange, ticker, from_date, to_date))
+                    historical._get(path, exchange, ticker, from_date, to_date)
+                )
             result_list = await asyncio.gather(*tasks, return_exceptions=True)
             # Add ticker and exchange code to each table in the list. The API
             # does not return this data so it must be constructed and attached.
@@ -583,20 +594,22 @@ class MultiHistorical(object):
                 symbol, unknown = result
                 ticker, exchange, from_date, to_date = symbol
                 # Check dates, guard against None's
-                assert from_date is None or isinstance(from_date, datetime.date),\
-                    'Expected symbol_list''s from_date type as datetime.date.'
-                assert to_date is None or isinstance(to_date, datetime.date),\
-                    'Expected symbol_list''s to_date type as datetime.date.'
+                assert from_date is None or isinstance(from_date, datetime.date), (
+                    "Expected symbol_list" "s from_date type as datetime.date."
+                )
+                assert to_date is None or isinstance(to_date, datetime.date), (
+                    "Expected symbol_list" "s to_date type as datetime.date."
+                )
                 if isinstance(unknown, Exception):
                     exception = unknown
                     logger.warning(
-                        'Exception %s for symbol %s.%s',
-                        exception, ticker, exchange)
+                        "Exception %s for symbol %s.%s", exception, ticker, exchange
+                    )
                 else:
                     # Process table and add to list
                     table = unknown
-                    table['ticker'] = ticker
-                    table['exchange'] = exchange
+                    table["ticker"] = ticker
+                    table["exchange"] = exchange
                     table_list.append(table)
         # Eliminate empty tables in the table list as these inadvertently erase
         # the `date` index name. This may be a `pandas` bug.
@@ -606,19 +619,18 @@ class MultiHistorical(object):
             # Return an empty table
             return pd.DataFrame([])
         # Concatenate all tables
-        table = pd.concat(table_list, axis='index')
+        table = pd.concat(table_list, axis="index")
         # Set up full index by appending ticker and exchange to the date index
         table.set_index(
-            ['ticker', 'exchange'],
-            verify_integrity=True, append=True, inplace=True)
+            ["ticker", "exchange"], verify_integrity=True, append=True, inplace=True
+        )
         # MultiIndex must be sorted for causal slicing.
         table.sort_index(inplace=True)
 
         return table
 
-    async def _get_bulk(
-            self, symbol_list, from_date, to_date=None, type=None):
-        """ Get bulk historical data for a range of dates.
+    async def _get_bulk(self, symbol_list, from_date, to_date=None, type=None):
+        """Get bulk historical data for a range of dates.
 
         This uses the Bulk history API service (class Bulk) which means
         histories for all securities in the ``symbol_list` argument are
@@ -646,8 +658,10 @@ class MultiHistorical(object):
 
         """
         # Generate a date series between from_date and to_date (inclusive).
-        dates = [from_date + datetime.timedelta(days=x)
-                 for x in range((to_date - from_date).days + 1)]
+        dates = [
+            from_date + datetime.timedelta(days=x)
+            for x in range((to_date - from_date).days + 1)
+        ]
 
         # Create a dict of exchanges keys with each item a list of the
         # securities specified (by symbols_list) in that exchange.
@@ -660,16 +674,13 @@ class MultiHistorical(object):
         async with Bulk() as bulk:
             for exchange, ticker_list in exchange_dict.items():
                 for date in dates:
-                    tasks.append(
-                        bulk._get(
-                            exchange, date, ticker_list, type)
-                    )
+                    tasks.append(bulk._get(exchange, date, ticker_list, type))
             table_list = await asyncio.gather(*tasks)
 
         # Contrary to _get_eod the API does return date, exchange and ticker
         # data so it not not be constructed and attached. Combine tables in to
         # one large table
-        table = pd.concat(table_list, axis='index')
+        table = pd.concat(table_list, axis="index")
         table.sort_index(inplace=True)  # MultiIndex must be sorted for slicing.
         # Duplicates are caused by holidays. Querying the API on the evenings of
         # Friday (which did return a non-trivial result), and Saturday and
@@ -680,7 +691,7 @@ class MultiHistorical(object):
         return table
 
     def get_eod(self, symbol_list):
-        """ Get historical EOD for a list of securities.
+        """Get historical EOD for a list of securities.
 
         This method switches between EOD and Bulk feeds (classes Historical and
         Bulk) depending on the date range. This is to minimize time in the API
@@ -696,8 +707,7 @@ class MultiHistorical(object):
 
         """
         # Use EOD API
-        table = asyncio.run(
-            self._get_eod(Historical._historical_eod, symbol_list))
+        table = asyncio.run(self._get_eod(Historical._historical_eod, symbol_list))
 
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
@@ -709,7 +719,7 @@ class MultiHistorical(object):
         return table
 
     def get_dividends(self, symbol_list):
-        """ Get historical dividends for a list of securities.
+        """Get historical dividends for a list of securities.
 
         This method uses only the EOD (class Historical) due to incorrect Bulk
         API call behaviour such as not returning the ``value`` filed and not
@@ -726,7 +736,8 @@ class MultiHistorical(object):
         """
         # Use EOD API
         table = asyncio.run(
-            self._get_eod(Historical._historical_dividends, symbol_list))
+            self._get_eod(Historical._historical_dividends, symbol_list)
+        )
 
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
@@ -738,7 +749,7 @@ class MultiHistorical(object):
         return table
 
     def get_forex(self, forex_list):
-        """ Get historical forex for a list of rates.
+        """Get historical forex for a list of rates.
 
         This method uses only the EOD (class Historical) due to incorrect Bulk
         API call behaviour such as not returning the ``value`` filed and not
@@ -757,12 +768,12 @@ class MultiHistorical(object):
         # part set to "FOREX". In other words, insert FOREX in the right
         # position.
         symbol_list = [
-            (ticker, 'FOREX', from_date, to_date
-             ) for ticker, from_date, to_date in forex_list]
+            (ticker, "FOREX", from_date, to_date)
+            for ticker, from_date, to_date in forex_list
+        ]
 
         # Use EOD API
-        table = asyncio.run(
-            self._get_eod(Historical._historical_forex, symbol_list))
+        table = asyncio.run(self._get_eod(Historical._historical_forex, symbol_list))
 
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
@@ -771,12 +782,12 @@ class MultiHistorical(object):
             # The security and date info is in the index
             table = table[eod_columns]
             # As the exchange suffix is always 'FOREX' it is unnecessary.
-            table = table.droplevel(level='exchange')
+            table = table.droplevel(level="exchange")
 
         return table
 
     def get_index(self, index_list):
-        """ Get historical forex for a list of rates.
+        """Get historical forex for a list of rates.
 
         This method uses only the EOD (class Historical) due to incorrect Bulk
         API call behaviour such as not returning the ``value`` filed and not
@@ -795,12 +806,12 @@ class MultiHistorical(object):
         # part set to "FOREX". In other words, insert FOREX in the right
         # position.
         symbol_list = [
-            (ticker, 'INDX', from_date, to_date
-             ) for ticker, from_date, to_date in index_list]
+            (ticker, "INDX", from_date, to_date)
+            for ticker, from_date, to_date in index_list
+        ]
 
         # Use EOD API
-        table = asyncio.run(
-            self._get_eod(Historical._historical_forex, symbol_list))
+        table = asyncio.run(self._get_eod(Historical._historical_forex, symbol_list))
 
         if table.empty:
             # Produce an empty DataFrame that will pass empty tests downstream
@@ -809,7 +820,6 @@ class MultiHistorical(object):
             # The security and date info is in the index
             table = table[eod_columns]
             # As the exchange suffix is always 'INDX' it is unnecessary.
-            table = table.droplevel(level='exchange')
+            table = table.droplevel(level="exchange")
 
         return table
-

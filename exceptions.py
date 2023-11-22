@@ -19,20 +19,22 @@ class _BaseException(BaseException):
 
     def __init__(self, msg, **kwargs):
         """Initialization."""
-        self.message = msg   # In python3 there is no Exception.message
-        if 'action' in kwargs:
-            self.action = kwargs['action']
+        self.message = msg  # In python3 there is no Exception.message
+        if "action" in kwargs:
+            self.action = kwargs["action"]
         super().__init__(msg)
 
     def __str__(self):
         """Return the informal string output."""
         if self.action is not None:
-            fmt = '%(except_name)s : %(action)s : %(message)s'
+            fmt = "%(except_name)s : %(action)s : %(message)s"
         else:
-            fmt = '%(except_name)s : %(message)s'
-        data = {'message': self.message,
-                'except_name': self.__class__.__name__,
-                'action': self.action}
+            fmt = "%(except_name)s : %(message)s"
+        data = {
+            "message": self.message,
+            "except_name": self.__class__.__name__,
+            "action": self.action,
+        }
         return fmt % data
 
     def set_action(self, action):
@@ -56,8 +58,7 @@ class _BaseException(BaseException):
             'action':
                 What action has already been taken.
         """
-        return {'except_name': self.__class__.__name__,
-                'action': self.action}
+        return {"except_name": self.__class__.__name__, "action": self.action}
 
 
 class FactoryError(_BaseException):
@@ -99,7 +100,7 @@ class BadISIN(_BaseException):
     def __init__(self, isin, **kwargs):
         """See the class docstring."""
         self.isin = isin
-        msg = 'ISIN=%s checksum fails' % isin
+        msg = "ISIN=%s checksum fails" % isin
         super().__init__(msg, **kwargs)
 
 
@@ -134,8 +135,10 @@ class ReconcileError(_BaseException):
         """Instance initialization."""
         self.param = param
         self.obj = obj
-        msg = ('The existing %r does not reconcile '
-               'with the factory method argument "%s".') % (obj, param)
+        msg = (
+            "The existing %r does not reconcile "
+            'with the factory method argument "%s".'
+        ) % (obj, param)
         super().__init__(msg, **kwargs)
 
 
@@ -168,7 +171,7 @@ class _EntityError(Exception):
         domicile_code = entity.domicile.code
         discriminator = entity._discriminator
         msg = super().__str__()
-        return '%s:%s:%s:%s' % (name, domicile_code, discriminator, msg)
+        return "%s:%s:%s:%s" % (name, domicile_code, discriminator, msg)
 
     @property
     def logger_extra(self):
@@ -183,9 +186,11 @@ class _EntityError(Exception):
         name = entity.name
         domicile_code = entity.domicile.code
         discriminator = entity._discriminator
-        return {'name': name,
-                'domicile_code': domicile_code,
-                'discriminator': discriminator}
+        return {
+            "name": name,
+            "domicile_code": domicile_code,
+            "discriminator": discriminator,
+        }
 
 
 class ListedError(_EntityError):

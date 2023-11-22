@@ -9,7 +9,6 @@
 
 import sys
 import functools
-import datetime
 import numpy as np
 import pandas as pd
 
@@ -24,14 +23,20 @@ from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData
-from .exceptions import ReconcileError
-from .exceptions import BadISIN
-from .financial_data import Dump
-from .common import Common
-from .entity import Currency, Exchange, Issuer
-from .industry_class import IndustryClassICB
-from .time_series import Dividend, ForexEOD, IndexEOD, ListedEOD, SimpleEOD, TimeSeriesBase
+from asset_base.exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData
+from asset_base.exceptions import ReconcileError
+from asset_base.exceptions import BadISIN
+from asset_base.financial_data import Dump
+from asset_base.entity import Currency, Exchange, Issuer
+from asset_base.common import Common
+from asset_base.industry_class import IndustryClassICB
+from asset_base.time_series import (
+    Dividend,
+    ForexEOD,
+    IndexEOD,
+    ListedEOD,
+    TimeSeriesBase,
+)
 
 # Get module-named logger.
 import logging
@@ -60,25 +65,26 @@ class Base(Common):
     <other Base polymorph>` error.
     """
 
-    __tablename__ = 'base'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "base"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('common.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("common.id"), primary_key=True)
     """ Primary key."""
 
     # Asset currency. Optional.
-    _currency_id = Column(Integer, ForeignKey('currency.id'), nullable=True)
+    _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=True)
     currency = relationship(Currency)
 
     # Price quote in cents or units. Strictly convert all prices to currency
     # units in case of this attribute being in cents.
-    quote_units = Column(Enum('units', 'cents'), nullable=False)
+    quote_units = Column(Enum("units", "cents"), nullable=False)
 
     # All historical time-series collection ranked by date_stamp
     _series = relationship(
-        TimeSeriesBase,
-        order_by=TimeSeriesBase.date_stamp,
-        back_populates='base_obj')
+        TimeSeriesBase, order_by=TimeSeriesBase.date_stamp, back_populates="base_obj"
+    )
     """list: EOD historical time-series collection ranked by date_stamp
 
     A list of ``time_series.TimeSeriesBase`` instances.
@@ -98,10 +104,10 @@ class Base(Common):
 
         self.currency = currency
 
-        if 'quote_units' in kwargs:
-            self.quote_units = kwargs.pop('quote_units')
+        if "quote_units" in kwargs:
+            self.quote_units = kwargs.pop("quote_units")
         else:
-            self.quote_units = 'units'
+            self.quote_units = "units"
 
     def __str__(self):
         """Return the informal string output. Currently ``identity_code``."""
@@ -110,18 +116,19 @@ class Base(Common):
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", currency={!r})'.format(
-            self._class_name, self.name, self.currency)
+            self._class_name, self.name, self.currency
+        )
 
     def __lt__(self, other):
-        """Use primarily key ``id`` for sorting. (See Note in class docstring).
-        """
+        """Use primarily key ``id`` for sorting. (See Note in class docstring)."""
         return self.id < other.id
 
     @property
     def long_name(self):
         """str: Return the long name string."""
-        return '{} is an {} priced in {}.'.format(
-            self.name, self._class_name, self.currency_ticker)
+        return "{} is an {} priced in {}.".format(
+            self.name, self._class_name, self.currency_ticker
+        )
 
     @property
     def _eod_series(self):
@@ -147,12 +154,12 @@ class Base(Common):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.currency.ticker + '.' + self.name
+        return self.currency.ticker + "." + self.name
 
     @property
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return self.currency.ticker + '.' + self.name
+        return self.currency.ticker + "." + self.name
 
     @property
     def currency_ticker(self):
@@ -178,10 +185,10 @@ class Base(Common):
         """
         trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
         if len(trade_eod_dict_list) == 0:
-            raise EODSeriesNoData(f'Expected EOD data for {self}.')
+            raise EODSeriesNoData(f"Expected EOD data for {self}.")
         data_frame = pd.DataFrame(trade_eod_dict_list)
-        data_frame['date_stamp'] = pd.to_datetime(data_frame['date_stamp'])
-        data_frame.set_index('date_stamp', inplace=True)
+        data_frame["date_stamp"] = pd.to_datetime(data_frame["date_stamp"])
+        data_frame.set_index("date_stamp", inplace=True)
         data_frame.sort_index(inplace=True)  # Assure ascending
         data_frame.name = self
 
@@ -198,7 +205,7 @@ class Base(Common):
         try:
             last_eod = self._eod_series[-1]
         except IndexError:
-            raise EODSeriesNoData(f'Expected EOD data for {self}.')
+            raise EODSeriesNoData(f"Expected EOD data for {self}.")
 
         return last_eod
 
@@ -316,18 +323,19 @@ class Asset(Base):
 
     """
 
-    __tablename__ = 'asset'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "asset"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('base.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("base.id"), primary_key=True)
     """ Primary key."""
 
     # Entity owns Asset. Entity has a reference list to many owned Asset named
     # `asset_list`
     # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
-    _owner_id = Column(Integer, ForeignKey('entity.id'))
-    owner = relationship(
-        'Entity', backref='asset_list', foreign_keys=[_owner_id])
+    _owner_id = Column(Integer, ForeignKey("entity.id"))
+    owner = relationship("Entity", backref="asset_list", foreign_keys=[_owner_id])
 
     # TODO: This (or child) is were we would add asset fundamental data relationships
     # TODO: This (or child) is were we would add asset book relationships
@@ -341,8 +349,8 @@ class Asset(Base):
         super().__init__(name, currency, **kwargs)
 
         # Asset owner
-        if 'owner' in kwargs:
-            self.owner = kwargs.pop('owner')
+        if "owner" in kwargs:
+            self.owner = kwargs.pop("owner")
 
     def __repr__(self):
         """Return the official string output."""
@@ -350,7 +358,8 @@ class Asset(Base):
             msg = super().__repr__()
         else:
             msg = '{}(name="{}", currency={!r}, owner={!r})'.format(
-                self._class_name, self.name, self.currency, self.owner)
+                self._class_name, self.name, self.currency, self.owner
+            )
 
         return msg
 
@@ -359,7 +368,7 @@ class Asset(Base):
         """str: Return the long name string."""
         msg = super().__str__()
         if self.owner is not None:
-            msg += ' Owner: {}'.format(self.owner)
+            msg += " Owner: {}".format(self.owner)
 
         return msg
 
@@ -443,15 +452,19 @@ class Asset(Base):
         # as Entity should ber an abstract class. Check if entity exists in the
         # session and if not then add it.
         try:
-            obj = session.query(cls).join(Currency).filter(
-                cls.name == asset_name,
-                Currency.ticker == currency_code
-            ).one()
+            obj = (
+                session.query(cls)
+                .join(Currency)
+                .filter(cls.name == asset_name, Currency.ticker == currency_code)
+                .one()
+            )
         except NoResultFound:
             if not create:
                 raise FactoryError(
                     'Asset "{}", currency="{}", not found.'.format(
-                        asset_name, currency_code))
+                        asset_name, currency_code
+                    )
+                )
             else:
                 # Create a new instance, fetch pre-existing currency
                 currency = Currency.factory(session, currency_code)
@@ -503,25 +516,25 @@ class Cash(Asset):
         ISO 4217 3-letter currency code used as the ticker.
     """
 
-    __tablename__ = 'cash'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "cash"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('asset.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("asset.id"), primary_key=True)
 
-    key_code_name = 'asset_currency'
+    key_code_name = "asset_currency"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
-    _asset_class = 'cash'
+    _asset_class = "cash"
 
     #  A short class name for use in naming
-    _name_appendix = 'Cash'
+    _name_appendix = "Cash"
 
     def __init__(self, currency, **kwargs):
         """Instance initialization."""
 
-        assert 'owner' not in kwargs, 'Unexpected `owner` argument.'
+        assert "owner" not in kwargs, "Unexpected `owner` argument."
 
         # The name is constrained to that of the currency.
         name = currency.name
@@ -529,8 +542,7 @@ class Cash(Asset):
 
     def __repr__(self):
         """Return the official string output."""
-        msg = '{}(currency={!r})'.format(
-            self._class_name, self.currency)
+        msg = "{}(currency={!r})".format(self._class_name, self.currency)
 
         return msg
 
@@ -552,8 +564,9 @@ class Cash(Asset):
     @property
     def long_name(self):
         """str: Return the long name string."""
-        msg = '{} is an {} priced in {}.'.format(
-            self.name, self._class_name, self.currency_ticker)
+        msg = "{} is an {} priced in {}.".format(
+            self.name, self._class_name, self.currency_ticker
+        )
 
         return msg
 
@@ -587,9 +600,9 @@ class Cash(Asset):
 
         """
         if self.currency.in_domicile(domicile_code):
-            locality = 'domestic'
+            locality = "domestic"
         else:
-            locality = 'foreign'
+            locality = "foreign"
 
         return locality
 
@@ -627,7 +640,7 @@ class Cash(Asset):
         except NoResultFound:
             # Raise exception if the currency is not found
             if not create:
-                raise FactoryError(f'Currency with ticker `{ticker}` not found.')
+                raise FactoryError(f"Currency with ticker `{ticker}` not found.")
             else:
                 # Create a new instance, fetch pre-existing currency
                 currency = Currency.factory(session, ticker)
@@ -662,12 +675,12 @@ class Cash(Asset):
         currency_list = session.query(Currency).all()
         if len(currency_list) == 0:
             raise Exception(
-                'No Currency instances found. '
-                'Please run `Currency.update_all`.')
+                "No Currency instances found. " "Please run `Currency.update_all`."
+            )
         for currency in currency_list:
             Cash.factory(session, currency.ticker)
 
-    def time_series(self, date_index, identifier='asset'):
+    def time_series(self, date_index, identifier="asset"):
         """Retrieve historic time-series for a set of class instances.
 
         Price time-series for cash is a unity time-series as the price of cash
@@ -702,7 +715,7 @@ class Cash(Asset):
                 attribute.
         """
         if not isinstance(date_index, pd.DatetimeIndex):
-            raise ValueError('Unexpected date_index argument type.')
+            raise ValueError("Unexpected date_index argument type.")
 
         # Make a series with all prices set to 1.0
         series = pd.Series(len(date_index) * [1.0], index=date_index)
@@ -710,17 +723,16 @@ class Cash(Asset):
         # Add the entity (Cash) as the Series name for later use as column a
         # label in concatenation into a DataFrame
         # TODO: Replace with a match statement
-        if identifier == 'asset':
+        if identifier == "asset":
             series.name = self
-        elif identifier == 'id':
+        elif identifier == "id":
             series.name = self.id
-        elif identifier == 'ticker':
+        elif identifier == "ticker":
             series.name = self.ticker
-        elif identifier == 'identity_code':
+        elif identifier == "identity_code":
             series.name = self.identity_code
         else:
-            raise ValueError(
-                f'Unexpected `identifier` argument `{identifier}`.')
+            raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
 
         return series
 
@@ -748,7 +760,7 @@ class Forex(Cash):
 
         ```
             price    = price    * EURUSD
-                    USD        EUR
+                       USD        EUR
         ```
 
     Warning
@@ -773,46 +785,63 @@ class Forex(Cash):
 
 
     """
-    __tablename__ = 'forex'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
 
-    id = Column(Integer, ForeignKey('cash.id'), primary_key=True)
+    __tablename__ = "forex"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    key_code_name = 'ticker'
+    id = Column(Integer, ForeignKey("cash.id"), primary_key=True)
+
+    key_code_name = "ticker"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
     _eod_series = relationship(
-        ForexEOD,
-        order_by=ForexEOD.date_stamp,
-        back_populates='forex')
+        ForexEOD, order_by=ForexEOD.date_stamp, back_populates="forex"
+    )
     """list: EOD historical time-series collection ranked by date_stamp
 
     A list of ``time_series.ForexEOD`` instances.
     """
 
-    _asset_class = 'forex'
+    _asset_class = "forex"
 
     #  A short class name for use in naming
-    _name_appendix = 'Forex'
+    _name_appendix = "Forex"
 
     # Priced currency, or ``base_currency``
-    _currency_id2 = Column(Integer, ForeignKey('currency.id'), nullable=True)
+    _currency_id2 = Column(Integer, ForeignKey("currency.id"), nullable=True)
     base_currency = relationship(Currency, foreign_keys=[_currency_id2])
 
     # Currency ticker is redundant information, but very useful and inexpensive
     ticker = Column(String(6))
 
     # The reference or root ticker. Its price will always be 1.0.
-    root_currency_ticker = 'USD'
+    root_currency_ticker = "USD"
 
     # List of top foreign currencies. Their time series are maintained as the
     # price of 1 unit of the ``root_currency_ticker``. South African ZAR is included for
     # domestic reasons.
     foreign_currencies = [
-        'USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', 'CHF', 'CNY', 'HKD',
-        'NZD', 'SEK', 'KRW', 'SGD', 'NOK', 'MXN', 'INR', 'RUB', 'ZAR']
+        "USD",
+        "EUR",
+        "GBP",
+        "CAD",
+        "AUD",
+        "JPY",
+        "CHF",
+        "CNY",
+        "HKD",
+        "NZD",
+        "SEK",
+        "KRW",
+        "SGD",
+        "NOK",
+        "MXN",
+        "INR",
+        "RUB",
+        "ZAR",
+    ]
 
     def __init__(self, base_currency, price_currency, **kwargs):
         """Instance initialization."""
@@ -821,22 +850,23 @@ class Forex(Cash):
         # The name is constrained to that of the currency.
         # Note that we set the pricing currency of the cash asset here.
         super().__init__(price_currency, **kwargs)
-        self.name = f'{base_currency.ticker}{price_currency.ticker}'
+        self.name = f"{base_currency.ticker}{price_currency.ticker}"
 
         self.currency = price_currency
         self.base_currency = base_currency
 
-        assert base_currency.ticker == self.root_currency_ticker, \
-            f'Expected the `base_currency` to be the root currency (USD).'
+        assert (
+            base_currency.ticker == self.root_currency_ticker
+        ), "Expected the `base_currency` to be the root currency (USD)."
 
         # Ticker is Joined ISO 4217 3-letter currency codes
-        self.ticker = '{}{}'.format(
-            self.base_currency.ticker, self.currency.ticker)
+        self.ticker = "{}{}".format(self.base_currency.ticker, self.currency.ticker)
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(base_currency={!r}, price_currency={!r})'.format(
-            self._class_name, self.base_currency.ticker, self.currency.ticker)
+        return "{}(base_currency={!r}, price_currency={!r})".format(
+            self._class_name, self.base_currency.ticker, self.currency.ticker
+        )
 
     @property
     def base_currency_ticker(self):
@@ -851,18 +881,19 @@ class Forex(Cash):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
+        return "{}{}".format(self.base_currency.ticker, self.currency.ticker)
 
     @property
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return '{}{}'.format(self.base_currency.ticker, self.currency.ticker)
+        return "{}{}".format(self.base_currency.ticker, self.currency.ticker)
 
     @property
     def long_name(self):
         """str: Return the long name string."""
-        return 'One {} priced in {}'.format(
-            self.base_currency.ticker, self.currency.ticker)
+        return "One {} priced in {}".format(
+            self.base_currency.ticker, self.currency.ticker
+        )
 
     @classmethod
     def factory(cls, session, base_ticker, price_ticker, create=True, **kwargs):
@@ -898,24 +929,28 @@ class Forex(Cash):
         try:
             base_currency = Currency.factory(session, base_ticker)
         except NoResultFound:
-            raise FactoryError('Base currency %s not found', base_ticker)
+            raise FactoryError("Base currency %s not found", base_ticker)
         # Get the pricing currency if it exits
         try:
             price_currency = Currency.factory(session, price_ticker)
         except NoResultFound:
-            raise FactoryError('Base currency %s not found', price_ticker)
+            raise FactoryError("Base currency %s not found", price_ticker)
 
         # Check if entity exists in the session and if not then add it.
         try:
-            obj = session.query(cls).filter(
-                cls.base_currency == base_currency,
-                cls.currency == price_currency,
-                ).one()
+            obj = (
+                session.query(cls)
+                .filter(
+                    cls.base_currency == base_currency,
+                    cls.currency == price_currency,
+                )
+                .one()
+            )
         except NoResultFound:
             # Raise exception if the currency is not found
             if not create:
-                ticker = '{}{}'.format(base_ticker, price_ticker)
-                raise FactoryError(f'Forex {ticker} not found.')
+                ticker = "{}{}".format(base_ticker, price_ticker)
+                raise FactoryError(f"Forex {ticker} not found.")
             else:
                 # Create a new instance, fetch pre-existing currency
                 obj = cls(base_currency, price_currency, **kwargs)
@@ -959,18 +994,21 @@ class Forex(Cash):
 
         # Create Forex instances as per the Forex.foreign_currencies list
         # attribute
-        foreign_currencies = session.query(Currency).filter(
-            Currency.ticker.in_(foreign_currencies_list),
-            ).all()
+        foreign_currencies = (
+            session.query(Currency)
+            .filter(
+                Currency.ticker.in_(foreign_currencies_list),
+            )
+            .all()
+        )
         if len(foreign_currencies) == 0:
             raise Exception(
-                'No Currency instances found. '
-                'Please run `Currency.update_all`.')
+                "No Currency instances found. " "Please run `Currency.update_all`."
+            )
         if len(foreign_currencies_list) != len(foreign_currencies):
-            raise FactoryError('Not all foreign currencies were found.')
+            raise FactoryError("Not all foreign currencies were found.")
         for price_currency in foreign_currencies:
-            Forex.factory(
-                session, cls.root_currency_ticker, price_currency.ticker)
+            Forex.factory(session, cls.root_currency_ticker, price_currency.ticker)
 
         # Get EOD trade data for Forex.
         if get_forex_method is not None:
@@ -978,8 +1016,8 @@ class Forex(Cash):
 
     @classmethod
     def get_rates_data_frame(
-            cls, session,
-            base_ticker, price_ticker_list, price_item='close'):
+        cls, session, base_ticker, price_ticker_list, price_item="close"
+    ):
         """Price the base in a list of pricing currencies.
 
         Note
@@ -1023,7 +1061,7 @@ class Forex(Cash):
             eod_dict[price_ticker] = eod[price_item]
         df_eod_prices = pd.DataFrame(eod_dict)
         # Keep last price over holiday periods
-        df_eod_prices.ffill(axis='index', inplace=True)
+        df_eod_prices.ffill(axis="index", inplace=True)
 
         # Get the `root_currency_ticker` prices in the desired `base_ticker`
         # currency.
@@ -1034,10 +1072,11 @@ class Forex(Cash):
         # the denominator, then forward fill last price over holiday or break
         # periods.
         series_eod_base = series_eod_base.reindex(
-            index=df_eod_prices.index, method='ffill')
+            index=df_eod_prices.index, method="ffill"
+        )
 
         # Price the base currency in the pricing currencies.
-        df_rates = df_eod_prices.divide(series_eod_base, axis='index')
+        df_rates = df_eod_prices.divide(series_eod_base, axis="index")
 
         return df_rates
 
@@ -1075,20 +1114,21 @@ class Share(Asset):
     .Asset, .Issuer
 
     """
+
     # TODO: Create Account class to contain assets with many-to-one relationship
 
-    __tablename__ = 'share'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "share"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('asset.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("asset.id"), primary_key=True)
     """ Primary key."""
 
     # TODO: Here we would add share unitization and ownership relationships
 
     # Issuer issues Share. Issuer has a reference list to many issued Share
     # named `share_list`
-    _issuer_id = Column(Integer, ForeignKey('issuer.id'), nullable=False)
-    issuer = relationship('Issuer', backref='share_list')
+    _issuer_id = Column(Integer, ForeignKey("issuer.id"), nullable=False)
+    issuer = relationship("Issuer", backref="share_list")
 
     # Number of share units issued byu the Issuer
     shares_in_issue = Column(Integer, nullable=True)
@@ -1097,7 +1137,7 @@ class Share(Asset):
     distributions = Column(Boolean, nullable=False, default=False)
 
     #  A short class name for use in naming
-    _name_appendix = 'Share'
+    _name_appendix = "Share"
 
     def __init__(self, name, issuer, currency=None, **kwargs):
         """Instance initialization."""
@@ -1112,14 +1152,14 @@ class Share(Asset):
         self.issuer = issuer
 
         # Number of shares issued by the Issuer
-        if 'shares_in_issue' in kwargs:
-            self.shares_in_issue = kwargs.pop('shares_in_issue')
+        if "shares_in_issue" in kwargs:
+            self.shares_in_issue = kwargs.pop("shares_in_issue")
         else:
             self.shares_in_issue = None
 
         # Does the share pay distributions or not
-        if 'distributions' in kwargs:
-            self.distributions = kwargs.pop('distributions')
+        if "distributions" in kwargs:
+            self.distributions = kwargs.pop("distributions")
         else:
             # Not sure why the default is not set to False as specified in the
             # column attribute definition, so we do it here anyway
@@ -1133,19 +1173,22 @@ class Share(Asset):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.issuer.key_code + '.' + self.name
+        return self.issuer.key_code + "." + self.name
 
     @property
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return self.issuer.identity_code + '.' + self.name
+        return self.issuer.identity_code + "." + self.name
 
     @property
     def long_name(self):
         """str: Return the long name string."""
-        return '{} is a {} issued by {} in {}.'.format(
-            self.name, self._class_name,
-            self.issuer.name, self.issuer.domicile.country_name)
+        return "{} is a {} issued by {} in {}.".format(
+            self.name,
+            self._class_name,
+            self.issuer.name,
+            self.issuer.domicile.country_name,
+        )
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".
@@ -1178,9 +1221,9 @@ class Share(Asset):
         """
         share_domicile_code = self.domicile.country_code
         if domicile_code == share_domicile_code:
-            locality = 'domestic'
+            locality = "domestic"
         else:
-            locality = 'foreign'
+            locality = "foreign"
 
         return locality
 
@@ -1228,7 +1271,7 @@ class Listed(Share):
         identifies a security. ISINs consist of two alphabetic characters, which
         are the ISO 3166-1 alpha-2 code for the issuing country (An ISIN cannot
         specify a particular trading location.), nine alpha-numeric characters
-        (the National Securities Identifying Number, or NSIN, which identifies
+        (the National Securities Identifying Number, or ISIN, which identifies
         the security, padded as necessary with leading zeros), and one numerical
         check digit.
     exchange : .Exchange
@@ -1266,22 +1309,21 @@ class Listed(Share):
 
     """
 
-    __tablename__ = 'listed'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "listed"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('share.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("share.id"), primary_key=True)
     """ Primary key."""
 
     # Exchange lists Listed. Exchange has a reference list to many issued Listed
     # named `securities_list`
-    _exchange_id = Column(Integer, ForeignKey('exchange.id'), nullable=False)
-    exchange = relationship('Exchange', backref='securities_list')
+    _exchange_id = Column(Integer, ForeignKey("exchange.id"), nullable=False)
+    exchange = relationship("Exchange", backref="securities_list")
 
     # EOD historical time-series collection ranked by date_stamp
     _eod_series = relationship(
-        ListedEOD,
-        order_by=ListedEOD.date_stamp,
-        back_populates='listed')
+        ListedEOD, order_by=ListedEOD.date_stamp, back_populates="listed"
+    )
     """list: EOD historical time-series collection ranked by date_stamp
 
     A list of ``time_series.ListedEOD`` instances.
@@ -1292,17 +1334,17 @@ class Listed(Share):
     # National Securities Identifying Number
     isin = Column(String(12), nullable=False)
 
-    key_code_name = 'isin'
+    key_code_name = "isin"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
     # Listing status.
-    status = Column(Enum('listed', 'delisted'), nullable=False)
+    status = Column(Enum("listed", "delisted"), nullable=False)
 
     #  A short class name for use in naming
     # TODO: Automate from class magic attributes.
-    _name_appendix = 'Listed'
+    _name_appendix = "Listed"
 
     def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
@@ -1314,8 +1356,7 @@ class Listed(Share):
         if all([name, issuer, isin, exchange, ticker]):
             pass
         else:
-            raise ValueError(
-                'Unexpected `None` value for some positional arguments.')
+            raise ValueError("Unexpected `None` value for some positional arguments.")
 
         # Currency is the exchange listing currency, i.e., the exchange's
         # domicile currency which overwrites the parent class Share issuer's
@@ -1337,14 +1378,13 @@ class Listed(Share):
         if isin[0:2] == self.issuer.domicile.country_code:
             self.isin = isin
         else:
-            raise ValueError(
-                'Unexpected domicile. Does not match ISIN country code.')
+            raise ValueError("Unexpected domicile. Does not match ISIN country code.")
 
         # Listing status
-        if 'status' in kwargs:
-            self.status = kwargs.pop('status')
+        if "status" in kwargs:
+            self.status = kwargs.pop("status")
         else:
-            self.status = 'listed'
+            self.status = "listed"
 
     @property
     def domicile(self):
@@ -1359,16 +1399,21 @@ class Listed(Share):
     @property
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return self.isin + '.' + self.ticker
+        return self.isin + "." + self.ticker
 
     @property
     def long_name(self):
         """str: Return the long name string."""
-        return (
-            '{} ({}.{}) ISIN:{} is a {} on the {} issued by {} in {}').format(
-                self.name, self.ticker, self.exchange.mic, self.isin,
-                self._discriminator, self.exchange.name, self.issuer.name,
-                self.domicile.country_name)
+        return ("{} ({}.{}) ISIN:{} is a {} on the {} issued by {} in {}").format(
+            self.name,
+            self.ticker,
+            self.exchange.mic,
+            self.isin,
+            self._discriminator,
+            self.exchange.name,
+            self.issuer.name,
+            self.domicile.country_name,
+        )
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".
@@ -1402,9 +1447,9 @@ class Listed(Share):
         """
         listed_domicile_code = self.exchange.domicile.country_code
         if listed_domicile_code == domicile_code:
-            locality = 'domestic'
+            locality = "domestic"
         else:
-            locality = 'foreign'
+            locality = "foreign"
 
         return locality
 
@@ -1420,21 +1465,28 @@ class Listed(Share):
 
         """
         return {
-            'isin': self.isin,
-            'mic': self.exchange.mic,
-            'ticker': self.ticker,
-            'listed_name': self.name,
-            'issuer_name': self.issuer.name,
-            'issuer_domicile_code': self.issuer.domicile.country_code,
-            'status': self.status,
+            "isin": self.isin,
+            "mic": self.exchange.mic,
+            "ticker": self.ticker,
+            "listed_name": self.name,
+            "issuer_name": self.issuer.name,
+            "issuer_domicile_code": self.issuer.domicile.country_code,
+            "status": self.status,
         }
 
     @classmethod
     def factory(
-            cls, session,
-            isin=None, mic=None, ticker=None, listed_name=None,
-            issuer_domicile_code=None, issuer_name=None,
-            create=True, **kwargs):
+        cls,
+        session,
+        isin=None,
+        mic=None,
+        ticker=None,
+        listed_name=None,
+        issuer_domicile_code=None,
+        issuer_name=None,
+        create=True,
+        **kwargs,
+    ):
         """Manufacture/retrieve an instance from the given parameters.
 
         If a record of the specified class instance does not exist then add it,
@@ -1511,47 +1563,54 @@ class Listed(Share):
             if isin is not None:
                 obj = session.query(cls).filter(cls.isin == isin).one()
             elif mic is not None and ticker is not None:
-                obj = session.query(cls).filter(
-                    # Must use explicit join in this line!
-                    cls._exchange_id == Exchange.id).filter(
-                        Exchange.mic == mic, cls.ticker == ticker).one()
+                obj = (
+                    session.query(cls)
+                    .filter(
+                        # Must use explicit join in this line!
+                        cls._exchange_id == Exchange.id
+                    )
+                    .filter(Exchange.mic == mic, cls.ticker == ticker)
+                    .one()
+                )
             else:
                 raise FactoryError(
-                    'Expected arguments, single `isin` or `ticker`-`mic` pair.',
-                    action='Retrieve Failed')
+                    "Expected arguments, single `isin` or `ticker`-`mic` pair.",
+                    action="Retrieve Failed",
+                )
         except NoResultFound:
             # Create and add a new instance below if allowed
             if not create:
-                raise FactoryError(
-                    'Listed ISIN={}, not found.'.format(isin))
+                raise FactoryError("Listed ISIN={}, not found.".format(isin))
             # Need sufficient arguments. Due to argument default these can be
             # None
             if not all([listed_name, isin, ticker]):
                 raise FactoryError(
-                    'Expected  arguments `listed_name`, `isin`, `ticker`. '
-                    'Some are None.', action='Create Failed')
+                    "Expected  arguments `listed_name`, `isin`, `ticker`. "
+                    "Some are None.",
+                    action="Create Failed",
+                )
             if not all([issuer_name, issuer_domicile_code]):
                 raise FactoryError(
-                    'Expected valid `issuer_name`, `issuer_domicile_code` '
-                    'arguments. Some are None.',
-                    action='Create failed')
+                    "Expected valid `issuer_name`, `issuer_domicile_code` "
+                    "arguments. Some are None.",
+                    action="Create failed",
+                )
             if mic is None:
-                raise FactoryError(
-                    'Expect valid exchange MIC argument. Got None.')
+                raise FactoryError("Expect valid exchange MIC argument. Got None.")
             # Begin Listed creation process
             try:
                 exchange = Exchange.factory(session, mic=mic)
             except FactoryError:
                 # The exchange must already exist.
-                raise FactoryError(
-                    f'Exchange {mic} not found.', action='Create Failed')
+                raise FactoryError(f"Exchange {mic} not found.", action="Create Failed")
             try:
-                issuer = Issuer.factory(
-                    session, issuer_name, issuer_domicile_code)
+                issuer = Issuer.factory(session, issuer_name, issuer_domicile_code)
             except FactoryError:
                 raise FactoryError(
-                    'Could not create or retrieve the Issuer. '
-                    'Check Issuer arguments.', action='Create Failed')
+                    "Could not create or retrieve the Issuer. "
+                    "Check Issuer arguments.",
+                    action="Create Failed",
+                )
             # Now we have all required arguments to create
             obj = cls(listed_name, issuer, isin, exchange, ticker, **kwargs)
             session.add(obj)
@@ -1565,18 +1624,18 @@ class Listed(Share):
                 obj.ticker = ticker
             # Disallow issuer change
             if issuer_name and obj.issuer.name != issuer_name:
-                raise ReconcileError(obj, 'issuer_name')
-            if issuer_domicile_code and \
-                    obj.issuer.domicile.country_code != issuer_domicile_code:
-                raise ReconcileError(obj, 'issuer_domicile_code')
+                raise ReconcileError(obj, "issuer_name")
+            if (
+                issuer_domicile_code
+                and obj.issuer.domicile.country_code != issuer_domicile_code
+            ):
+                raise ReconcileError(obj, "issuer_domicile_code")
 
         return obj
 
     @classmethod
-    def update_all(
-            cls, session, get_meta_method, get_eod_method=None,
-            **kwargs):
-        """ Update/create all the objects in the asset_base session.
+    def update_all(cls, session, get_meta_method, get_eod_method=None, **kwargs):
+        """Update/create all the objects in the asset_base session.
 
         Note
         ----
@@ -1712,7 +1771,7 @@ class ListedEquity(Listed):
         identifies a security. ISINs consist of two alphabetic characters, which
         are the ISO 3166-1 alpha-2 code for the issuing country (An ISIN cannot
         specify a particular trading location.), nine alpha-numeric characters
-        (the National Securities Identifying Number, or NSIN, which identifies
+        (the National Securities Identifying Number, or ISIN, which identifies
         the security, padded as necessary with leading zeros), and one numerical
         check digit.
     exchange : .Exchange
@@ -1746,21 +1805,20 @@ class ListedEquity(Listed):
     .Listed, .Issuer, .Exchange
     """
 
-    __tablename__ = 'listed_equity'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "listed_equity"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
     # Major asset class constant. Possibly be overridden by child classes.
-    _asset_class = 'equity'
+    _asset_class = "equity"
 
-    id = Column(Integer, ForeignKey('listed.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("listed.id"), primary_key=True)
     """ Primary key."""
 
     # Historical Dividend end-of-day (EOD) time-series collection
     # TODO: Rename to dividends
     _dividend_series = relationship(
-        'Dividend',
-        order_by=TimeSeriesBase.date_stamp,
-        back_populates='listed_equity')
+        "Dividend", order_by=TimeSeriesBase.date_stamp, back_populates="listed_equity"
+    )
 
     # Industry classification
     industry_class = Column(String(16), nullable=True)
@@ -1772,40 +1830,41 @@ class ListedEquity(Listed):
     """
     # Industry classification foreign keys. This is backref'ed as
     # industry_class_icb
-    _industry_class_icb_id = Column(Integer,
-                                    ForeignKey('industry_class_icb.id'),
-                                    nullable=True)
+    _industry_class_icb_id = Column(
+        Integer, ForeignKey("industry_class_icb.id"), nullable=True
+    )
 
     #  A short class name for use in naming
-    _name_appendix = 'Equity'
+    _name_appendix = "Equity"
 
     # FIXME: The __repr__ string is printing Currency.__str__ instead of
     # Currency.__repr__
 
     def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
-        super().__init__(
-            name, issuer, isin, exchange, ticker, **kwargs)
+        super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
 
         # Select industry classification scheme, initialise and add it.
-        if 'industry_class' in kwargs:
-            if kwargs['industry_class'] == 'icb':
-                self.industry_class = kwargs.pop('industry_class')
+        if "industry_class" in kwargs:
+            if kwargs["industry_class"] == "icb":
+                self.industry_class = kwargs.pop("industry_class")
                 # Create and assign the industry classification instance
                 self._industry_class_icb = IndustryClassICB(
-                    industry_name=kwargs.pop('industry_name'),
-                    super_sector_name=kwargs.pop('super_sector_name'),
-                    sector_name=kwargs.pop('sector_name'),
-                    sub_sector_name=kwargs.pop('sub_sector_name'),
-                    industry_code=kwargs.pop('industry_code'),
-                    super_sector_code=kwargs.pop('super_sector_code'),
-                    sector_code=kwargs.pop('sector_code'),
-                    sub_sector_code=kwargs.pop('sub_sector_code'),
+                    industry_name=kwargs.pop("industry_name"),
+                    super_sector_name=kwargs.pop("super_sector_name"),
+                    sector_name=kwargs.pop("sector_name"),
+                    sub_sector_name=kwargs.pop("sub_sector_name"),
+                    industry_code=kwargs.pop("industry_code"),
+                    super_sector_code=kwargs.pop("super_sector_code"),
+                    sector_code=kwargs.pop("sector_code"),
+                    sub_sector_code=kwargs.pop("sub_sector_code"),
                 )
             else:
                 raise ValueError(
-                    'The `industry_class` {} is not implemented.'.format(
-                        self.industry_class))
+                    "The `industry_class` {} is not implemented.".format(
+                        self.industry_class
+                    )
+                )
 
     @property
     def industry_class_instance(self):
@@ -1825,7 +1884,7 @@ class ListedEquity(Listed):
             https://en.wikipedia.org/wiki/Industry_classification
 
         """
-        if self.industry_class == 'icb':
+        if self.industry_class == "icb":
             return self._industry_class_icb
         else:
             pass
@@ -1843,15 +1902,15 @@ class ListedEquity(Listed):
         """
         dictionary = super().to_dict()
         additional_dict = {
-            'industry_class': self.industry_class,
-            'industry_name': self._industry_class_icb.industry_name,
-            'super_sector_name': self._industry_class_icb.super_sector_name,
-            'sector_name': self._industry_class_icb.sector_name,
-            'sub_sector_name': self._industry_class_icb.sub_sector_name,
-            'industry_code': self._industry_class_icb.industry_code,
-            'super_sector_code': self._industry_class_icb.super_sector_code,
-            'sector_code': self._industry_class_icb.sector_code,
-            'sub_sector_code': self._industry_class_icb.sub_sector_code,
+            "industry_class": self.industry_class,
+            "industry_name": self._industry_class_icb.industry_name,
+            "super_sector_name": self._industry_class_icb.super_sector_name,
+            "sector_name": self._industry_class_icb.sector_name,
+            "sub_sector_name": self._industry_class_icb.sub_sector_name,
+            "industry_code": self._industry_class_icb.industry_code,
+            "super_sector_code": self._industry_class_icb.super_sector_code,
+            "sector_code": self._industry_class_icb.sector_code,
+            "sub_sector_code": self._industry_class_icb.sub_sector_code,
         }
         dictionary.update(additional_dict)
 
@@ -1859,10 +1918,14 @@ class ListedEquity(Listed):
 
     @classmethod
     def update_all(
-            cls, session, get_meta_method,
-            get_eod_method=None, get_dividends_method=None,
-            **kwargs):
-        """ Update/create all the objects in the asset_base session.
+        cls,
+        session,
+        get_meta_method,
+        get_eod_method=None,
+        get_dividends_method=None,
+        **kwargs,
+    ):
+        """Update/create all the objects in the asset_base session.
 
         This method updates its class collection of ``ListedEOD`` and
         ``Dividend`` instances from the ``financial_data`` module.
@@ -1903,8 +1966,7 @@ class ListedEquity(Listed):
         # new and unseen securities can be taken.
 
         # Get securities
-        super().update_all(
-            session, get_meta_method, get_eod_method, **kwargs)
+        super().update_all(session, get_meta_method, get_eod_method, **kwargs)
 
         # Get Dividend trade data.
         if get_dividends_method is not None:
@@ -1982,10 +2044,10 @@ class ListedEquity(Listed):
         """
         dividend_dict_list = [s.to_dict() for s in self._dividend_series]
         if len(dividend_dict_list) == 0:
-            raise DividendSeriesNoData(f'Expected dividend data for {self}')
+            raise DividendSeriesNoData(f"Expected dividend data for {self}")
         series = pd.DataFrame(dividend_dict_list)
-        series['date_stamp'] = pd.to_datetime(series['date_stamp'])
-        series.set_index('date_stamp', inplace=True)
+        series["date_stamp"] = pd.to_datetime(series["date_stamp"])
+        series.set_index("date_stamp", inplace=True)
         series.sort_index(inplace=True)  # Assure ascending
         series.name = self
 
@@ -2003,7 +2065,7 @@ class ListedEquity(Listed):
         try:
             last_dividend = self._dividend_series[-1]
         except IndexError:
-            raise DividendSeriesNoData(f'Expected dividend data for {self}')
+            raise DividendSeriesNoData(f"Expected dividend data for {self}")
 
         return last_dividend
 
@@ -2039,9 +2101,13 @@ class ListedEquity(Listed):
 
         return last_date
 
-    def time_series(self,
-                    series='price', price_item='close', return_type='price',
-                    identifier='asset'):
+    def time_series(
+        self,
+        series="price",
+        price_item="close",
+        return_type="price",
+        identifier="asset",
+    ):
         """Retrieve historic time-series for this instance.
 
         TODO: Remove `series` argument and use to get price series only
@@ -2106,23 +2172,23 @@ class ListedEquity(Listed):
         Cash.time_series
 
         """
+
         def get_prices(price_item):
             eod = self.get_eod()
             try:
                 price_series = eod[price_item]
             except KeyError:
-                raise ValueError(
-                    'Unexpected `price_item` argument {price_item}.')
+                raise ValueError("Unexpected `price_item` argument {price_item}.")
             return price_series
 
         def get_volumes():
             eod = self.get_eod()
-            volume_series = eod['volume']
+            volume_series = eod["volume"]
             return volume_series
 
         def get_dividends():
             dividends = self.get_dividend_series()
-            dividend_series = dividends['unadjusted_value']
+            dividend_series = dividends["unadjusted_value"]
             return dividend_series
 
         def get_total_returns(price_item):
@@ -2133,16 +2199,16 @@ class ListedEquity(Listed):
                 dividend = get_dividends()
             except DividendSeriesNoData:
                 if self.distributions is True:
-                    raise DividendSeriesNoData(
-                        f'Expected dividend data for {self}.')
+                    raise DividendSeriesNoData(f"Expected dividend data for {self}.")
                 # No dividends
                 numerator = price
             else:
                 # Warn if not supposed to have dividends
                 if self.distributions is False:
                     logger.warning(
-                        f'Unexpected dividend data for {self}.'
-                        'Adding dividends anyway.')
+                        f"Unexpected dividend data for {self}."
+                        "Adding dividends anyway."
+                    )
                 # If dividends then add them to the price
                 numerator = price.add(dividend, fill_value=0.0)
             # Total one period returns
@@ -2174,8 +2240,7 @@ class ListedEquity(Listed):
                 sig1 = filtfilt([1, -1], [1], values_untidy, axis=0)
                 # Index of z-scores excursions beyond 3-sigma to create a mask
                 # of untidy positions.
-                z_score = (sig1 - np.nanmean(sig1, axis=0)
-                           ) / np.nanstd(sig1, axis=0)
+                z_score = (sig1 - np.nanmean(sig1, axis=0)) / np.nanstd(sig1, axis=0)
                 untidy_mask = abs(z_score) > 3  # True at an untidy position.
                 # Detect isolated single tidy data points surrounded by untidy
                 # points. These data point are considered to be part of a wider
@@ -2202,56 +2267,54 @@ class ListedEquity(Listed):
                 untidy_columns[untidy_columns] = np.any(untidy_mask, axis=0)
 
             # Construct a new DataFrame with the tidy time-series.
-            price = pd.DataFrame(values,
-                                 index=price.index, columns=price.columns)
+            price = pd.DataFrame(values, index=price.index, columns=price.columns)
 
             return price
 
-        if series == 'price':
+        if series == "price":
             # Get the price view.
-            if return_type == 'price':
+            if return_type == "price":
                 result = get_prices(price_item)
-            elif return_type == 'return':
+            elif return_type == "return":
                 price = get_prices(price_item)
                 returns = price / price.shift(1)
                 # Remove leading and any other NaN with no-returns=1.0.
                 result = returns.fillna(1.0)
-            elif return_type == 'total_price':
+            elif return_type == "total_price":
                 # FIXME: What about multiple dividends on the same day?
                 total_returns, price = get_total_returns(price_item)
                 total_returns.iloc[0] = price.iloc[0]  # Normalise to start price
                 result = total_returns.cumprod()
-            elif return_type == 'total_return':
+            elif return_type == "total_return":
                 total_returns, price = get_total_returns(price_item)
                 result = total_returns
             else:
                 raise ValueError(
-                    f'Unexpected return_type argument value `{return_type}`.')
-        elif series == 'dividend':
+                    f"Unexpected return_type argument value `{return_type}`."
+                )
+        elif series == "dividend":
             result = get_dividends()
-        elif series == 'volume':
+        elif series == "volume":
             # Get the volume series.
             result = get_volumes()
         else:
-            raise ValueError(
-                f'Unexpected series argument value `{series}`.')
+            raise ValueError(f"Unexpected series argument value `{series}`.")
 
         # Add the entity (ListedEquity) as the Series name for later use as
         # column a label in concatenation into a DataFrame
         # TODO: Replace with a match statement
-        if identifier == 'asset':
+        if identifier == "asset":
             result.name = self
-        elif identifier == 'id':
+        elif identifier == "id":
             result.name = self.id
-        elif identifier == 'ticker':
+        elif identifier == "ticker":
             result.name = self.ticker
-        elif identifier == 'isin':
+        elif identifier == "isin":
             result.name = self.isin
-        elif identifier == 'identity_code':
+        elif identifier == "identity_code":
             result.name = self.identity_code
         else:
-            raise ValueError(
-                f'Unexpected `identifier` argument `{identifier}`.')
+            raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
 
         return result
 
@@ -2314,21 +2377,20 @@ class Index(Base):
 
     """
 
-    __tablename__ = 'index'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "index"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('base.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("base.id"), primary_key=True)
 
-    key_code_name = 'ticker'
+    key_code_name = "ticker"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
     # EOD historical time-series collection ranked by date_stamp
     _eod_series = relationship(
-        IndexEOD,
-        order_by=IndexEOD.date_stamp,
-        back_populates='index')
+        IndexEOD, order_by=IndexEOD.date_stamp, back_populates="index"
+    )
     """list: EOD historical time-series collection ranked by date_stamp
 
     A list of ``time_series.IndexEOD`` instances.
@@ -2345,11 +2407,11 @@ class Index(Base):
     static = Column(Boolean, nullable=False)
 
     #  A short class name for use in naming
-    _name_appendix = 'Index'
+    _name_appendix = "Index"
 
     def __init__(
-        self, name, ticker, currency, total_return=False, static=False,
-        **kwargs):
+        self, name, ticker, currency, total_return=False, static=False, **kwargs
+    ):
         """Instance initialization."""
         super().__init__(name, currency, **kwargs)
         self.ticker = ticker
@@ -2359,32 +2421,32 @@ class Index(Base):
     def __repr__(self):
         """Return the official string output."""
         msg = '{}(name="{}", ticker="{}", currency={!r})'.format(
-            self._class_name, self.name, self.ticker, self.currency)
+            self._class_name, self.name, self.ticker, self.currency
+        )
 
         return msg
 
     @property
     def key_code(self):
         """Return a unique string code for this class instance."""
-        return f'{self.ticker}'
+        return f"{self.ticker}"
 
     @property
     def identity_code(self):
         """Return a unique string code for this class instance."""
-        return f'{self.ticker}'
+        return f"{self.ticker}"
 
     @property
     def long_name(self):
         """str: Return the long name string."""
-        msg = '{} is an {} priced in {}.'.format(
-            self.name, self._class_name, self.currency_ticker)
+        msg = "{} is an {} priced in {}.".format(
+            self.name, self._class_name, self.currency_ticker
+        )
 
         return msg
 
     @classmethod
-    def factory(
-            cls, session, index_name, ticker, currency_code, create=True,
-            **kwargs):
+    def factory(cls, session, index_name, ticker, currency_code, create=True, **kwargs):
         """Manufacture/retrieve an instance from the given parameters.
 
         If a record of the specified class instance does not exist then add it,
@@ -2419,8 +2481,8 @@ class Index(Base):
         except NoResultFound:
             if not create:
                 raise FactoryError(
-                    'Index "{}" with ticker="{}", not found.'.format(
-                        index_name, ticker))
+                    'Index "{}" with ticker="{}", not found.'.format(index_name, ticker)
+                )
             else:
                 # Create and add.
                 obj = cls(index_name, ticker, currency)
@@ -2432,10 +2494,8 @@ class Index(Base):
         return obj
 
     @classmethod
-    def update_all(
-            cls, session, get_meta_method, get_eod_method=None,
-            **kwargs):
-        """ Update/create all the objects in the asset_base session.
+    def update_all(cls, session, get_meta_method, get_eod_method=None, **kwargs):
+        """Update/create all the objects in the asset_base session.
 
         This method updates its class collection of ``Index`` instances from
         the ``financial_data`` module.
@@ -2501,7 +2561,7 @@ class ExchangeTradeFund(ListedEquity):
         identifies a security. ISINs consist of two alphabetic characters, which
         are the ISO 3166-1 alpha-2 code for the issuing country (An ISIN cannot
         specify a particular trading location.), nine alpha-numeric characters
-        (the National Securities Identifying Number, or NSIN, which identifies
+        (the National Securities Identifying Number, or ISIN, which identifies
         the security, padded as necessary with leading zeros), and one numerical
         check digit.
     exchange : .Exchange
@@ -2548,18 +2608,18 @@ class ExchangeTradeFund(ListedEquity):
 
     """
 
-    __tablename__ = 'exchange_traded_fund'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "exchange_traded_fund"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('listed_equity.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("listed_equity.id"), primary_key=True)
     """ Primary key."""
 
     # The index, if any, that the ETF attempts to replicate.
-    index = Column(Integer, ForeignKey('index.id'), nullable=True)
+    index = Column(Integer, ForeignKey("index.id"), nullable=True)
 
     # HACK: These are are workarounds for not having data for all the underlying
     # securities for our ETFs.
-    _classes = ('money', 'bond', 'property', 'equity', 'commodity', 'multi')
+    _classes = ("money", "bond", "property", "equity", "commodity", "multi")
     _asset_class = Column(Enum(*_classes))
     _locality = Column(String)
 
@@ -2567,23 +2627,23 @@ class ExchangeTradeFund(ListedEquity):
     ter = Column(Float, nullable=True)
 
     #  A short class name for use in naming
-    _name_appendix = 'ETF'
+    _name_appendix = "ETF"
 
     def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
         # Optional parameters.
-        if 'index' in kwargs:
-            self.index = kwargs.pop('index')
-        if 'asset_class' in kwargs:
-            self._asset_class = kwargs.pop('asset_class')
-        if 'locality' in kwargs:
-            self._locality = kwargs.pop('locality')
-        if 'ter' in kwargs:
-            self.ter = kwargs.pop('ter')
-            if self.ter == '':
-                self.ter = float('nan')
+        if "index" in kwargs:
+            self.index = kwargs.pop("index")
+        if "asset_class" in kwargs:
+            self._asset_class = kwargs.pop("asset_class")
+        if "locality" in kwargs:
+            self._locality = kwargs.pop("locality")
+        if "ter" in kwargs:
+            self.ter = kwargs.pop("ter")
+            if self.ter == "":
+                self.ter = float("nan")
         else:  # Default to zero.
-            self.ter = float('nan')
+            self.ter = float("nan")
 
         super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
 
@@ -2623,15 +2683,21 @@ class ExchangeTradeFund(ListedEquity):
 
         """
         if self._locality == domicile_code:
-            locality = 'domestic'
+            locality = "domestic"
         else:
-            locality = 'foreign'
+            locality = "foreign"
 
         return locality
 
-    def time_series(self,
-                    series='price', price_item='close', return_type='price',
-                    identifier='asset', tidy=False, include_index=False):
+    def time_series(
+        self,
+        series="price",
+        price_item="close",
+        return_type="price",
+        identifier="asset",
+        tidy=False,
+        include_index=False,
+    ):
         """Retrieve historic time-series for this instance.
 
         Parameters
@@ -2711,34 +2777,35 @@ class ExchangeTradeFund(ListedEquity):
         # replicated index time-series history
         if self.index is None:
             id_code = self.identity_code
-            logger.warning(
-                f'The ExchangeTradeFund {id_code} has no Index reference.')
+            logger.warning(f"The ExchangeTradeFund {id_code} has no Index reference.")
             return data
 
         # Now we can back-fill the price with the index time-series history to
         # produce longer histories.
 
         # Check we are using prices series only
-        if series == 'price':
+        if series == "price":
             pass
         else:
             raise Exception(
-                f'Can back-fill only `price` series, not `{series}` series.')
+                f"Can back-fill only `price` series, not `{series}` series."
+            )
 
         # Check that we are using like with like, i.e., price and total
         # return price are different indices.
-        if return_type in ['price', 'return']:
+        if return_type in ["price", "return"]:
             if not self.index.total_return:
                 raise Exception(
-                    'Total price index series cannot back-fill a price series.')
-        elif return_type in ['total_price', 'total_return']:
+                    "Total price index series cannot back-fill a price series."
+                )
+        elif return_type in ["total_price", "total_return"]:
             if self.index.total_return:
                 raise Exception(
-                    'Price index series cannot back-fill a total price series.')
+                    "Price index series cannot back-fill a total price series."
+                )
 
         # Get the replicated index for its time-series history as a back-fill
-        back_fill = self.index.time_series(
-            series, price_item, return_type, tidy)
+        back_fill = self.index.time_series(series, price_item, return_type, tidy)
 
         #  Very important that `data` is 1st and `back_fill` is 2nd so that
         #  `back_fill` does nto overwrite any elements in `data`.

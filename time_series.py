@@ -17,14 +17,16 @@ from sqlalchemy.orm import relationship
 
 # Used to avoid ImportError (most likely due to a circular import)
 from typing import TYPE_CHECKING
+
 if TYPE_CHECKING:
     from .asset import Asset
 
-from .common import Base
-from .financial_data import Dump
+from asset_base.common import Base
+from asset_base.financial_data import Dump
 
 # Get module-named logger.
 import logging
+
 logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -34,7 +36,7 @@ metadata = MetaData()
 
 
 class TimeSeriesBase(Base):
-    """"Common time-series capabilities.
+    """ "Common time-series capabilities.
 
     Note
     ----
@@ -54,31 +56,30 @@ class TimeSeriesBase(Base):
         The end-of-day (EOD) data date stamp.
     """
 
-    __tablename__ = 'time_series_base'
+    __tablename__ = "time_series_base"
 
     # Polymorphism discriminator.
     _discriminator = Column(String(32))
 
     __mapper_args__ = {
-        'polymorphic_identity': __tablename__,
-        'polymorphic_on': _discriminator,
+        "polymorphic_identity": __tablename__,
+        "polymorphic_on": _discriminator,
     }
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     """int: Primary key."""
 
-    __table_args__ = (UniqueConstraint('_discriminator', '_asset_id', 'date_stamp'), )
+    __table_args__ = (UniqueConstraint("_discriminator", "_asset_id", "date_stamp"),)
 
     # Foreign key giving ``Asset`` a time series capability
-    _asset_id = Column(Integer, ForeignKey('base.id'), nullable=False)
-    base_obj = relationship(
-        'Base', back_populates='_series', foreign_keys=[_asset_id])
+    _asset_id = Column(Integer, ForeignKey("base.id"), nullable=False)
+    base_obj = relationship("Base", back_populates="_series", foreign_keys=[_asset_id])
 
     date_stamp = Column(Date, nullable=False)
     # TODO: Consider making this part of the primary keys
     """datetime: EOD date."""
 
-    date_column_names = ['date_stamp']
+    date_column_names = ["date_stamp"]
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
     def __init__(self, base_obj, date_stamp):
@@ -92,7 +93,7 @@ class TimeSeriesBase(Base):
         date = self.date_stamp
         id_code = self.base_obj.identity_code
 
-        return f'Time series:{name}, date stamp:{date}, asset:{id_code}'
+        return f"Time series:{name}, date stamp:{date}, asset:{id_code}"
 
     def __repr__(self):
         """Return the official string output."""
@@ -100,7 +101,7 @@ class TimeSeriesBase(Base):
         asset = self.base_obj
         date = self.date_stamp
 
-        return f'{name}(asset={asset!r}, date_stamp={date})'
+        return f"{name}(asset={asset!r}, date_stamp={date})"
 
     @classmethod
     @property
@@ -152,10 +153,10 @@ class TimeSeriesBase(Base):
         data_table = data_frame
 
         # Guarantee uniqueness in a copy of the data
-        data_frame.drop_duplicates(['date_stamp', key_code_name], inplace=True)
+        data_frame.drop_duplicates(["date_stamp", key_code_name], inplace=True)
 
         # Guarantee date ranking of the data
-        data_table.sort_values(by='date_stamp')
+        data_table.sort_values(by="date_stamp")
 
         # Replace pesky pd.NaT with None. Else SqlAlchemy DateTime columns
         # throw (exceptions.TypeError) %d format: a number is required, not
@@ -165,26 +166,24 @@ class TimeSeriesBase(Base):
         # Join to create a new extended instance_table with the security column.
         # Only for time series instances (left join).
         # FIXME: Warn or raise if left and right are not congruent
-        data_table = data_table.merge(
-            key_code_id_table, on=key_code_name, how='left')
+        data_table = data_table.merge(key_code_id_table, on=key_code_name, how="left")
         data_table.drop(columns=key_code_name, inplace=True)
 
         instances_list = list()
-        data_table.set_index(
-            ['id', 'date_stamp'], inplace=True, drop=True)
+        data_table.set_index(["id", "date_stamp"], inplace=True, drop=True)
         # Iterate over all Asset polymorph instances
 
         # Determine which, if any, security id's are present in the data.
-        id_list = data_table.index.to_frame(
-            index=False).id.drop_duplicates().to_list()
+        id_list = data_table.index.to_frame(index=False).id.drop_duplicates().to_list()
         # Avoid empty data edge case - with certain date ranges in a data fetch,
         # there may be no new data to be found
         if len(id_list) == 0:
             # Nothing to process so just return
             return
         # Fetch the relevant securities
-        security_list = session.query(
-            asset_class).filter(asset_class.id.in_(id_list)).all()
+        security_list = (
+            session.query(asset_class).filter(asset_class.id.in_(id_list)).all()
+        )
         # Add data to each security's time series' asset_class
         for security in security_list:
             # Get the security's time series.
@@ -206,7 +205,7 @@ class TimeSeriesBase(Base):
                 pass
             else:
                 last_date = pd.to_datetime(last_date)
-                keep_index = pd.to_datetime(last_date) < series['date_stamp']
+                keep_index = pd.to_datetime(last_date) < series["date_stamp"]
                 series = series.loc[keep_index]
 
             # Avoid empty series edge case
@@ -215,7 +214,8 @@ class TimeSeriesBase(Base):
             # Create the security's series list of class instances and extend
             # onto the instances list
             instances = [
-                cls(base_obj=security, **row) for index, row in series.iterrows()]
+                cls(base_obj=security, **row) for index, row in series.iterrows()
+            ]
             instances_list.extend(instances)
 
         # The bulk_save_objects does not work with inherited objects. Use
@@ -257,15 +257,14 @@ class TimeSeriesBase(Base):
             instance_dict = instance.to_dict()
             # Reference to the class primary key attribute Asset.id (or
             # polymorph child class)
-            instance_dict['id'] = instance._asset_id
+            instance_dict["id"] = instance._asset_id
             record_list.append(instance_dict)
         instance_table = pd.DataFrame(record_list)
 
         # Join in the `id` column. Only for time series instances (left
         # join).
-        data_table = instance_table.merge(
-            key_code_id_table, on='id', how='left')
-        data_table.drop(columns='id', inplace=True)
+        data_table = instance_table.merge(key_code_id_table, on="id", how="left")
+        data_table.drop(columns="id", inplace=True)
 
         # The date_stamp must be pandas.TimeStamp. Note that child classes may
         # redefine the `date_column_names` list.
@@ -276,7 +275,7 @@ class TimeSeriesBase(Base):
 
     @classmethod
     def update_all(cls, session, asset_class, get_method, asset_list):
-        """ Update/create the eod trade data of all the Listed instances.
+        """Update/create the eod trade data of all the Listed instances.
 
         Parameters
         ----------
@@ -365,8 +364,7 @@ class TimeSeriesBase(Base):
         # Uses dict data structures. See the docs.
         class_name = cls._class_name
         data_frame_dict = dumper.read(name_list=[class_name])
-        cls.from_data_frame(
-            session, asset_class, data_frame_dict[class_name])
+        cls.from_data_frame(session, asset_class, data_frame_dict[class_name])
 
 
 class SimpleEOD(TimeSeriesBase):
@@ -383,17 +381,18 @@ class SimpleEOD(TimeSeriesBase):
 
     """
 
-    __tablename__ = 'simple_eod'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "simple_eod"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("time_series_base.id"), primary_key=True)
     """ Primary key."""
 
     _close = Column(Float, nullable=False)
     """float: Price for the day."""
 
-    def __init__(
-            self, base_obj, date_stamp, close):
+    def __init__(self, base_obj, date_stamp, close):
         """Instance initialization."""
         super().__init__(base_obj, date_stamp)
         self._close = close
@@ -407,14 +406,16 @@ class SimpleEOD(TimeSeriesBase):
             date_stamp : datetime.date
             close : float (in currency units)
         """
-        if self.base_obj.quote_units == 'cents':
+        if self.base_obj.quote_units == "cents":
             return {
                 "date_stamp": self.date_stamp,
-                "close": self._close / 100.0, }
+                "close": self._close / 100.0,
+            }
         else:
             return {
                 "date_stamp": self.date_stamp,
-                "close": self._close, }
+                "close": self._close,
+            }
 
 
 class TradeEOD(SimpleEOD):
@@ -444,10 +445,10 @@ class TradeEOD(SimpleEOD):
 
     """
 
-    __tablename__ = 'trade_eod'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "trade_eod"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('simple_eod.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("simple_eod.id"), primary_key=True)
     """ Primary key."""
 
     _open = Column(Float, nullable=False)
@@ -474,13 +475,14 @@ class TradeEOD(SimpleEOD):
     """float: Number of shares traded in the day."""
 
     def __init__(
-            self, base_obj, date_stamp,
-            open, close, high, low, adjusted_close, volume):
+        self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+    ):
         """Instance initialization."""
         super().__init__(
-            base_obj, date_stamp,
+            base_obj,
+            date_stamp,
             close=close,  # Convention that price=close price
-            )
+        )
         self._open = open
         self._close = close
         self._high = high
@@ -502,7 +504,7 @@ class TradeEOD(SimpleEOD):
             adjusted_close : float (in currency units)
             volume : int (number of units traded)
         """
-        if self.base_obj.quote_units == 'cents':
+        if self.base_obj.quote_units == "cents":
             return {
                 "date_stamp": self.date_stamp,
                 "open": self._open / 100.0,
@@ -510,7 +512,8 @@ class TradeEOD(SimpleEOD):
                 "high": self._high / 100.0,
                 "low": self._low / 100.0,
                 "adjusted_close": self._adjusted_close / 100.0,
-                "volume": self._volume, }
+                "volume": self._volume,
+            }
         else:
             return {
                 "date_stamp": self.date_stamp,
@@ -519,7 +522,8 @@ class TradeEOD(SimpleEOD):
                 "high": self._high,
                 "low": self._low,
                 "adjusted_close": self._adjusted_close,
-                "volume": self._volume, }
+                "volume": self._volume,
+            }
 
 
 class ListedEOD(TradeEOD):
@@ -550,10 +554,10 @@ class ListedEOD(TradeEOD):
 
     """
 
-    __tablename__ = 'listed_eod'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "listed_eod"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("trade_eod.id"), primary_key=True)
     """ Primary key."""
 
     # Foreign key giving ``Listed`` a EOD series capability. Note:
@@ -561,22 +565,23 @@ class ListedEOD(TradeEOD):
     # for the relationships with ``.asset.Share._series`` and
     # ``.asset.Listed._eod_series`` to work and avoids the
     # "SAWarning: relationship" warning for the relationship below.
-    _listed_id = Column(Integer, ForeignKey('listed.id'), nullable=False)
+    _listed_id = Column(Integer, ForeignKey("listed.id"), nullable=False)
     listed = relationship(
-        'Listed', back_populates='_eod_series', foreign_keys=[_listed_id])
+        "Listed", back_populates="_eod_series", foreign_keys=[_listed_id]
+    )
 
     def __init__(
-            self, base_obj, date_stamp,
-            open, close, high, low, adjusted_close, volume):
+        self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+    ):
         """Instance initialization."""
         super().__init__(
-            base_obj, date_stamp,
-            open, close, high, low, adjusted_close, volume)
+            base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+        )
         self.listed = base_obj
 
     @classmethod
     def update_all(cls, session, get_method):
-        """ Update/create the eod trade data of all the Listed instances.
+        """Update/create the eod trade data of all the Listed instances.
 
         Warning
         -------
@@ -603,17 +608,20 @@ class ListedEOD(TradeEOD):
         asset_class = cls.listed.property.mapper.class_
 
         # For all de-listed securities skip data fetch and warn
-        securities_delisted = session.query(asset_class).filter(
-            asset_class.status == 'delisted').all()
+        securities_delisted = (
+            session.query(asset_class).filter(asset_class.status == "delisted").all()
+        )
         for security in securities_delisted:
             logger.warning(
-                f'Skipped {cls._class_name} data fetch for '
-                f'de-listed security {security.identity_code}.')
+                f"Skipped {cls._class_name} data fetch for "
+                f"de-listed security {security.identity_code}."
+            )
 
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
-        securities_list = session.query(
-            asset_class).filter(asset_class.status == 'listed').all()
+        securities_list = (
+            session.query(asset_class).filter(asset_class.status == "listed").all()
+        )
 
         super().update_all(session, asset_class, get_method, securities_list)
 
@@ -646,10 +654,10 @@ class IndexEOD(TradeEOD):
 
     """
 
-    __tablename__ = 'index_eod'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "index_eod"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("trade_eod.id"), primary_key=True)
     """ Primary key."""
 
     # Foreign key giving ``Index`` a EOD series capability. Note:
@@ -657,22 +665,23 @@ class IndexEOD(TradeEOD):
     # for the relationships with ``.asset.Share._series`` and
     # ``.asset.Listed._eod_series`` to work and avoids the
     # "SAWarning: relationship" warning for the relationship below.
-    _index_id = Column(Integer, ForeignKey('index.id'), nullable=False)
+    _index_id = Column(Integer, ForeignKey("index.id"), nullable=False)
     index = relationship(
-        'Index', back_populates='_eod_series', foreign_keys=[_index_id])
+        "Index", back_populates="_eod_series", foreign_keys=[_index_id]
+    )
 
     def __init__(
-            self, base_obj, date_stamp,
-            open, close, high, low, adjusted_close, volume):
+        self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+    ):
         """Instance initialization."""
         super().__init__(
-            base_obj, date_stamp,
-            open, close, high, low, adjusted_close, volume)
+            base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+        )
         self.index = base_obj
 
     @classmethod
     def update_all(cls, session, get_method):
-        """ Update/create the eod trade data of all the Listed instances.
+        """Update/create the eod trade data of all the Listed instances.
 
         Warning
         -------
@@ -697,8 +706,9 @@ class IndexEOD(TradeEOD):
 
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
-        index_list = session.query(
-            asset_class).filter(asset_class.static==False).all()
+        index_list = (
+            session.query(asset_class).filter(asset_class.static is False).all()
+        )
 
         super().update_all(session, asset_class, get_method, index_list)
 
@@ -731,10 +741,10 @@ class ForexEOD(TradeEOD):
 
     """
 
-    __tablename__ = 'forex_eod'
-    __mapper_args__ = {'polymorphic_identity': __tablename__}
+    __tablename__ = "forex_eod"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey('trade_eod.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("trade_eod.id"), primary_key=True)
     """ Primary key."""
 
     # Foreign key giving ``Forex`` a EOD series capability. Note:
@@ -742,22 +752,23 @@ class ForexEOD(TradeEOD):
     # for the relationships with ``.asset.Share._series`` and
     # ``.asset.Forex._eod_series`` to work and avoids the
     # "SAWarning: relationship" warning for the relationship below.
-    _forex_id = Column(Integer, ForeignKey('forex.id'), nullable=False)
+    _forex_id = Column(Integer, ForeignKey("forex.id"), nullable=False)
     forex = relationship(
-        'Forex', back_populates='_eod_series', foreign_keys=[_forex_id])
+        "Forex", back_populates="_eod_series", foreign_keys=[_forex_id]
+    )
 
     def __init__(
-            self, base_obj, date_stamp,
-            open, close, high, low, adjusted_close, volume):
+        self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+    ):
         """Instance initialization."""
         super().__init__(
-            base_obj, date_stamp,
-            open, close, high, low, adjusted_close, volume)
+            base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+        )
         self.forex = base_obj
 
     @classmethod
     def update_all(cls, session, get_method):
-        """ Update/create the eod trade data of all the Listed instances.
+        """Update/create the eod trade data of all the Listed instances.
 
         Warning
         -------
@@ -814,10 +825,12 @@ class Dividend(TimeSeriesBase):
 
     """
 
-    __tablename__ = 'dividend'
-    __mapper_args__ = {'polymorphic_identity': __tablename__, }
+    __tablename__ = "dividend"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
 
-    id = Column(Integer, ForeignKey('time_series_base.id'), primary_key=True)
+    id = Column(Integer, ForeignKey("time_series_base.id"), primary_key=True)
     """ Primary key."""
     # NOTE: Inherited
     # backrefs to the polymorphic ListedEquity
@@ -827,12 +840,12 @@ class Dividend(TimeSeriesBase):
     # for the relationships with ``.asset.Asset._series`` and
     # ``.asset.ListedEquity._dividend_series`` to work and avoids the
     # "SAWarning: relationship" warning for the relationship below.
-    _listed_equity_id = Column(
-        Integer, ForeignKey('listed_equity.id'), nullable=False)
+    _listed_equity_id = Column(Integer, ForeignKey("listed_equity.id"), nullable=False)
     listed_equity = relationship(
-        'ListedEquity',
-        back_populates='_dividend_series',
-        foreign_keys=[_listed_equity_id])
+        "ListedEquity",
+        back_populates="_dividend_series",
+        foreign_keys=[_listed_equity_id],
+    )
 
     # FIXME: Cannot have NULL here but some dividends are triggering tis
     currency = Column(String, nullable=True)
@@ -857,13 +870,26 @@ class Dividend(TimeSeriesBase):
     """float: The adjusted value of the dividend in indicated currency. """
 
     date_column_names = [
-        'date_stamp', 'declaration_date', 'payment_date', 'record_date']
+        "date_stamp",
+        "declaration_date",
+        "payment_date",
+        "record_date",
+    ]
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
     def __init__(
-            self, base_obj, date_stamp,
-            currency, declaration_date, payment_date,
-            period, record_date, unadjusted_value, adjusted_value, **kwargs):
+        self,
+        base_obj,
+        date_stamp,
+        currency,
+        declaration_date,
+        payment_date,
+        period,
+        record_date,
+        unadjusted_value,
+        adjusted_value,
+        **kwargs,
+    ):
         """Instance initialization."""
         super().__init__(base_obj, date_stamp)
         self.listed_equity = base_obj
@@ -895,7 +921,7 @@ class Dividend(TimeSeriesBase):
             unadjusted_value : float (in currency units)
             adjusted_value : float (in currency units)
         """
-        if self.base_obj.quote_units == 'cents':
+        if self.base_obj.quote_units == "cents":
             return {
                 "date_stamp": self.date_stamp,
                 "currency": self.currency,
@@ -904,7 +930,8 @@ class Dividend(TimeSeriesBase):
                 "period": self.period,
                 "record_date": self.record_date,
                 "unadjusted_value": self._unadjusted_value / 100.0,
-                "adjusted_value": self._adjusted_value / 100.0, }
+                "adjusted_value": self._adjusted_value / 100.0,
+            }
         else:
             return {
                 "date_stamp": self.date_stamp,
@@ -914,11 +941,12 @@ class Dividend(TimeSeriesBase):
                 "period": self.period,
                 "record_date": self.record_date,
                 "unadjusted_value": self._unadjusted_value,
-                "adjusted_value": self._adjusted_value, }
+                "adjusted_value": self._adjusted_value,
+            }
 
     @classmethod
     def update_all(cls, session, get_method):
-        """ Update/create the eod trade data of all the Listed instances.
+        """Update/create the eod trade data of all the Listed instances.
 
         Warning
         -------
@@ -945,18 +973,19 @@ class Dividend(TimeSeriesBase):
         asset_class = cls.listed_equity.property.mapper.class_
 
         # Skip data fetch and warn for all de-listed securities
-        securities_delisted = session.query(asset_class).filter(
-            asset_class.status == 'delisted').all()
+        securities_delisted = (
+            session.query(asset_class).filter(asset_class.status == "delisted").all()
+        )
         for security in securities_delisted:
             logger.warning(
-                f'Skipped {cls._class_name} data fetch for '
-                f'de-listed security {security.identity_code}.')
+                f"Skipped {cls._class_name} data fetch for "
+                f"de-listed security {security.identity_code}."
+            )
 
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
-        securities_list = session.query(
-            asset_class).filter(asset_class.status == 'listed').all()
+        securities_list = (
+            session.query(asset_class).filter(asset_class.status == "listed").all()
+        )
 
         super().update_all(session, asset_class, get_method, securities_list)
-
-

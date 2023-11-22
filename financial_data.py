@@ -26,12 +26,13 @@ import os
 # Abstract base class.
 import abc
 
-from .eod_historical_data import Exchanges, MultiHistorical
-from .exceptions import _BaseException, TimeSeriesNoData
-from .__init__ import get_data_path, get_var_path
+from asset_base.eod_historical_data import Exchanges, MultiHistorical
+from asset_base.exceptions import _BaseException, TimeSeriesNoData
+from asset_base.__init__ import get_data_path, get_var_path
 
 # Get module-named logger.
 import logging
+
 logger = logging.getLogger(__name__)
 
 
@@ -77,23 +78,24 @@ class _Feed(object, metaclass=abc.ABCMeta):
     def makedir(self, path):
         """Make path if not exist."""
         if not os.path.isdir(path):
-            logger.info('Created folder %s', path)
+            logger.info("Created folder %s", path)
             os.makedirs(path)
 
 
 class Dump(_Feed):
     """Dump and read re-usable content to and from disk files.
 
-        The destination folder is `data/dump`.
+    The destination folder is `data/dump`.
 
-        The dumper uses a dump_dict : dict of pandas.DataFrame, with the key the
-        CSV dump file prefix when dumping (writing), for the same reason it uses
-        a list of file name prefixes for reading. The reason is that this class
-        was originally designed to work with multiple class dumps at once.
+    The dumper uses a dump_dict : dict of pandas.DataFrame, with the key the
+    CSV dump file prefix when dumping (writing), for the same reason it uses
+    a list of file name prefixes for reading. The reason is that this class
+    was originally designed to work with multiple class dumps at once.
 
     """
-    _CLASS_DATA_PATH = 'dumps'
-    _CLASS_TEST_DATA_PATH = 'test_dumps'
+
+    _CLASS_DATA_PATH = "dumps"
+    _CLASS_TEST_DATA_PATH = "test_dumps"
 
     def __init__(self, testing=False):
         """Instance initialization.
@@ -130,15 +132,15 @@ class Dump(_Feed):
             The key shall be the CSV file prefix
         """
         for key, item in list(dump_dict.items()):
-            file_name = f'{key}.pandas.dataframe.pkl'
+            file_name = f"{key}.pandas.dataframe.pkl"
             path = self._path(file_name)
             try:
                 item.to_pickle(path)
             except Exception:
-                logger.error('Could not write dump file %s', path)
+                logger.error("Could not write dump file %s", path)
                 raise
             else:
-                logger.info('Write dump file %s', path)
+                logger.info("Write dump file %s", path)
 
     def read(self, name_list):
         """Read a dict of ``pandas.DataFrame`` from CSV files.
@@ -157,17 +159,17 @@ class Dump(_Feed):
         """
         dump_dict = dict()
         for name in name_list:
-            file_name = f'{name}.pandas.dataframe.pkl'
+            file_name = f"{name}.pandas.dataframe.pkl"
             path = self._path(file_name)
             try:
                 dump_dict[name] = pd.read_pickle(path)
             except FileNotFoundError:
-                raise DumpReadError(f'Could not read dump file {path}.')
+                raise DumpReadError(f"Could not read dump file {path}.")
             except Exception as ex:
                 logger.exception(ex)
                 raise ex
             else:
-                logger.info('Read dump file %s', path)
+                logger.info("Read dump file %s", path)
 
         return dump_dict
 
@@ -196,9 +198,9 @@ class Dump(_Feed):
             try:
                 os.remove(path)
             except Exception:
-                logger.warning('Could not delete dump file %s', path)
+                logger.warning("Could not delete dump file %s", path)
             else:
-                logger.info('Deleted dump file %s', path)
+                logger.info("Deleted dump file %s", path)
 
         # If required then delete the now empty folder too.
         if delete_folder:
@@ -207,9 +209,9 @@ class Dump(_Feed):
             try:
                 os.rmdir(path)
             except Exception:
-                logger.warning('Could not delete dump folder %s', path)
+                logger.warning("Could not delete dump folder %s", path)
             else:
-                logger.info('Deleted dump folder %s', path)
+                logger.info("Deleted dump folder %s", path)
 
     def exists(self, dump_class):
         """Verify that a dump file exits for a dumped class.
@@ -225,7 +227,7 @@ class Dump(_Feed):
             The class for which the dump files existence must be verified. The
             class must have a valid ``dump`` method.
         """
-        file_name = f'{dump_class._class_name}.pandas.dataframe.pkl'
+        file_name = f"{dump_class._class_name}.pandas.dataframe.pkl"
         path = self._path(file_name)
 
         return os.path.exists(path)
@@ -241,7 +243,8 @@ class Static(_Feed):
         * World exchange information.
 
     """
-    _CLASS_DATA_PATH = 'static'
+
+    _CLASS_DATA_PATH = "static"
 
     def __init__(self):
         """Instance initialization."""
@@ -249,18 +252,18 @@ class Static(_Feed):
 
     def get_currency(self):
         """Fetch currencies from the local file."""
-        file_name = 'CurrencyCountry.csv'
+        file_name = "CurrencyCountry.csv"
         path = self._path(file_name)
 
         column_dict = {
-            'CurrencyCode': 'ticker',
-            'CurrencyName': 'name',
-            'CountryCode': 'country_code',
+            "CurrencyCode": "ticker",
+            "CurrencyName": "name",
+            "CountryCode": "country_code",
         }
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info('Fetching currency data from {}.'.format(path))
+        logger.info("Fetching currency data from {}.".format(path))
         data = pd.read_csv(path, na_filter=False)
 
         # Extract by columns name and rename to a standard. This is also then a
@@ -270,32 +273,32 @@ class Static(_Feed):
 
         # Convert multiple country codes to a list.
         country_codes_list = list()
-        data_thinned = data.drop_duplicates(subset='ticker').copy()
-        for ticker in data_thinned['ticker']:
-            mask = data['ticker'] == ticker
-            country_codes = data[mask]['country_code'].tolist()
-            country_codes = ','.join(country_codes)
+        data_thinned = data.drop_duplicates(subset="ticker").copy()
+        for ticker in data_thinned["ticker"]:
+            mask = data["ticker"] == ticker
+            country_codes = data[mask]["country_code"].tolist()
+            country_codes = ",".join(country_codes)
             country_codes_list.append(country_codes)
-        data_thinned['country_code_list'] = country_codes_list
-        data = data_thinned.drop(columns='country_code')
+        data_thinned["country_code_list"] = country_codes_list
+        data = data_thinned.drop(columns="country_code")
 
         return data
 
     def get_domicile(self):
         """Fetch domicile from the local file."""
-        file_name = 'CurrencyCountry.csv'
+        file_name = "CurrencyCountry.csv"
         path = self._path(file_name)
 
         column_dict = {
-            'CountryCode': 'country_code',
-            'CountryName': 'country_name',
-            'CurrencyCode': 'currency_ticker',
+            "CountryCode": "country_code",
+            "CountryName": "country_name",
+            "CurrencyCode": "currency_ticker",
             # Currency name not important here as all currency instances exit
         }
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info('Fetching domicile data from {}.'.format(path))
+        logger.info("Fetching domicile data from {}.".format(path))
         data = pd.read_csv(path, na_filter=False)
 
         # Extract by columns name and rename to a standard. This is also then a
@@ -307,19 +310,19 @@ class Static(_Feed):
 
     def get_exchange(self):
         """Fetch exchanges from the local file."""
-        file_name = 'EODExchanges.csv'
+        file_name = "EODExchanges.csv"
         path = self._path(file_name)
 
         column_dict = {
-            'MIC': 'mic',
-            'CountryCode': 'country_code',
-            'ExchangeName': 'exchange_name',
-            'EODCode': 'eod_code',
+            "MIC": "mic",
+            "CountryCode": "country_code",
+            "ExchangeName": "exchange_name",
+            "EODCode": "eod_code",
         }
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info('Fetching exchange data from {}.'.format(path))
+        logger.info("Fetching exchange data from {}.".format(path))
         data = pd.read_csv(path, na_filter=False)
 
         # Extract by columns name and rename to a standard. This is also then a
@@ -339,7 +342,8 @@ class StaticIndices(_Feed):
         * Index time series.
 
     """
-    _CLASS_DATA_PATH = 'static_time_series'
+
+    _CLASS_DATA_PATH = "static_time_series"
 
     def __init__(self):
         """Instance initialization."""
@@ -347,14 +351,14 @@ class StaticIndices(_Feed):
 
     def get_indices_meta(self, **kwargs):
         """Fetch indices mete data from the feeds."""
-        file_name = 'IndicesMeta.csv'
+        file_name = "IndicesMeta.csv"
         path = self._path(file_name)
 
         column_dict = {
-            'Name': 'index_name',
-            'Code': 'ticker',
-            'Currency': 'currency_code',
-            'TRI': 'total_return'
+            "Name": "index_name",
+            "Code": "ticker",
+            "Currency": "currency_code",
+            "TRI": "total_return",
         }
 
         with open(path) as stream:
@@ -362,8 +366,7 @@ class StaticIndices(_Feed):
 
         # If no data then just return a simple empty pandas DataFrame.
         if data.empty:
-            raise Exception(
-                f'Expected index data but found file {path} empty.')
+            raise Exception(f"Expected index data but found file {path} empty.")
         #  Reset the index as we need to form here on treat the index as
         # column data. The security and date info is in the index
         data.reset_index(inplace=True)
@@ -373,19 +376,18 @@ class StaticIndices(_Feed):
         data.rename(columns=column_dict, inplace=True)
 
         # Mark the data as static (non feed API).
-        data['static'] = True
+        data["static"] = True
 
         # For testing purposes only!!!
-        if '_test_ticker_list' in kwargs and \
-                kwargs['_test_ticker_list'] is not None:
-            _test_ticker_list = kwargs.pop('_test_ticker_list')
+        if "_test_ticker_list" in kwargs and kwargs["_test_ticker_list"] is not None:
+            _test_ticker_list = kwargs.pop("_test_ticker_list")
             # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data['ticker'].isin(_test_ticker_list)]
+            data = data[data["ticker"].isin(_test_ticker_list)]
 
         return data
 
     def get_indices(self, index_list, **kwargs):
-        """ Get historical EOD for a specified list of indices.
+        """Get historical EOD for a specified list of indices.
 
         This method fetches the data from the specified feed.
 
@@ -395,17 +397,17 @@ class StaticIndices(_Feed):
         """
         # Column renaming dict
         column_dict = {
-            'Name': 'index_name',
-            'Code': 'ticker',
-            'Currency': 'currency_code',
-            'TRI': 'total_return'
+            "Name": "index_name",
+            "Code": "ticker",
+            "Currency": "currency_code",
+            "TRI": "total_return",
         }
 
         # Look for files with INDX.<index ticker>.csv
         data_list = list()
         tickers = [index.ticker for index in index_list]
         for ticker in tickers:
-            file_name = f'INDX.{ticker}.csv'
+            file_name = f"INDX.{ticker}.csv"
             path = self._path(file_name)
             # Read CSV history file
             with open(path) as file:
@@ -415,14 +417,14 @@ class StaticIndices(_Feed):
             try:
                 data = data[list(column_dict.keys())]
             except KeyError:
-                raise KeyError(f'Error in column headers for file {path}')
+                raise KeyError(f"Error in column headers for file {path}")
             else:
                 data.rename(columns=column_dict, inplace=True)
             # Append to list for concatenation into one pandas.DataFrame
             data_list.append(data)
-        data = pd.concat(data_list, axis='index')
+        data = pd.concat(data_list, axis="index")
         # Condition date
-        data['date_stamp'] = pd.to_datetime(data['date_stamp'])
+        data["date_stamp"] = pd.to_datetime(data["date_stamp"])
 
         return data
 
@@ -430,45 +432,45 @@ class StaticIndices(_Feed):
 class MetaData(_Feed):
     """Provide fundamental and meta-data of the working universe securities."""
 
-    _CLASS_DATA_PATH = 'static'
+    _CLASS_DATA_PATH = "static"
 
     def __init__(self):
         """Instance initialization."""
         super().__init__()
 
     def get_etfs(self, **kwargs):
-        """Fetch JSE securities mata-data from a local file. """
-        universe_file_name = 'ETFMeta.csv'
+        """Fetch JSE securities mata-data from a local file."""
+        universe_file_name = "ETFMeta.csv"
         path = self._path(universe_file_name)
 
         column_dict = {
-            'mic': 'mic',
-            'ticker': 'ticker',
-            'name': 'listed_name',
-            'status': 'status',
-            'distributions': 'distributions',
-            'asset_class': 'asset_class',
-            'locality': 'locality',
-            'domicile': 'domicile_code',
-            'quote_units': 'quote_units',
-            'industry_class': 'industry_class',
-            'industry_code': 'industry_code',
-            'industry_name': 'industry_name',
-            'isin': 'isin',
-            'issuer_domicile': 'issuer_domicile_code',
-            'issuer_name': 'issuer_name',
-            'sector_code': 'sector_code',
-            'sector_name': 'sector_name',
-            'sub_sector_code': 'sub_sector_code',
-            'sub_sector_name': 'sub_sector_name',
-            'super_sector_code': 'super_sector_code',
-            'super_sector_name': 'super_sector_name',
-            'ter': 'ter',
+            "mic": "mic",
+            "ticker": "ticker",
+            "name": "listed_name",
+            "status": "status",
+            "distributions": "distributions",
+            "asset_class": "asset_class",
+            "locality": "locality",
+            "domicile": "domicile_code",
+            "quote_units": "quote_units",
+            "industry_class": "industry_class",
+            "industry_code": "industry_code",
+            "industry_name": "industry_name",
+            "isin": "isin",
+            "issuer_domicile": "issuer_domicile_code",
+            "issuer_name": "issuer_name",
+            "sector_code": "sector_code",
+            "sector_name": "sector_name",
+            "sub_sector_code": "sub_sector_code",
+            "sub_sector_name": "sub_sector_name",
+            "super_sector_code": "super_sector_code",
+            "super_sector_name": "super_sector_name",
+            "ter": "ter",
         }
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info('Fetching JSE ETFs meta-data from {}.'.format(path))
+        logger.info("Fetching JSE ETFs meta-data from {}.".format(path))
 
         # Read data with proper dat typing
         data = pd.read_csv(
@@ -482,29 +484,28 @@ class MetaData(_Feed):
         data.rename(columns=column_dict, inplace=True)
 
         # For testing purposes only!!!
-        if '_test_isin_list' in kwargs and \
-                kwargs['_test_isin_list'] is not None:
-            _test_isin_list = kwargs.pop('_test_isin_list')
+        if "_test_isin_list" in kwargs and kwargs["_test_isin_list"] is not None:
+            _test_isin_list = kwargs.pop("_test_isin_list")
             # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data['isin'].isin(_test_isin_list)]
+            data = data[data["isin"].isin(_test_isin_list)]
 
         return data
 
-    def get_indices(self, feed='EOD', **kwargs):
+    def get_indices(self, feed="EOD", **kwargs):
         """Fetch indices mete data from the feeds."""
 
-        if feed == 'EOD':
+        if feed == "EOD":
             feed = Exchanges()
             column_dict = {
-                'Name': 'index_name',
-                'Code': 'ticker',
-                'Currency': 'currency_code',
+                "Name": "index_name",
+                "Code": "ticker",
+                "Currency": "currency_code",
             }
             # Try fetch the data form the feed
             try:
                 data = feed.get_indices()
             except Exception as ex:
-                logger.error('Failed to get Indices meta data.')
+                logger.error("Failed to get Indices meta data.")
                 raise ex
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -517,14 +518,13 @@ class MetaData(_Feed):
             data = data[list(column_dict.keys())]
             data.rename(columns=column_dict, inplace=True)
         else:
-            raise Exception('Feed {} not implemented.'.format(feed))
+            raise Exception("Feed {} not implemented.".format(feed))
 
         # For testing purposes only!!!
-        if '_test_ticker_list' in kwargs and \
-                kwargs['_test_ticker_list'] is not None:
-            _test_ticker_list = kwargs.pop('_test_ticker_list')
+        if "_test_ticker_list" in kwargs and kwargs["_test_ticker_list"] is not None:
+            _test_ticker_list = kwargs.pop("_test_ticker_list")
             # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data['ticker'].isin(_test_ticker_list)]
+            data = data[data["ticker"].isin(_test_ticker_list)]
 
         return data
 
@@ -537,6 +537,7 @@ class History(_Feed):
 
     This class manages
     """
+
     _CLASS_DATA_PATH = None
 
     def __init__(self):
@@ -545,7 +546,7 @@ class History(_Feed):
 
     @staticmethod
     def date_preprocessor(obj_list, from_date, to_date, series):
-        """ Get date ranges based on arguments and last available data series.
+        """Get date ranges based on arguments and last available data series.
 
         Parameters
         ----------
@@ -580,13 +581,14 @@ class History(_Feed):
             from_date_list = list()
             for asset in obj_list:
                 try:
-                    if series in ['eod', 'forex', 'index']:
+                    if series in ["eod", "forex", "index"]:
                         from_date = asset.get_last_eod_date()
-                    elif series in ['dividend']:
+                    elif series in ["dividend"]:
                         from_date = asset.get_last_dividend_date()
                     else:
                         raise ValueError(
-                            f'Unexpected value {series} for `series` argument.')
+                            f"Unexpected value {series} for `series` argument."
+                        )
                 except TimeSeriesNoData:
                     from_date = None
                 from_date_list.append(from_date)
@@ -601,9 +603,8 @@ class History(_Feed):
 
         return from_date_list, to_date_list
 
-    def get_eod(
-            self, asset_list, from_date=None, to_date=None, feed='EOD'):
-        """ Get historical EOD for a specified list of securities.
+    def get_eod(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+        """Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
 
@@ -623,33 +624,32 @@ class History(_Feed):
         """
         # Generate (or default) date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
-            asset_list, from_date, to_date, series='eod')
+            asset_list, from_date, to_date, series="eod"
+        )
 
         # Assemble symbol list
         symbol_list = list()
-        for sec, from_date, to_date in zip(
-                asset_list, from_date_list, to_date_list):
-            symbol_list.append(
-                (sec.ticker, sec.exchange.eod_code, from_date, to_date))
+        for sec, from_date, to_date in zip(asset_list, from_date_list, to_date_list):
+            symbol_list.append((sec.ticker, sec.exchange.eod_code, from_date, to_date))
 
         # Pick feed
-        if feed == 'EOD':
+        if feed == "EOD":
             feed = MultiHistorical()
             column_dict = {
-                'date': 'date_stamp',
-                'ticker': 'ticker',
-                'exchange': 'mic',
-                'adjusted_close': 'adjusted_close',
-                'close': 'close',
-                'high': 'high',
-                'low': 'low',
-                'open': 'open',
-                'volume': 'volume',
+                "date": "date_stamp",
+                "ticker": "ticker",
+                "exchange": "mic",
+                "adjusted_close": "adjusted_close",
+                "close": "close",
+                "high": "high",
+                "low": "low",
+                "open": "open",
+                "volume": "volume",
             }
             try:
                 data = feed.get_eod(symbol_list)
             except Exception as ex:
-                logger.error('Failed to get EOD data.')
+                logger.error("Failed to get EOD data.")
                 raise ex
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -663,27 +663,27 @@ class History(_Feed):
             data.rename(columns=column_dict, inplace=True)
             # Replace EODHistoricalData.com's exchange codes (the mic column)
             # with exchange MICs
-            eod_to_mic_dict = dict([
-                (s.exchange.eod_code, s.exchange.mic) for s in asset_list])
-            data.replace({'mic': eod_to_mic_dict}, inplace=True)
+            eod_to_mic_dict = dict(
+                [(s.exchange.eod_code, s.exchange.mic) for s in asset_list]
+            )
+            data.replace({"mic": eod_to_mic_dict}, inplace=True)
             # Augment the ticker-mic with the matching ISIN code
-            mic_ticker_to_isin_dict = dict([
-                ((s.exchange.mic, s.ticker), s.isin) for s in asset_list])
-            data['_key'] = data[['mic', 'ticker']
-                                ].to_records(index=False).tolist()
-            data['isin'] = data['_key'].map(mic_ticker_to_isin_dict)
+            mic_ticker_to_isin_dict = dict(
+                [((s.exchange.mic, s.ticker), s.isin) for s in asset_list]
+            )
+            data["_key"] = data[["mic", "ticker"]].to_records(index=False).tolist()
+            data["isin"] = data["_key"].map(mic_ticker_to_isin_dict)
             # These columns are expected by asset_base
-            data.drop(columns=['_key', 'mic', 'ticker'], inplace=True)
+            data.drop(columns=["_key", "mic", "ticker"], inplace=True)
             # Condition date
-            data['date_stamp'] = pd.to_datetime(data['date_stamp'])
+            data["date_stamp"] = pd.to_datetime(data["date_stamp"])
         else:
-            raise Exception('Feed {} not implemented.'.format(feed))
+            raise Exception("Feed {} not implemented.".format(feed))
 
         return data
 
-    def get_dividends(
-            self, asset_list, from_date=None, to_date=None, feed='EOD'):
-        """ Get historical dividends for a list of securities.
+    def get_dividends(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+        """Get historical dividends for a list of securities.
 
         This method fetches the data from the specified feed.
 
@@ -703,36 +703,39 @@ class History(_Feed):
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
-            asset_list, from_date, to_date, series='dividend')
+            asset_list, from_date, to_date, series="dividend"
+        )
 
         # Assemble symbol list
         symbol_list = list()
-        for sec, from_date, to_date in zip(
-                asset_list, from_date_list, to_date_list):
-            symbol_list.append(
-                (sec.ticker, sec.exchange.eod_code, from_date, to_date))
+        for sec, from_date, to_date in zip(asset_list, from_date_list, to_date_list):
+            symbol_list.append((sec.ticker, sec.exchange.eod_code, from_date, to_date))
 
         # Pick feed
-        if feed == 'EOD':
+        if feed == "EOD":
             feed = MultiHistorical()
             column_dict = {
-                'date': 'date_stamp',
-                'ticker': 'ticker',
-                'exchange': 'mic',
-                'currency': 'currency',
-                'declarationDate': 'declaration_date',
-                'paymentDate': 'payment_date',
-                'period': 'period',
-                'recordDate': 'record_date',
-                'unadjustedValue': 'unadjusted_value',
-                'value': 'adjusted_value',
+                "date": "date_stamp",
+                "ticker": "ticker",
+                "exchange": "mic",
+                "currency": "currency",
+                "declarationDate": "declaration_date",
+                "paymentDate": "payment_date",
+                "period": "period",
+                "recordDate": "record_date",
+                "unadjustedValue": "unadjusted_value",
+                "value": "adjusted_value",
             }
             date_columns_list = [
-                'date_stamp', 'declaration_date', 'payment_date', 'record_date']
+                "date_stamp",
+                "declaration_date",
+                "payment_date",
+                "record_date",
+            ]
             try:
                 data = feed.get_dividends(symbol_list)
             except Exception() as ex:
-                logger.error('Failed to get dividend data.')
+                logger.error("Failed to get dividend data.")
                 raise ex
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -746,29 +749,29 @@ class History(_Feed):
             data.rename(columns=column_dict, inplace=True)
             # Replace EODHistoricalData.com's exchange codes (the mic column)
             # with exchange MICs
-            eod_to_mic_dict = dict([
-                (s.exchange.eod_code, s.exchange.mic) for s in asset_list])
-            data.replace({'mic': eod_to_mic_dict}, inplace=True)
+            eod_to_mic_dict = dict(
+                [(s.exchange.eod_code, s.exchange.mic) for s in asset_list]
+            )
+            data.replace({"mic": eod_to_mic_dict}, inplace=True)
             # Augment the ticker-mic with the matching ISIN code using a mapping
             # dictionary
-            mic_ticker_to_isin_dict = dict([
-                ((s.exchange.mic, s.ticker), s.isin) for s in asset_list])
-            data['_key'] = data[['mic', 'ticker']
-                                ].to_records(index=False).tolist()
-            data['isin'] = data['_key'].map(mic_ticker_to_isin_dict)
+            mic_ticker_to_isin_dict = dict(
+                [((s.exchange.mic, s.ticker), s.isin) for s in asset_list]
+            )
+            data["_key"] = data[["mic", "ticker"]].to_records(index=False).tolist()
+            data["isin"] = data["_key"].map(mic_ticker_to_isin_dict)
             # These columns are expected by asset_base
-            data.drop(columns=['_key', 'mic', 'ticker'], inplace=True)
+            data.drop(columns=["_key", "mic", "ticker"], inplace=True)
             # Condition date
             for column in date_columns_list:
                 data[column] = pd.to_datetime(data[column])
         else:
-            raise Exception('Feed {} not implemented.'.format(feed))
+            raise Exception("Feed {} not implemented.".format(feed))
 
         return data
 
-    def get_forex(
-            self, forex_list, from_date=None, to_date=None, feed='EOD'):
-        """ Get historical EOD for a specified list of securities.
+    def get_forex(self, forex_list, from_date=None, to_date=None, feed="EOD"):
+        """Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
 
@@ -788,32 +791,31 @@ class History(_Feed):
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
-            forex_list, from_date, to_date, series='forex')
+            forex_list, from_date, to_date, series="forex"
+        )
 
         # Assemble symbol list
         symbol_list = list()
-        for sec, from_date, to_date in zip(
-                forex_list, from_date_list, to_date_list):
-            symbol_list.append(
-                (sec.ticker, from_date, to_date))
+        for sec, from_date, to_date in zip(forex_list, from_date_list, to_date_list):
+            symbol_list.append((sec.ticker, from_date, to_date))
 
         # Pick feed
-        if feed == 'EOD':
+        if feed == "EOD":
             feed = MultiHistorical()
             column_dict = {
-                'date': 'date_stamp',
-                'ticker': 'ticker',
-                'adjusted_close': 'adjusted_close',
-                'close': 'close',
-                'high': 'high',
-                'low': 'low',
-                'open': 'open',
-                'volume': 'volume',
+                "date": "date_stamp",
+                "ticker": "ticker",
+                "adjusted_close": "adjusted_close",
+                "close": "close",
+                "high": "high",
+                "low": "low",
+                "open": "open",
+                "volume": "volume",
             }
             try:
                 data = feed.get_forex(symbol_list)
             except Exception as ex:
-                logger.error('Failed to get Forex data.')
+                logger.error("Failed to get Forex data.")
                 raise ex
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -826,15 +828,14 @@ class History(_Feed):
             data = data[list(column_dict.keys())]
             data.rename(columns=column_dict, inplace=True)
             # Condition date
-            data['date_stamp'] = pd.to_datetime(data['date_stamp'])
+            data["date_stamp"] = pd.to_datetime(data["date_stamp"])
         else:
-            raise Exception('Feed {} not implemented.'.format(feed))
+            raise Exception("Feed {} not implemented.".format(feed))
 
         return data
 
-    def get_indices(
-            self, index_list, from_date=None, to_date=None, feed='EOD'):
-        """ Get historical EOD for a specified list of indices.
+    def get_indices(self, index_list, from_date=None, to_date=None, feed="EOD"):
+        """Get historical EOD for a specified list of indices.
 
         This method fetches the data from the specified feed.
 
@@ -854,32 +855,31 @@ class History(_Feed):
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
-            index_list, from_date, to_date, series='index')
+            index_list, from_date, to_date, series="index"
+        )
 
         # Assemble symbol list
         symbol_list = list()
-        for sec, from_date, to_date in zip(
-                index_list, from_date_list, to_date_list):
-            symbol_list.append(
-                (sec.ticker, from_date, to_date))
+        for sec, from_date, to_date in zip(index_list, from_date_list, to_date_list):
+            symbol_list.append((sec.ticker, from_date, to_date))
 
         # Pick feed
-        if feed == 'EOD':
+        if feed == "EOD":
             feed = MultiHistorical()
             column_dict = {
-                'date': 'date_stamp',
-                'ticker': 'ticker',
-                'adjusted_close': 'adjusted_close',
-                'close': 'close',
-                'high': 'high',
-                'low': 'low',
-                'open': 'open',
-                'volume': 'volume',
+                "date": "date_stamp",
+                "ticker": "ticker",
+                "adjusted_close": "adjusted_close",
+                "close": "close",
+                "high": "high",
+                "low": "low",
+                "open": "open",
+                "volume": "volume",
             }
             try:
                 data = feed.get_index(symbol_list)
             except Exception as ex:
-                logger.error('Failed to get Forex data.')
+                logger.error("Failed to get Forex data.")
                 raise ex
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -892,8 +892,8 @@ class History(_Feed):
             data = data[list(column_dict.keys())]
             data.rename(columns=column_dict, inplace=True)
             # Condition date
-            data['date_stamp'] = pd.to_datetime(data['date_stamp'])
+            data["date_stamp"] = pd.to_datetime(data["date_stamp"])
         else:
-            raise Exception('Feed {} not implemented.'.format(feed))
+            raise Exception("Feed {} not implemented.".format(feed))
 
         return data

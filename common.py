@@ -21,6 +21,7 @@ from sqlalchemy import create_engine
 
 # Get module-named logger.
 import logging
+
 logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
@@ -33,34 +34,33 @@ class TestSession(object):
     """Set up an `in-memory` test database and session."""
 
     def __init__(self):
-        self.engine = create_engine('sqlite://', echo=True)
+        self.engine = create_engine("sqlite://", echo=True)
         Base.metadata.create_all(self.engine)  # Using asset_base.Base
         self.session = Session(self.engine, autoflush=True, autocommit=False)
 
 
 class Common(Base):
-    """ Common object.
-    """
+    """Common object."""
 
-    __tablename__ = 'common'
+    __tablename__ = "common"
 
     # Polymorphism discriminator.
     _discriminator = Column(String(32))
 
     __mapper_args__ = {
-        'polymorphic_identity': __tablename__,
-        'polymorphic_on': _discriminator,
+        "polymorphic_identity": __tablename__,
+        "polymorphic_on": _discriminator,
     }
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
 
-    __table_args__ = (UniqueConstraint('_discriminator', 'id'), )
+    __table_args__ = (UniqueConstraint("_discriminator", "id"),)
 
     name = Column(String(256), nullable=False)
     """str: Entity name."""
 
-    key_code_name = 'key_code'
+    key_code_name = "key_code"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -81,12 +81,11 @@ class Common(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return '{} - {}'.format(self.id, self.name)
+        return "{} - {}".format(self.id, self.name)
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", id={!r})'.format(
-            self._class_name, self.name, self.id)
+        return '{}(name="{}", id={!r})'.format(self._class_name, self.name, self.id)
 
     @classmethod
     @property
@@ -96,12 +95,12 @@ class Common(Base):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return '{}.{}'.format(self.id, self.name)
+        return "{}.{}".format(self.id, self.name)
 
     @property
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return '{}.{}'.format(self.id, self.name)
+        return "{}.{}".format(self.id, self.name)
 
     @classmethod
     def key_code_id_table(cls, session):
@@ -120,7 +119,8 @@ class Common(Base):
         instances_list = session.query(cls).all()
         return pd.DataFrame(
             [(item.id, item.key_code) for item in instances_list],
-            columns=['id', cls.key_code_name])
+            columns=["id", cls.key_code_name],
+        )
 
     @classmethod
     def factory(cls, session, **kwargs):
@@ -178,7 +178,7 @@ class Common(Base):
 
     @classmethod
     def update_all(cls, session, get_method, **kwargs):
-        """ Update/create all the objects in the asset_base session.
+        """Update/create all the objects in the asset_base session.
 
         Parameters
         ----------
@@ -198,4 +198,3 @@ class Common(Base):
         data_frame = get_method(**kwargs)
         # Bulk add/update data (uses the factory method)
         cls.from_data_frame(session, data_frame)
-
