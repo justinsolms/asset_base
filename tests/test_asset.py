@@ -10,7 +10,7 @@ from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import (
     Asset,
-    Base,
+    AssetBase,
     Cash,
     Forex,
     Index,

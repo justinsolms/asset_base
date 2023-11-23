@@ -51,7 +51,7 @@ metadata = MetaData()
 
 
 @functools.total_ordering
-class Base(Common):
+class AssetBase(Common):
     """Base class for the module.
 
     Note
@@ -65,7 +65,7 @@ class Base(Common):
     <other Base polymorph>` error.
     """
 
-    __tablename__ = "base"
+    __tablename__ = "asset_base"
     __mapper_args__ = {
         "polymorphic_identity": __tablename__,
     }
@@ -242,7 +242,7 @@ class Base(Common):
         return last_date
 
 
-class Asset(Base):
+class Asset(AssetBase):
     """A financial asset.
 
     Note
@@ -328,7 +328,7 @@ class Asset(Base):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("base.id"), primary_key=True)
+    id = Column(Integer, ForeignKey("asset_base.id"), primary_key=True)
     """ Primary key."""
 
     # Entity owns Asset. Entity has a reference list to many owned Asset named
@@ -2319,7 +2319,7 @@ class ListedEquity(Listed):
         return result
 
 
-class Index(Base):
+class Index(AssetBase):
     """An index representing some financial data.
 
     Wikipedia defines an index is an indirect short-cut derived from and
@@ -2380,7 +2380,7 @@ class Index(Base):
     __tablename__ = "index"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey("base.id"), primary_key=True)
+    id = Column(Integer, ForeignKey("asset_base.id"), primary_key=True)
 
     key_code_name = "ticker"
     """str: The name to attach to the ``key_code`` attribute (@property method).

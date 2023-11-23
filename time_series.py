@@ -81,8 +81,8 @@ class TimeSeriesBase(Base):
     __table_args__ = (UniqueConstraint("_discriminator", "_asset_id", "date_stamp"),)
 
     # Foreign key giving ``Asset`` a time series capability
-    _asset_id = Column(Integer, ForeignKey("base.id"), nullable=False)
-    base_obj = relationship("Base", back_populates="_series", foreign_keys=[_asset_id])
+    _asset_id = Column(Integer, ForeignKey("asset_base.id"), nullable=False)
+    base_obj = relationship("AssetBase", back_populates="_series", foreign_keys=[_asset_id])
 
     date_stamp = Column(Date, nullable=False)
     # TODO: Consider making this part of the primary keys
