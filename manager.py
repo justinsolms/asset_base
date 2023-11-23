@@ -214,7 +214,7 @@ class Meta(Base):
 # TODO: Consider converting flush commands to try-commit-exception-rollback
 
 
-class AssetBase(object):
+class ManagerBase(object):
     """Database set-up, destruction, initialization, management, maintenance.
 
     Parameters
@@ -339,7 +339,6 @@ class AssetBase(object):
             When `True` then previous dumped database content will be reused to
             initialise the database.
         update : bool
-            FIXME: Not implemented, do so urgently.
             When `True` then API feeds will be checked for newer data.
 
         """
@@ -389,7 +388,8 @@ class AssetBase(object):
         delete_dump_data : bool, optional
             If `True` then data is not dumped and the dump folder and its
             contents are deleted. Warning: do not use this unless you are really
-            sure you wish to delete all your reusable data sources.
+            sure you wish to delete all your reusable data sources. If `False`
+            then re-use data is first dumped before the database is torn down.
         """
         # Dump reusable data. Abort with CRITICAL logging if failed.
         if delete_dump_data:
@@ -782,7 +782,7 @@ class AssetBase(object):
     # mixed currency time series.
 
 
-class AssetBaseManager(AssetBase):
+class Manager(ManagerBase):
     """A context manager that manages the AssetBase session opening and closing.
 
     Parameters

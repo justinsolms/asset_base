@@ -31,7 +31,7 @@ class TestBase(unittest.TestCase):
         """Set up test class fixtures."""
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
-        cls.Cls = Base
+        cls.Cls = AssetBase
         # Fixed date window for time series tests
         cls.from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d").date()
         cls.to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()

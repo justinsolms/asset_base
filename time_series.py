@@ -3,6 +3,15 @@
 # <nbformat>3.0</nbformat>
 
 """ Support for time series data.
+
+Note
+----
+This module provides all price units in `units` and not `cents`. In this
+module's several `to_dict` methods the ``asset.Base.quote_units`` bool attribute
+of the related security object is used to determine if conversion from cents to
+units is necessary. Nonetheless the underlying data in the time-series database
+tables is stored as indicated by ``asset.Base.quote_units`` bool attribute
+
 """
 # Allows  in type hints to use class names instead of class name strings
 from __future__ import annotations
@@ -238,7 +247,6 @@ class TimeSeriesBase(Base):
             class' constructor method arguments, with the exception that instead
             of a column named ``listed``, instead there shall be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
-            FIXME: Wrong docs string!!!
         asset_class : .asset.Asset (or child class)
             The ``Asset`` class which has this time-series data. (Not to be
             confused with the market asset class of security such as cash,

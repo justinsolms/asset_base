@@ -75,7 +75,7 @@ class TestAssetBase(unittest.TestCase):
         """Set up test class fixtures."""
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
-        cls.Cls = AssetBase
+        cls.Cls = ManagerBase
 
         # Make a memory based asset_base session with test data.
         # Set up with only AAPL, MCD and STX40 respectively
@@ -95,7 +95,7 @@ class TestAssetBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        self.asset_base = AssetBase(dialect="memory", testing=True)
+        self.asset_base = ManagerBase(dialect="memory", testing=True)
         self.session = self.asset_base.session
         # For a fresh test delete any previously dumped data. Do not delete the
         # folder which was set up as a required test fixture.
@@ -116,7 +116,7 @@ class TestAssetBase(unittest.TestCase):
 
     def test___init__(self):
         """Instance initialization."""
-        self.assertIsInstance(self.asset_base, AssetBase)
+        self.assertIsInstance(self.asset_base, ManagerBase)
 
     def test_dump(self):
         """Dump re-usable content to disk files."""
@@ -131,30 +131,22 @@ class TestAssetBase(unittest.TestCase):
 
     def test_reuse(self):
         """Reuse dumped data as a database initialization resource."""
-        # Dump the reusable part of the database contents for reuse.
-        self.asset_base.dump()
-        # Tear down asset_base and delete the dump folder, but not its contents,
-        # so that we can initialise the database by reusing the dumped data
+        # Get existing database data as test reference data
+        securities_test_data = ListedEquity.to_data_frame(self.session)
+        eod_test_data = ListedEOD.to_data_frame(self.session, ListedEquity)
+        dividend_test_data = Dividend.to_data_frame(self.session, ListedEquity)
+        # Tear down asset_base dumping data so that we can initialise the
+        # database by reusing the dumped data
         self.asset_base.tear_down(delete_dump_data=False)
-        # Set-up the database using only dumped data, do not update from feeds.
+        # Set-up the database using only dumped data, do not update from API.
         self.asset_base.set_up(update=False, _test_isin_list=self.isin_list)
-        # The old session was delete and a new one created.
+        # Get the newly created session
         self.session = self.asset_base.session
 
-        # Get database data
+        # Get reused database data which was instantiated from the dumped data
         securities_data = ListedEquity.to_data_frame(self.session)
         eod_data = ListedEOD.to_data_frame(self.session, ListedEquity)
         dividend_data = Dividend.to_data_frame(self.session, ListedEquity)
-        # Get test data from feed
-        fundamentals = MetaData()
-        history = History()
-        securities_list = self.session.query(ListedEquity).all()
-        from_date = datetime.date(1900, 1, 1)  # Get all history
-        # Test data - get all history and should be the same as the data direct
-        # from the database with reused data
-        securities_test_data = fundamentals.get_etfs(_test_isin_list=self.isin_list)
-        eod_test_data = history.get_eod(securities_list, from_date=from_date)
-        dividend_test_data = history.get_dividends(securities_list, from_date=from_date)
         # Test - reused data should be same as feed data
         pd.testing.assert_frame_equal(
             securities_test_data[securities_data.columns].reset_index(drop=True),
@@ -162,28 +154,28 @@ class TestAssetBase(unittest.TestCase):
         )
         pd.testing.assert_frame_equal(
             eod_test_data.drop(columns="adjusted_close")
-            .sort_index(axis=1)
-            .sort_values(["date_stamp", "isin"])
-            .reset_index(drop=True),
+            .set_index(["date_stamp", "isin"])
+            .sort_index(axis=0)  # Sorts index rank
+            .sort_index(axis=1),  # Sorts column rank
             eod_data.drop(columns="adjusted_close")
-            .sort_index(axis=1)
-            .sort_values(["date_stamp", "isin"])
-            .reset_index(drop=True),
+            .set_index(["date_stamp", "isin"])
+            .sort_index(axis=0)  # Sorts index rank
+            .sort_index(axis=1),  # Sorts column rank
         )
         pd.testing.assert_frame_equal(
             dividend_test_data.drop(columns="adjusted_value")
-            .sort_index(axis=1)
-            .sort_values(["date_stamp", "isin"])
-            .reset_index(drop=True),
+            .set_index(["date_stamp", "isin"])
+            .sort_index(axis=0)  # Sorts index rank
+            .sort_index(axis=1),  # Sorts column rank
             dividend_data.drop(columns="adjusted_value")
-            .sort_index(axis=1)
-            .sort_values(["date_stamp", "isin"])
-            .reset_index(drop=True),
+            .set_index(["date_stamp", "isin"])
+            .sort_index(axis=0)  # Sorts index rank
+            .sort_index(axis=1),  # Sorts column rank
         )
 
     def test_time_series(self):
         """Test all securities time series."""
-        # Test total_return check-product over short historical date window.
+        # Test total-return product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
         data = self.asset_base.time_series(securities_list, return_type="total_return")
         replace_time_series_labels(data, "ticker", inplace=True)

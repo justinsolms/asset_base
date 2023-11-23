@@ -74,7 +74,7 @@ class Base(Common):
     """ Primary key."""
 
     # Asset currency. Optional.
-    _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=True)
+    _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=False)
     currency = relationship(Currency)
 
     # Price quote in cents or units. Strictly convert all prices to currency
@@ -334,7 +334,7 @@ class Asset(Base):
     # Entity owns Asset. Entity has a reference list to many owned Asset named
     # `asset_list`
     # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
-    _owner_id = Column(Integer, ForeignKey("entity.id"))
+    _owner_id = Column(Integer, ForeignKey("entity.id"), nullable=True)
     owner = relationship("Entity", backref="asset_list", foreign_keys=[_owner_id])
 
     # TODO: This (or child) is were we would add asset fundamental data relationships
@@ -534,7 +534,8 @@ class Cash(Asset):
     def __init__(self, currency, **kwargs):
         """Instance initialization."""
 
-        assert "owner" not in kwargs, "Unexpected `owner` argument."
+        # Force ownership of currencies
+        assert "owner" not in kwargs, "Missing `owner` argument."
 
         # The name is constrained to that of the currency.
         name = currency.name
@@ -810,7 +811,7 @@ class Forex(Cash):
     _name_appendix = "Forex"
 
     # Priced currency, or ``base_currency``
-    _currency_id2 = Column(Integer, ForeignKey("currency.id"), nullable=True)
+    _currency_id2 = Column(Integer, ForeignKey("currency.id"), nullable=False)
     base_currency = relationship(Currency, foreign_keys=[_currency_id2])
 
     # Currency ticker is redundant information, but very useful and inexpensive
@@ -1098,6 +1099,7 @@ class Share(Asset):
         Entity full name.
     issuer: .Issuer
         The issuing institution that issues the asset for exchange.
+    FIXME: Args like these are NOT optional
     quote_units : {'units', 'cents'}, optional
         Price quotations are either in currency units (default) or currency
         cents.
@@ -1134,6 +1136,7 @@ class Share(Asset):
     shares_in_issue = Column(Integer, nullable=True)
 
     # Does the share pay distributions or not
+    # FIXME: Does not reflect the security meta data correctly
     distributions = Column(Boolean, nullable=False, default=False)
 
     #  A short class name for use in naming
@@ -1141,28 +1144,26 @@ class Share(Asset):
 
     def __init__(self, name, issuer, currency=None, **kwargs):
         """Instance initialization."""
+        super().__init__(name, currency, **kwargs)
+
         # If the currency is not provided then the currency is the issuer's
         # domicile's currency
         if currency is None:
             domicile = issuer.domicile
             currency = domicile.currency
 
-        super().__init__(name, currency, **kwargs)
-
         self.issuer = issuer
 
         # Number of shares issued by the Issuer
         if "shares_in_issue" in kwargs:
             self.shares_in_issue = kwargs.pop("shares_in_issue")
-        else:
-            self.shares_in_issue = None
 
         # Does the share pay distributions or not
         if "distributions" in kwargs:
             self.distributions = kwargs.pop("distributions")
         else:
-            # Not sure why the default is not set to False as specified in the
-            # column attribute definition, so we do it here anyway
+            # Not sure why the default isn't being set to False as specified in
+            # the column attribute definition, so we do it here anyway
             self.distributions = False
 
     @property
@@ -1348,6 +1349,12 @@ class Listed(Share):
 
     def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
+        # Currency is the exchange listing currency, i.e., the exchange's
+        # domicile currency which overwrites the parent class Share issuer's
+        # domicile's currency
+        currency = exchange.domicile.currency
+
+        super().__init__(name, issuer, currency, **kwargs)
 
         # Do no remove this code!!. Some methods that use this class (such as
         # factory methods) are able to place arguments with a None value, this
@@ -1357,13 +1364,6 @@ class Listed(Share):
             pass
         else:
             raise ValueError("Unexpected `None` value for some positional arguments.")
-
-        # Currency is the exchange listing currency, i.e., the exchange's
-        # domicile currency which overwrites the parent class Share issuer's
-        # domicile's currency
-        currency = exchange.domicile.currency
-
-        super().__init__(name, issuer, currency, **kwargs)
 
         # Instrument identification and listing
         self.exchange = exchange
@@ -1515,11 +1515,11 @@ class Listed(Share):
             The ticker assigned to the asset by the exchange listing process.
         listed_name : str, Optional
             Entity full name of the listed security as it was issued.
-        issuer_name : str, Optional
-            The name of the issuer institution that issued the share.
         issuer_domicile_code : str(2), Optional
             ISO 3166-1 Alpha-2 two letter country code. The domicile code of the
             issuer.
+        issuer_name : str, Optional
+            The name of the issuer institution that issued the share.
         status : str
             Flag of listing status ('listed', 'delisted').
         create : bool, Optional
@@ -2414,6 +2414,7 @@ class Index(Base):
     ):
         """Instance initialization."""
         super().__init__(name, currency, **kwargs)
+
         self.ticker = ticker
         self.total_return = total_return
         self.static = static
@@ -2631,6 +2632,8 @@ class ExchangeTradeFund(ListedEquity):
 
     def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
         """Instance initialization."""
+        super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
+
         # Optional parameters.
         if "index" in kwargs:
             self.index = kwargs.pop("index")
@@ -2644,8 +2647,6 @@ class ExchangeTradeFund(ListedEquity):
                 self.ter = float("nan")
         else:  # Default to zero.
             self.ter = float("nan")
-
-        super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".
