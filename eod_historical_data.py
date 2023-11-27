@@ -187,12 +187,12 @@ class Historical(APISessionManager):
             to_date = datetime.datetime.today()
 
         # Get the API response
-        params = dict(
-            from_date=from_date.strftime("%Y-%m-%d"),
-            to_date=to_date.strftime("%Y-%m-%d"),
-            period="d",  # Default to daily sampling period
-            order="a",  # Default to ascending order
-        )
+        params = {
+            "from": from_date.strftime("%Y-%m-%d"),
+            "to": to_date.strftime("%Y-%m-%d"),
+            "period": "d",  # Default to daily sampling period
+            "order": "a",  # Default to ascending order
+        }
         table = await self.get(path, params=params)
 
         if table.empty:
