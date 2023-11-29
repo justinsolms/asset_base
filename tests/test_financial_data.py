@@ -164,8 +164,9 @@ class TestSecuritiesHistory(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean sqlite in-memory database
-        self.session = TestSession().session
+        # Each test with a clean (but persistent) sqlite in-memory database
+        self.test_session = TestSession()
+        self.session = self.test_session.session
         # Add all initialization objects to asset_base
         static_obj = Static()
         Currency.update_all(self.session, get_method=static_obj.get_currency)

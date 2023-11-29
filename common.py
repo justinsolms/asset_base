@@ -34,9 +34,20 @@ class TestSession(object):
     """Set up an `in-memory` test database and session."""
 
     def __init__(self):
-        self.engine = create_engine("sqlite://", echo=True)
+        """Initialization."""
+        self.engine = create_engine("sqlite://", echo=False)  # No logging
+        logger.debug("Created database in-memory engine.")
         Base.metadata.create_all(self.engine)  # Using asset_base.Base
         self.session = Session(self.engine, autoflush=True, autocommit=False)
+        logger.debug("Obtained database in-memory session.")
+
+    def __del__(self):
+        """Destruction."""
+        self.session.close()
+        logger.debug("Closed database session.")
+        self.engine.dispose()
+        logger.debug("Disposed of database engine.")
+
 
 
 class Common(Base):

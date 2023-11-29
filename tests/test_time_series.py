@@ -46,9 +46,9 @@ class TestTimeSeriesBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Similar set up to test_financial_data
-        # Each test with a clean sqlite in-memory database
-        self.session = TestSession().session
+        # Each test with a clean (but persistent) sqlite in-memory database
+        self.test_session = TestSession()
+        self.session = self.test_session.session
         # Add all initialization objects to asset_base
         static = Static()
         Currency.update_all(self.session, get_method=static.get_currency)

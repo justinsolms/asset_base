@@ -38,7 +38,8 @@ class TestCurrency(unittest.TestCase):
     def setUp(self):
         """Set up test case fixtures."""
         # Each test with a clean sqlite in-memory database
-        self.session = TestSession().session
+        self.test_session = TestSession()
+        self.session = self.test_session.session
 
     def test___init__(self):
         """Initialization."""
@@ -194,8 +195,9 @@ class TestDomicile(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean sqlite in-memory session
-        self.session = TestSession().session
+        # Each test with a clean (but persistent) sqlite in-memory database
+        self.test_session = TestSession()
+        self.session = self.test_session.session
         # Add all currency objects to asset_base
         Currency.update_all(self.session, get_method=Static().get_currency)
         self.currency = Currency.factory(self.session, self.currency_ticker)
@@ -311,8 +313,9 @@ class TestEntity(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        # Each test with a clean sqlite in-memory session
-        self.session = TestSession().session
+        # Each test with a clean (but persistent) sqlite in-memory database
+        self.test_session = TestSession()
+        self.session = self.test_session.session
         # Add all Currency objects to asset_base
         Currency.update_all(self.session, get_method=Static().get_currency)
         # Add all Domicile objects to the asset_base
