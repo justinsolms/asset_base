@@ -259,8 +259,11 @@ class TimeSeriesBase(Base):
         key_code_id_table = asset_class.key_code_id_table(session)
 
         #  Get a table of time-series instances with attribute columns
+        instances = session.query(cls).all()
+        if len(instances) == 0:
+            raise Exception(f"No instances of time series class {cls} belonging to {asset_class} were found.")
         record_list = list()
-        for instance in session.query(cls).all():
+        for instance in instances:
             # Get instance data dictionary and add the `Listed` ISIN number
             instance_dict = instance.to_dict()
             # Reference to the class primary key attribute Asset.id (or
