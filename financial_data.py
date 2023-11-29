@@ -53,11 +53,8 @@ class _Feed(object, metaclass=abc.ABCMeta):
 
     def __init__(self, path=None):
         """Instance initialization."""
-        # Make the absolute data path for writing
-        if self._CLASS_DATA_PATH is not None:
-            self._abs_data_path = get_data_path(self._CLASS_DATA_PATH)
-            # Make directory if not existing
-            self.makedir(self._abs_data_path)
+        # Make the absolute data path for writing.
+        self.makedir()
 
     def _path(self, file_name=None):
         """Absolute data path schema with optional file name.
@@ -75,11 +72,17 @@ class _Feed(object, metaclass=abc.ABCMeta):
 
         return path
 
-    def makedir(self, path):
+    def makedir(self):
         """Make path if not exist."""
-        if not os.path.isdir(path):
-            logger.info("Created folder %s", path)
-            os.makedirs(path)
+        # Note that not all subclasses have _CLASS_DATA_PATH set
+        if self._CLASS_DATA_PATH is not None:
+            self._abs_data_path = get_data_path(self._CLASS_DATA_PATH)
+            # Make directory if not existing
+            if not os.path.isdir(self._abs_data_path):
+                logger.info("Created folder %s", self._abs_data_path)
+                os.makedirs(self._abs_data_path)
+        else:
+            self._abs_data_path = None
 
 
 class Dump(_Feed):
@@ -119,7 +122,7 @@ class Dump(_Feed):
         # `_abs_data_path` of the parent class.
         if self._CLASS_DATA_PATH is not None:
             self._abs_data_path = get_var_path(self._CLASS_DATA_PATH)
-            self.makedir(self._abs_data_path)
+            self.makedir()
 
     def write(self, dump_dict):
         """Write a dict of ``pandas.DataFrame`` to CSV files.
