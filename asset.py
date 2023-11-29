@@ -2473,6 +2473,9 @@ class Index(AssetBase):
             The single instance that is in the session.
 
         """
+        # Some indices such as "Crypto Volatility Index" have unknown currency
+        if currency_code in ("Unknown"):
+            currency_code = "ZZZ"
         currency = Currency.factory(session, currency_code)
 
         # Check if exchange exists in the session and if not then add it.
