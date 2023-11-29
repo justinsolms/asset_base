@@ -715,7 +715,9 @@ class IndexEOD(TradeEOD):
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
         index_list = (
-            session.query(asset_class).filter(asset_class.static is False).all()
+            # Do not use `asset_class.static is False` - `is` does NOT work. See
+            # https://stackoverflow.com/questions/18998010/flake8-complains-on-boolean-comparison-in-filter-clause
+            session.query(asset_class).filter(asset_class.static == False).all()  # noqa
         )
 
         super().update_all(session, asset_class, get_method, index_list)
