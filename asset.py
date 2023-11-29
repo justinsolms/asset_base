@@ -1144,13 +1144,12 @@ class Share(Asset):
 
     def __init__(self, name, issuer, currency=None, **kwargs):
         """Instance initialization."""
-        super().__init__(name, currency, **kwargs)
-
         # If the currency is not provided then the currency is the issuer's
         # domicile's currency
         if currency is None:
-            domicile = issuer.domicile
-            currency = domicile.currency
+            currency = issuer.domicile.currency
+
+        super().__init__(name, currency, **kwargs)
 
         self.issuer = issuer
 
