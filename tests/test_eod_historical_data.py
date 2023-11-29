@@ -11,6 +11,7 @@ distributed without the express permission of Justin Solms.
 
 """
 import asyncio
+from io import StringIO
 import unittest
 import aiounittest
 
@@ -407,27 +408,32 @@ class TestExchanges(unittest.TestCase):
 
     def test_get_indices_list(self):
         """Get a list of supported indices."""
-        test_columns = [
-            "Code",
-            "Name",
-            "Country",
-            "Exchange",
-            "Currency",
-            "Type",
-            "Isin",
-        ]
-        test_row = [
-            "J200",
-            "FTSE/JSE Top 40",
-            "South Africa",
-            "INDX",
-            "ZAR",
-            "INDEX",
-            None,
-        ]
-        table = self.exchanges.get_indices()
-        self.assertEqual(test_columns, table.columns.tolist())
-        self.assertEqual(test_row, table[table["Code"] == "J200"].values.tolist()[0])
+        # Test data
+        test_csv = (
+            "Code,Name,Country,Exchange,Currency,Type\n"
+            "SP500-15,S&P 500 Materials (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-151010,S&P 500 Chemicals,USA,INDX,USD,INDEX\n"
+            "SP500-20,S&P 500 Industrials (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-25,S&P 500 Consumer Discretionary (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-30,S&P 500 Consumer Staples (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-35,S&P 500 Health Care (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-40,S&P 500 Financials (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-45,S&P 500 Information Technology (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-50,S&P 500 Telecommunication Services (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-55,S&P 500 Utilities (Sector),USA,INDX,USD,INDEX\n"
+            "SP500-60,S&P 500 Real Estate (Sector),USA,INDX,USD,INDEX\n"
+        )
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        # Call
+        df = self.exchanges.get_indices()
+        df = df[df.Code.isin(test_df.Code)]
+        df.drop(columns='Isin', inplace=True)  # Empty in data
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('Code').sort_index(axis='columns').reset_index(drop=True)
+        df = df.sort_values('Code').sort_index(axis='columns').reset_index(drop=True)
+        # Test
+        pd.testing.assert_frame_equal(test_df, df)
 
 
 class TestMultiHistorical(unittest.TestCase):

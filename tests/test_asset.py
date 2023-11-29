@@ -1,3 +1,4 @@
+from io import StringIO
 import unittest
 import datetime
 import pandas as pd
@@ -69,7 +70,7 @@ class TestAsset(TestBase):
         cls.Cls = Asset
         # Test strings
         cls.name = "Test Asset"
-        cls.test_str = "Test Asset is an Asset priced in USD."
+        cls.test_str = "USD.Test Asset"
         cls.key_code = "USD.Test Asset"
         cls.identity_code = "USD.Test Asset"
 
@@ -124,7 +125,7 @@ class TestCash(TestAsset):
         date_stamp = datetime.date(yesterday.year, yesterday.month, yesterday.day)
         cls.test_price_dict = {"date_stamp": date_stamp, "close": 1.0}
         # Test strings
-        cls.test_str = "U.S. Dollar is an Cash priced in USD."
+        cls.test_str = "USD"
         cls.key_code = "USD"
         cls.identity_code = "USD"
 
@@ -226,7 +227,7 @@ class TestForex(TestAsset):
         cls.get_method = History().get_forex
         # Test strings
         cls.name = "USDZAR"
-        cls.test_str = "One USD priced in ZAR"
+        cls.test_str = "USDZAR"
         cls.key_code = "USDZAR"
         cls.identity_code = "USDZAR"
         # Test values
@@ -245,7 +246,7 @@ class TestForex(TestAsset):
         # NOTE: These values may change as EOD historical data gets corrected
         cls.test_values = pd.DataFrame(
             [  # Last date data
-                [14.6878, 14.7204, 14.5707, 14.6078, 0],
+                [14.6953, 14.7117, 14.5651, 14.6028, 0],
                 [1.0000, 1.0000, 1.0000, 1.0000, 0],
                 [0.8185, 0.8191, 0.8123, 0.8131, 89060],
             ],
@@ -363,14 +364,14 @@ class TestForex(TestAsset):
         """Price the base in a list of pricing currencies."""
         # Test data
         date = pd.to_datetime(self.to_date)
-        test_values = [0.06808371573687005, 0.05593077247783875, 1.0]
+        test_values = [0.06804896803739971, 0.055698080338611664, 1.0]
         # Populate
         self.Cls.update_all(self.session, self.get_method)
         # Test
         df = self.Cls.get_rates_data_frame(
             self.session, "ZAR", self.Cls.foreign_currencies
         )
-        self.assertTrue(all(df["ZAR"] == 1.0))
+        self.assertTrue(all(df.dropna().ZAR == 1.0))
         self.assertEqual(df.loc[date].tolist(), test_values)
 
 
@@ -471,10 +472,7 @@ class TestListed(TestShare):
         cls.issuer_name = cls.security_item.issuer_name.to_list()[0]
         cls.isin = cls.security_item["isin"].to_list()[0]
         cls.status = cls.security_item["status"].to_list()[0]
-        cls.test_str = (
-            "Apple Inc (AAPL.XNYS) ISIN:US0378331005 is a listed "
-            "on the USA Stocks issued by Apple Inc in United States"
-        )
+        cls.test_str = "US0378331005.AAPL"
         # about where it belongs. MacDonald Inc.
         cls.security_item1 = cls.securities_dataframe[
             cls.securities_dataframe.ticker == "MCD"
@@ -520,7 +518,7 @@ class TestListed(TestShare):
             [  # Last date data
                 [132.69, 134.74, 131.72, 134.08, 99116586.0],
                 [214.58, 214.93, 210.78, 211.25, 2610900.0],
-                [5460.0, 5511.0, 5403.0, 5492.0, 112700.0],
+                [54.60, 55.11, 54.03, 54.92, 112700.0],
             ],
             columns=cls.test_columns,
         )
@@ -539,19 +537,14 @@ class TestListed(TestShare):
         self.exchange2 = Exchange.factory(self.session, mic=self.mic2)
 
     def to_eod_dict(self, item):
-        """Convert all class price attributes to a dictionary."""
-        return {
-            "date_stamp": item.date_stamp,
-            "isin": item.base_obj.isin,
-            "ticker": item.base_obj.ticker,
-            "mic": item.base_obj.exchange.mic,
-            "open": item.open,
-            "close": item.close,
-            "high": item.high,
-            "low": item.low,
-            "adjusted_close": item.adjusted_close,
-            "volume": item.volume,
-        }
+        """The time_series to_dict method is augmented with extra items."""
+        data = item.to_dict()
+        data.update(
+            isin=item.base_obj.isin,
+            ticker=item.base_obj.ticker,
+            mic=item.base_obj.exchange.mic,
+        )
+        return data
 
     def test___init__(self):
         """Initialization."""
@@ -583,7 +576,7 @@ class TestListed(TestShare):
             self.session, self.issuer_name, self.issuer_domicile_code
         )
         listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
-        self.assertEqual(listed.__str__(), self.test_str)
+        self.assertEqual(self.test_str, listed.__str__())
 
     def test_key_code(self):
         """Full parameter set provided."""
@@ -795,6 +788,10 @@ class TestListed(TestShare):
         test_df.sort_values(by="isin", inplace=True)
         test_df.reset_index(drop=True, inplace=True)
         test_df = test_df[df.columns]  # Align columns rank
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Compare
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all(self):
@@ -820,8 +817,8 @@ class TestListed(TestShare):
         # Check status
         self.assertEqual(listed.status, listed.status)
 
-    def test_0_dump(self):
-        """Dump all class instances and their time series data to disk."""
+    def test_dump(self):
+        """Dump and reuse class instances and their time series data to disk."""
         # Dumper
         dumper = Dump(testing=True)
         # For testing delete old any test dump folder and re-create it empty
@@ -836,25 +833,16 @@ class TestListed(TestShare):
             get_eod_method=self.get_eod_method,
             _test_isin_list=[self.isin, self.isin1, self.isin2],
         )
-        # Methods to be tested
+        # Should dump Listed instances and their ListedEOD data
         Listed.dump(self.session, dumper)
         # Verify dump files exists.
         self.assertTrue(dumper.exists(Listed), "Listed dump file not found.")
         self.assertTrue(dumper.exists(ListedEOD), "ListedEOD dump file not found.")
 
-    def test_1_reuse(self):
-        """Reuse dumped data as a database initialization resource.
-
-        This test must run after ``test_0_dump`` so that the dump file exists
-        and that the time series dates are correct; which is why there is a
-        numeric part to the test names; as `unittest` sorts tests by test method
-        name.
-        """
-        # Dumper
-        dumper = Dump(testing=True)
+        # Test reuse
         Listed.reuse(self.session, dumper)
 
-        # Test one Listed instance
+        # Test one Listed instance post reuse.
         listed = Listed.factory(self.session, self.isin)
         # Attributes
         self.assertIsInstance(listed, Listed)
@@ -904,6 +892,10 @@ class TestListed(TestShare):
             columns=["id", "isin"],
         )
         df = Listed.key_code_id_table(self.session)
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Compare
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all_trade_eod(self):
@@ -1087,8 +1079,8 @@ class TestListedEquity(TestListed):
                     None,
                     None,
                     None,
-                    9.1925,
-                    9.1925,
+                    0.091925,
+                    0.091925,
                 ],
                 [
                     "2020-11-06",
@@ -1127,20 +1119,12 @@ class TestListedEquity(TestListed):
 
     def to_dividend_dict(self, item):
         """Convert all class price attributes to a dictionary."""
-        data = {
-            "date_stamp": item.date_stamp,
-            "isin": item.listed_equity.isin,
-            "ticker": item.listed_equity.ticker,
-            "mic": item.listed_equity.exchange.mic,
-            "currency": item.currency,
-            "declaration_date": item.declaration_date,
-            "payment_date": item.payment_date,
-            "period": item.period,
-            "record_date": item.record_date,
-            "unadjusted_value": item.unadjusted_value,
-            "adjusted_value": item.adjusted_value,
-        }
-
+        data = item.to_dict()
+        data.update(
+            isin=item.listed_equity.isin,
+            ticker=item.listed_equity.ticker,
+            mic=item.listed_equity.exchange.mic,
+        )
         return data
 
     def test___init__(self):
@@ -1328,6 +1312,10 @@ class TestListedEquity(TestListed):
         test_df.sort_values(by="isin", inplace=True)
         test_df.reset_index(drop=True, inplace=True)
         test_df = test_df[df.columns]  # Align columns rank
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Compare
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all(self):
@@ -1364,8 +1352,8 @@ class TestListedEquity(TestListed):
         self.assertEqual(icb.sector_code, self.sector_code)
         self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
 
-    def test_0_dump(self):
-        """Dump all class instances and their time series data to disk."""
+    def test_dump(self):
+        """Dump and reuse class instances and their time series data to disk."""
         # Dumper
         dumper = Dump(testing=True)
         # For testing delete old any test dump folder and re-create it empty
@@ -1388,16 +1376,7 @@ class TestListedEquity(TestListed):
         self.assertTrue(dumper.exists(ListedEOD), "ListedEOD dump file not found.")
         self.assertTrue(dumper.exists(Dividend), "Dividend dump file not found.")
 
-    def test_1_reuse(self):
-        """Reuse dumped data as a database initialization resource.
-
-        This test must run after ``test_0_dump`` so that the dump file exists
-        and that the time series dates are correct; which is why there is a
-        numeric part to the test names; as `unittest` sorts tests by test method
-        name.
-        """
         # Dumper
-        dumper = Dump(testing=True)
         ListedEquity.reuse(self.session, dumper)
 
         # Test one ListedEquity instance
@@ -1452,11 +1431,15 @@ class TestListedEquity(TestListed):
         df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
         date_to_str(df)  # Convert Timestamps
         df.replace({pd.NaT: None}, inplace=True)  # Replace pandas NaT with None
-        self.assertTrue(
-            df.sort_index(axis="columns").equals(
-                self.div_test_df.sort_index(axis="columns")
-            ),
-            "Dividend test data mismatch",
+        pd.testing.assert_frame_equal(
+            self.div_test_df.drop(columns="adjusted_value")
+            .set_index(["date_stamp", "isin"])
+            .sort_index(axis=0)
+            .sort_index(axis=1),
+            df.drop(columns="adjusted_value")
+            .set_index(["date_stamp", "isin"])
+            .sort_index(axis=0)
+            .sort_index(axis=1),
         )
 
     def test_update_all_trade_eod_and_dividends(self):
@@ -1539,6 +1522,10 @@ class TestListedEquity(TestListed):
         # Make dates all strings for simple testing.
         date_to_str(df)  # Convert Timestamps
         # Test
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Compare
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_time_series(self):
@@ -1585,11 +1572,11 @@ class TestIndex(TestBase):
         # Test strings
         cls.index_name = "Gold Spot"
         cls.ticker = "XYZ"
-        cls.test_str = "Gold Spot is an Index priced in USD."
+        cls.test_str = "XYZ"
         cls.key_code = "XYZ"
         cls.identity_code = "XYZ"
         # Small set of test index tickers
-        cls.index_tickers = ("GSPC", "ASX", "J200")
+        cls.index_tickers = ("SP500-35", "SP500-45", "SP500TR")
         # Test ListedEOD time series data
         # Test data
         cls.from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d").date()
@@ -1656,36 +1643,52 @@ class TestIndex(TestBase):
 
     def test_update_all(self):
         """Update/create all the objects in the asset_base session."""
-        # Test a limited number of test tickers
+        # Small set of test index tickers
+        index_tickers = ("SP500-35", "SP500-45", "SP500TR")
+        # Create a limited number of test Index instances with their EOD data
         Index.update_all(
             self.session,
             self.get_method,
             self.get_eod_method,
-            _test_ticker_list=self.index_tickers,
+            _test_ticker_list=index_tickers,
         )
-        # Make sure they are all present
-        index_list = self.session.query(Index).all()
-        ticker_list = [index.ticker for index in index_list]
-        self.assertEqual(set(self.index_tickers), set(ticker_list))
+        # Dates
+        date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
+        # Test data
+        test_csv = (
+            "date_stamp,ticker,adjusted_close,close,high,low,open,volume\n"
+            "2020-12-31,SP500-35,1324.01,1324.01,1325.21,1305.53,1309.3101,136352800\n"
+            "2020-12-31,SP500-45,2291.28,2291.28,2294.5601,2269.8701,2284.47,344958200\n"
+            "2020-12-31,SP500TR,7759.3501,7759.3501,7767.1699,7699.0498,7712.2402,0\n"
+        )
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
         # Retrieve the submitted ListedEOD data from asset_base
-        df = pd.DataFrame(
-            [item.to_dict() for item in self.session.query(IndexEOD).all()]
-        )
-        # Test
-        df["date_stamp"] = pd.to_datetime(df["date_stamp"])
-        df.sort_values(["date_stamp"], inplace=True)
-        # Test against last date test_values data
-        last_date = pd.to_datetime(self.to_date)
-        df = df[df["date_stamp"] == last_date]
-        self.assertFalse(df.empty)
-        # Exclude adjusted_close as it changes
-        df = df[self.test_columns]  # Column select and rank for testing
-        # Sort to remove ambiguity
-        df.sort_values(by="close", inplace=True)
+        df = IndexEOD.to_data_frame(self.session, Index)
+        # Dates
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        # Extract test date range from resulting EODs
+        df = df[df.date_stamp.dt.date == date]
+        # Do not test for 'adjusted_close' as it changes
+        test_df.drop(columns="adjusted_close", inplace=True)
+        df.drop(columns="adjusted_close", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('ticker').sort_index(axis='columns')
+        df = df.sort_values('ticker').sort_index(axis='columns')
+        # Reset indexes to match in test
+        test_df.reset_index(drop=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
-        self.test_values.sort_values(by="close", inplace=True)
-        self.test_values.reset_index(drop=True, inplace=True)
-        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+        # Test
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Compare
+        pd.testing.assert_frame_equal(test_df, df)
+
+
+
+
 
 
 class Suite(object):

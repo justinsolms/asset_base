@@ -71,7 +71,6 @@ class TestCurrency(unittest.TestCase):
         )
         self.assertEqual(obj.identity_code, "USD")
 
-    # Write a test for Currency.in_domicile
     def test_in_domicile(self):
         """Check if the currency is domiciled in the specified country."""
         obj = Currency(
@@ -381,6 +380,10 @@ class TestEntity(unittest.TestCase):
             columns=["id", "key_code"],
         )
         df = Entity.key_code_id_table(self.session)
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Compare
         pd.testing.assert_frame_equal(test_df, df)
 
 

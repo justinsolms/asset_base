@@ -29,7 +29,7 @@ import pandas as pd
 from asset_base.financial_data import Dump, History, MetaData
 from asset_base.asset import Forex, ListedEquity
 from asset_base.time_series import Dividend, ListedEOD
-from asset_base.manager import AssetBase, replace_time_series_labels
+from asset_base.manager import Manager, replace_time_series_labels
 from asset_base.exceptions import TimeSeriesNoData
 
 import warnings
@@ -105,14 +105,14 @@ class TestAssetBase(unittest.TestCase):
             _test_isin_list=self.isin_list,
             _test_forex_list=self.foreign_currencies_list,
         )
-        # This is also a test of AssetBase.set_up() and AssetBase.tear_down()
+        # This is also a test of Manager.set_up() and Manager.tear_down()
 
     def tearDown(self):
         """Tear down test case fixtures."""
         # Tear down asset_base and delete the dump folder and its contents so
         # it does not pollute other tests.
         self.asset_base.tear_down(delete_dump_data=True)
-        # This is also a test of AssetBase.set_up() and AssetBase.tear_down()
+        # This is also a test of Manager.set_up() and Manager.tear_down()
 
     def test___init__(self):
         """Instance initialization."""

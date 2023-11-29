@@ -1,3 +1,4 @@
+from io import StringIO
 import unittest
 import datetime
 import pandas as pd
@@ -129,18 +130,13 @@ class TestTradeEOD(TestTimeSeriesBase):
 
     def to_dict(self, item):
         """Convert all class price attributes to a dictionary."""
-        return {
-            "date_stamp": item.date_stamp,
-            "isin": item.base_obj.isin,
-            "ticker": item.base_obj.ticker,
-            "mic": item.base_obj.exchange.mic,
-            "open": item.open,
-            "close": item.close,
-            "high": item.high,
-            "low": item.low,
-            "adjusted_close": item.adjusted_close,
-            "volume": item.volume,
-        }
+        data = item.to_dict()
+        data.update(
+            isin=item.listed_equity.isin,
+            ticker=item.listed_equity.ticker,
+            mic=item.listed_equity.exchange.mic,
+        )
+        return data
 
     @classmethod
     def setUpClass(cls):
@@ -405,12 +401,6 @@ class TestListedEOD(TestTradeEOD):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = ListedEOD
-        # NOTE: These values may change as EOD historical data gets corrected
-        cls.test_values = [  # Last date data
-            [132.69, 134.74, 131.72, 134.08],
-            [214.58, 214.93, 210.78, 211.25],
-            [5460.0, 5511.0, 5403.0, 5492.0],
-        ]
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -419,6 +409,19 @@ class TestListedEOD(TestTradeEOD):
         Listed.from_data_frame(self.session, self.securities_dataframe)
         # Securities asset_base instances list
         self.securities_list = self.session.query(Listed).all()
+        # Test data
+        self.date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
+        # Test data
+        test_csv = (
+            "date_stamp,adjusted_close,close,high,low,open,volume,isin\n"
+            "2020-12-31,130.3872,132.69,134.74,131.72,134.08,99116600,US0378331005\n"
+            "2020-12-31,201.8414,214.58,214.93,210.78,211.25,2610900,US5801351017\n"
+            "2020-12-31,51.851674,54.600,55.110,54.030,54.920,112700,ZAE000027108\n"
+        )
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        self.test_df = test_df
 
     def test___init__(self):
         """Initialization."""
@@ -479,69 +482,45 @@ class TestListedEOD(TestTradeEOD):
         self.session.commit()
         self.assertEqual(ts_item.base_obj, listed)
 
-    def test_from_data_frame(self):
-        """Get historical EOD for a specified list of securities."""
-        # This test is stolen from test_financial_data
-        # Call API for data
-        df = self.feed.get_eod(self.securities_list, self.from_date, self.to_date)
-        # Keep last date for testing later
-        # Call the tested method.
+    def test_data_frame(self):
+        """To and from dataframe."""
+        test_df = self.test_df
+        # Methods tested
+        df = self.feed.get_eod(self.securities_list, self.date, self.date)
         ListedEOD.from_data_frame(self.session, Listed, data_frame=df)
-        # Retrieve the submitted date stamped data from asset_base
-        df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(ListedEOD).all()]
-        )
-        # Test against last date data
-        last_date = pd.to_datetime(self.to_date)
-        df = df[df["date_stamp"] == last_date][self.test_columns]
-        # Exclude adjusted_close as it changes
-        df.drop(columns="adjusted_close", inplace=True)
-        self.assertFalse(df.empty)
-        for i, item in enumerate(df.iterrows()):
-            symbol, series = item
-            self.assertEqual(series.tolist(), self.test_values[i])
-        # Test security time series last date
-        self.assertTrue(
-            all(x.get_last_eod_date() == last_date for x in self.securities_list)
-        )
-
-    def test_to_data_frame(self):
-        """Convert all instances to a single data table."""
-        # This test is stolen from test_financial_data
-        # Call API for data
-        test_df = self.feed.get_eod(self.securities_list, self.from_date, self.to_date)
-        # Call the tested method.
-        ListedEOD.from_data_frame(self.session, Listed, data_frame=test_df)
-        # Method to be tested
         df = ListedEOD.to_data_frame(self.session, Listed)
-        # Test - first aligning rows and columns
-        df.sort_values(by=["isin", "date_stamp"], inplace=True)
-        test_df.sort_values(by=["isin", "date_stamp"], inplace=True)
-        df.reset_index(drop=True, inplace=True)
+        # Do not test for 'adjusted_close' as it changes
+        test_df.drop(columns="adjusted_close", inplace=True)
+        df.drop(columns="adjusted_close", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('isin').sort_index(axis='columns')
+        df = df.sort_values('isin').sort_index(axis='columns')
+        # Reset indices for test
         test_df.reset_index(drop=True, inplace=True)
-        test_df = test_df[df.columns]  # Align columns rank
-        test_df["date_stamp"] = pd.to_datetime(test_df["date_stamp"])
+        df.reset_index(drop=True, inplace=True)
+        # Test
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all(self):
         """Update/create all the objects in the asset_base session."""
-        # This test is stolen from test_financial_data
-        # Call the tested method.
+        test_df = self.test_df
+        # Methods tested
         ListedEOD.update_all(self.session, self.feed.get_eod)
-        # Retrieve the submitted date stamped data from asset_base
-        df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(ListedEOD).all()]
-        )
-        # Test over test-date-range
-        df["date_stamp"] = pd.to_datetime(df["date_stamp"])
-        last_date = pd.to_datetime(self.to_date)
-        df = df[df["date_stamp"] == last_date][self.test_columns]
-        # Exclude adjusted_close as it changes
+        df = ListedEOD.to_data_frame(self.session, Listed)
+        # Test date range
+        df = df[df.date_stamp.dt.date == self.date]
+        # Do not test for 'adjusted_close' as it changes
+        test_df.drop(columns="adjusted_close", inplace=True)
         df.drop(columns="adjusted_close", inplace=True)
-        self.assertFalse(df.empty)
-        for i, item in enumerate(df.iterrows()):
-            symbol, series = item
-            self.assertEqual(series.tolist(), self.test_values[i])
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('isin').sort_index(axis='columns')
+        df = df.sort_values('isin').sort_index(axis='columns')
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Test
+        pd.testing.assert_frame_equal(test_df, df)
+
 
     def test_0_dump(self):
         """Dump all class instances and their time series data to disk."""
@@ -559,41 +538,6 @@ class TestListedEOD(TestTradeEOD):
         ListedEOD.dump(self.session, dumper, Listed)
         # Verify dump file exists.
         self.assertTrue(dumper.exists(ListedEOD), "ListedEOD dump file not found.")
-
-    def test_1_reuse(self):
-        """Reuse dumped data as a database initialization resource.
-
-        This test must run after ``test_0_dump`` so that the dump file exists;
-        which is why there is a numeric part to the test names; as `unittest`
-        sorts tests by test method name.
-        """
-        # Dumper
-        dumper = Dump(testing=True)
-        # Verify dump file exists.
-        self.assertTrue(
-            dumper.exists(ListedEOD),
-            "ListedEOD dump file not found. "
-            "Please run `TestListedEOD.test_0_dump` first.",
-        )
-        # Reuse
-        ListedEOD.reuse(self.session, dumper, Listed)
-        # Retrieve the reused/restored date stamped data from asset_base
-        df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(ListedEOD).all()]
-        )
-        # Test against last date data
-        last_date = pd.to_datetime(self.to_date)
-        df = df[df["date_stamp"] == last_date][self.test_columns]
-        # Exclude adjusted_close as it changes
-        df.drop(columns="adjusted_close", inplace=True)
-        self.assertFalse(df.empty)
-        for i, item in enumerate(df.iterrows()):
-            symbol, series = item
-            self.assertEqual(series.tolist(), self.test_values[i])
-        # Test security time series last date
-        self.assertTrue(
-            all(x.get_last_eod_date() == last_date for x in self.securities_list)
-        )
 
 
 class TestDividend(TestTimeSeriesBase):
@@ -616,19 +560,13 @@ class TestDividend(TestTimeSeriesBase):
 
     def to_dict(self, item):
         """Convert all class price attributes to a dictionary."""
-        return {
-            "date_stamp": item.date_stamp,
-            "isin": item.listed_equity.isin,
-            "ticker": item.listed_equity.ticker,
-            "mic": item.listed_equity.exchange.mic,
-            "currency": item.currency,
-            "declaration_date": item.declaration_date,
-            "payment_date": item.payment_date,
-            "period": item.period,
-            "record_date": item.record_date,
-            "unadjusted_value": item.unadjusted_value,
-            "adjusted_value": item.adjusted_value,
-        }
+        data = item.to_dict()
+        data.update(
+            isin=item.listed_equity.isin,
+            ticker=item.listed_equity.ticker,
+            mic=item.listed_equity.exchange.mic,
+        )
+        return data
 
     @classmethod
     def setUpClass(cls):
@@ -636,66 +574,6 @@ class TestDividend(TestTimeSeriesBase):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = Dividend
-        # Test data
-        cls.from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d").date()
-        cls.to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
-        cls.columns = [
-            "date_stamp",
-            "ticker",
-            "mic",
-            "isin",
-            "currency",
-            "declaration_date",
-            "payment_date",
-            "period",
-            "record_date",
-            "unadjusted_value",
-            "adjusted_value",
-        ]
-        cls.test_df = pd.DataFrame(
-            [  # Last 3 dividends
-                [
-                    "2020-10-21",
-                    "STX40",
-                    "XJSE",
-                    "ZAE000027108",
-                    "ZAC",
-                    None,
-                    None,
-                    None,
-                    None,
-                    9.1925,
-                    9.1925,
-                ],
-                [
-                    "2020-11-06",
-                    "AAPL",
-                    "XNYS",
-                    "US0378331005",
-                    "USD",
-                    "2020-10-29",
-                    "2020-11-12",
-                    "Quarterly",
-                    "2020-11-09",
-                    0.2050,
-                    0.2050,
-                ],
-                [
-                    "2020-11-30",
-                    "MCD",
-                    "XNYS",
-                    "US5801351017",
-                    "USD",
-                    "2020-10-08",
-                    "2020-12-15",
-                    "Quarterly",
-                    "2020-12-01",
-                    1.2900,
-                    1.2900,
-                ],
-            ],
-            columns=cls.columns,
-        )
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -704,10 +582,32 @@ class TestDividend(TestTimeSeriesBase):
         ListedEquity.from_data_frame(self.session, self.securities_dataframe)
         # Securities asset_base instances list
         self.securities_list = self.session.query(ListedEquity).all()
-        # Get AAPL Inc instance form committed instances. This is different
-        # from the inherited `self.listed` instance; which it must override
-        # here.
-        self.listed_equity = ListedEquity.factory(self.session, isin=self.isin)
+        # Date range
+        self.from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d").date()
+        self.to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
+        # Test data
+        test_csv = (
+            "date_stamp,currency,declaration_date,payment_date,period,record_date,unadjusted_value,adjusted_value,isin\n"
+            "2020-01-15,ZAC,,,,,0.079238,0.079238,ZAE000027108\n"
+            "2020-02-07,USD,2020-01-28,2020-02-13,Quarterly,2020-02-10,0.77,0.1925,US0378331005\n"
+            "2020-02-28,USD,2020-01-29,2020-03-16,Quarterly,2020-03-02,1.25,1.25,US5801351017\n"
+            "2020-04-15,ZAC,,,,,0.071194,0.071194,ZAE000027108\n"
+            "2020-05-08,USD,2020-04-30,2020-05-14,Quarterly,2020-05-11,0.82,0.205,US0378331005\n"
+            "2020-05-29,USD,2020-05-22,2020-06-15,Quarterly,2020-06-01,1.25,1.25,US5801351017\n"
+            "2020-07-15,ZAC,,,,,0.315711,0.315711,ZAE000027108\n"
+            "2020-08-07,USD,2020-07-30,2020-08-13,Quarterly,2020-08-10,0.82,0.205,US0378331005\n"
+            "2020-08-31,USD,2020-07-21,2020-09-15,Quarterly,2020-09-01,1.25,1.25,US5801351017\n"
+            "2020-10-21,ZAC,,,,,0.091925,0.091925,ZAE000027108\n"
+            "2020-11-06,USD,2020-10-29,2020-11-12,Quarterly,2020-11-09,0.205,0.205,US0378331005\n"
+            "2020-11-30,USD,2020-10-08,2020-12-15,Quarterly,2020-12-01,1.29,1.29,US5801351017\n"
+        )
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        test_df['declaration_date'] = pd.to_datetime(test_df['declaration_date'])
+        test_df['payment_date'] = pd.to_datetime(test_df['payment_date'])
+        test_df['record_date'] = pd.to_datetime(test_df['record_date'])
+        self.test_df = test_df
 
     def test___init__(self):
         """Initialization."""
@@ -794,70 +694,31 @@ class TestDividend(TestTimeSeriesBase):
         )
         self.session.add(ts_item)
         self.session.commit()
-        self.assertEqual(ts_item.base_obj, self.listed_equity)
-        self.assertEqual(ts_item._asset_id, self.listed_equity.id)
+        self.assertEqual(ts_item.base_obj, listed_equity)
+        self.assertEqual(ts_item._asset_id, listed_equity.id)
 
-    def test_from_data_frame(self):
-        """Get historical dividends for a specified list of securities."""
-        # Test stolen from test_financial_data
-        # Longer date range test causes a decision to use the EOD API service
-        df = self.feed.get_dividends(self.securities_list, self.from_date, self.to_date)
-        # Keep last date for testing later
-        # Call the tested method.
-        Dividend.from_data_frame(self.session, ListedEquity, data_frame=df)
-        # Retrieve the submitted date stamped data from asset_base
-        df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(Dividend).all()]
-        )
-        df.sort_values(by="date_stamp", inplace=True)
-        # Test
-        self.assertEqual(len(df), 12)
-        df.reset_index(inplace=True, drop=True)
-        self.assertEqual(set(df.columns), set(self.columns))
-        # Test against last 3 dividends
-        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        self.date_to_str(df)  # Convert Timestamps
-        self.date_to_str(self.test_df)  # Convert Timestamps
-        df.replace({pd.NaT: None}, inplace=True)  # Replace pandas NaT with None
-        pd.testing.assert_frame_equal(
-            self.test_df.sort_index(axis="columns"),
-            df.sort_index(axis="columns"),
-        )
-        # Test security dividend time series last date
-        date_dict = dict(
-            (s.ticker, s.get_last_dividend_date().strftime("%Y-%m-%d"))
-            for s in self.securities_list
-        )
-        test_date_dict = {
-            "STX40": "2020-10-21",
-            "AAPL": "2020-11-06",
-            "MCD": "2020-11-30",
-        }
-        self.assertEqual(test_date_dict, date_dict)
-
-    def test_to_data_frame(self):
+    def test_data_frame(self):
         """Convert all instances to a single data table."""
-        # This test is stolen from test_financial_data
-        # Call API for data
-        test_df = self.feed.get_dividends(
-            self.securities_list, self.from_date, self.to_date
-        )
-        # Call the tested method.
-        Dividend.from_data_frame(self.session, ListedEquity, data_frame=test_df)
-        # Method to be tested
+        test_df = self.test_df
+        # Methods tested
+        df = self.feed.get_dividends(self.securities_list, self.from_date, self.to_date)
+        Dividend.from_data_frame(self.session, ListedEquity, data_frame=df)
         df = Dividend.to_data_frame(self.session, ListedEquity)
-        # Test
-        df.sort_values(by=["isin", "date_stamp"], inplace=True)
-        test_df.sort_values(by=["isin", "date_stamp"], inplace=True)
-        df.reset_index(drop=True, inplace=True)
+        # Do not test for `adjusted_value` as it changes
+        test_df.drop(columns="adjusted_value", inplace=True)
+        df.drop(columns="adjusted_value", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        df = df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        # Reset indices for test
         test_df.reset_index(drop=True, inplace=True)
-        test_df = test_df[df.columns]  # Align columns rank
-        date_to_str(df)
-        date_to_str(test_df)
+        df.reset_index(drop=True, inplace=True)
+        # Test
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_update_all(self):
         """Get historical dividends for a specified list of securities."""
+        test_df = self.test_df
         # Test stolen from test_financial_data
         # Call the tested method.
         Dividend.update_all(self.session, self.feed.get_dividends)
@@ -865,20 +726,24 @@ class TestDividend(TestTimeSeriesBase):
         df = pd.DataFrame(
             [self.to_dict(item) for item in self.session.query(Dividend).all()]
         )
-        test_df = self.test_df.copy()
+        # Test date range
+        df = df[(self.from_date <= df.date_stamp.dt.date) & (df.date_stamp.dt.date <= self.to_date)]
+        # Drop columns not in test data
+        df.drop(columns=["mic", "ticker"], inplace=True)
         # Test over test-date-range
-        df["date_stamp"] = pd.to_datetime(df["date_stamp"])
-        df.set_index("date_stamp", inplace=True)
-        df.sort_index(inplace=True)
-        df = df.loc[self.from_date : self.to_date]
-        df = df.iloc[-3:]  # Test data is for last three
-        df.reset_index(inplace=True)
-        df = df[test_df.columns]
-        # Make dates all strings for simple testing.
-        self.date_to_str(df)  # Convert Timestamps
-        self.date_to_str(test_df)  # Convert Timestamps
-        test_df["date_stamp"] = pd.to_datetime(test_df["date_stamp"])
-        df["date_stamp"] = pd.to_datetime(df["date_stamp"])
+        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
+        df['declaration_date'] = pd.to_datetime(df['declaration_date'])
+        df['payment_date'] = pd.to_datetime(df['payment_date'])
+        df['record_date'] = pd.to_datetime(df['record_date'])
+        # Do not test for `adjusted_value` as it changes
+        test_df.drop(columns="adjusted_value", inplace=True)
+        df.drop(columns="adjusted_value", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        df = df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
         # Test
         pd.testing.assert_frame_equal(test_df, df)
 
@@ -900,44 +765,6 @@ class TestDividend(TestTimeSeriesBase):
         Dividend.dump(self.session, dumper, ListedEquity)
         # Verify dump file exists.
         self.assertTrue(dumper.exists(Dividend), "Dividend dump file not found.")
-
-    def test_1_reuse(self):
-        """Reuse dumped data as a database initialization resource.
-
-        This test must run after ``test_0_dump`` so that the dump file exists;
-        which is why there is a numeric part to the test names; as `unittest`
-        sorts tests by test method name.
-        """
-        # Dumper
-        dumper = Dump(testing=True)
-        # Verify dump file exists.
-        self.assertTrue(
-            dumper.exists(Dividend),
-            "Dividend dump file not found. "
-            "Please run `TestDividend.test_0_dump` first.",
-        )
-        # Reuse
-        Dividend.reuse(self.session, dumper, ListedEquity)
-        # Retrieve the submitted date stamped data from asset_base
-        df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(Dividend).all()]
-        )
-        test_df = self.test_df.copy()
-        # Test over test-date-range
-        df["date_stamp"] = pd.to_datetime(df["date_stamp"])
-        df.set_index("date_stamp", inplace=True)
-        df.sort_index(inplace=True)
-        df = df.loc[self.from_date : self.to_date]
-        df = df.iloc[-3:]  # Test data is for last three
-        df.reset_index(inplace=True)
-        df = df[test_df.columns]
-        # Make dates all strings for simple testing.
-        self.date_to_str(df)  # Convert Timestamps
-        self.date_to_str(test_df)  # Convert Timestamps
-        test_df["date_stamp"] = pd.to_datetime(test_df["date_stamp"])
-        df["date_stamp"] = pd.to_datetime(df["date_stamp"])
-        # Test
-        pd.testing.assert_frame_equal(test_df, df)
 
 
 class Suite(object):

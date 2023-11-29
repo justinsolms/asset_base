@@ -10,6 +10,7 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
+from io import StringIO
 import os
 import datetime
 import unittest
@@ -137,11 +138,34 @@ class TestMetaData(unittest.TestCase):
 
     def test_get_indices(self):
         """Fetch indices form the feeds."""
-        test_columns = ["index_name", "ticker", "currency_code"]
-        test_row = ["FTSE/JSE Top 40", "J200", "ZAR"]
-        table = self.feed.get_indices()
-        self.assertEqual(test_columns, table.columns.tolist())
-        self.assertEqual(test_row, table[table["ticker"] == "J200"].values.tolist()[0])
+        # Test data
+        test_csv = (
+            "index_name,ticker,currency_code\n"
+            "S&P 500 Materials (Sector),SP500-15,USD\n"
+            "S&P 500 Chemicals,SP500-151010,USD\n"
+            "S&P 500 Industrials (Sector),SP500-20,USD\n"
+            "S&P 500 Consumer Discretionary (Sector),SP500-25,USD\n"
+            "S&P 500 Consumer Staples (Sector),SP500-30,USD\n"
+            "S&P 500 Health Care (Sector),SP500-35,USD\n"
+            "S&P 500 Financials (Sector),SP500-40,USD\n"
+            "S&P 500 Information Technology (Sector),SP500-45,USD\n"
+            "S&P 500 Telecommunication Services (Sector),SP500-50,USD\n"
+            "S&P 500 Utilities (Sector),SP500-55,USD\n"
+            "S&P 500 Real Estate (Sector),SP500-60,USD\n"
+            "S&P 500 Bond Index Total,SP500BDT,USD\n"
+            "S&P 500 Net Total Return,SP500NTR,USD\n"
+            "S&P 500 TR (Total Return),SP500TR,USD\n"
+        )
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        # Call
+        df = self.feed.get_indices()
+        df = df[df.ticker.isin(test_df.ticker)]
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('ticker').sort_index(axis='columns').reset_index(drop=True)
+        df = df.sort_values('ticker').sort_index(axis='columns').reset_index(drop=True)
+        # Test
+        pd.testing.assert_frame_equal(test_df, df)
 
 
 class TestSecuritiesHistory(unittest.TestCase):
@@ -159,8 +183,6 @@ class TestSecuritiesHistory(unittest.TestCase):
         cls.securities_dataframe.reset_index(drop=False, inplace=True)
         # Forex tickers
         cls.forex_tickers = ("USDEUR", "USDGBP", "USDUSD")
-        # Index tickers
-        cls.index_tickers = ("GSPC", "ASX", "J200")
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -172,23 +194,6 @@ class TestSecuritiesHistory(unittest.TestCase):
         Currency.update_all(self.session, get_method=static_obj.get_currency)
         Domicile.update_all(self.session, get_method=static_obj.get_domicile)
         Exchange.update_all(self.session, get_method=static_obj.get_exchange)
-        # Listed test instances
-        Listed.from_data_frame(self.session, self.securities_dataframe)
-        # Securities test instances list
-        self.securities_list = self.session.query(Listed).all()
-        # Create Forex instances from Currency instances. do not populate Forex
-        # time series yet as that is for the tests.
-        Forex.update_all(self.session)
-        # Forex test instances list
-        self.forex_list = (
-            self.session.query(Forex).filter(Forex.ticker.in_(self.forex_tickers)).all()
-        )
-        # Create index instances
-        Index.update_all(self.session, MetaData().get_indices)
-        # Index test instances list
-        self.index_list = (
-            self.session.query(Index).filter(Index.ticker.in_(self.index_tickers)).all()
-        )
 
     def test___init__(self):
         """Initialization."""
@@ -197,192 +202,152 @@ class TestSecuritiesHistory(unittest.TestCase):
 
     def test_get_eod(self):
         """Get historical EOD for a specified list of securities."""
+        # Listed securities test instances
+        Listed.from_data_frame(self.session, self.securities_dataframe)
+        # Securities test instances list
+        securities_list = self.session.query(Listed).all()
         # Test data
-        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
-        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
-        columns = ["date_stamp", "close", "high", "low", "open", "volume", "isin"]
-        # NOTE: This data may change as EOD historical make corrections
-        test_df = pd.DataFrame(
-            [  # Last date data
-                [
-                    "2020-12-31",
-                    132.69,
-                    134.74,
-                    131.72,
-                    134.08,
-                    99116594,
-                    "US0378331005",
-                ],
-                ["2020-12-31", 214.58, 214.93, 210.78, 211.25, 2610914, "US5801351017"],
-                [
-                    "2020-12-31",
-                    5460.00,
-                    5511.00,
-                    5403.00,
-                    5492.00,
-                    112700,
-                    "ZAE000027108",
-                ],
-            ],
-            columns=columns,
+        date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
+        # Test data
+        test_csv = (
+            "date_stamp,adjusted_close,close,high,low,open,volume,isin\n"
+            "2020-12-31,130.3872,132.69,134.74,131.72,134.08,99116600,US0378331005\n"
+            "2020-12-31,201.8414,214.58,214.93,210.78,211.25,2610900,US5801351017\n"
+            "2020-12-31,5185.1674,5460.0,5511.0,5403.0,5492.0,112700,ZAE000027108\n"
         )
-        test_df["date_stamp"] = pd.to_datetime(test_df["date_stamp"])
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         # Call
-        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
-        df = self.feed.get_eod(self.securities_list, from_date, to_date)
+        df = self.feed.get_eod(securities_list, date, date)
         # Do not test for 'adjusted_close' as it changes
+        test_df.drop(columns="adjusted_close", inplace=True)
         df.drop(columns="adjusted_close", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('isin').sort_index(axis='columns')
+        df = df.sort_values('isin').sort_index(axis='columns')
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
         # Test
-        self.assertEqual(len(df), 758)
-        # Test against last date data
-        self.assertFalse(df.empty)
-        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        pd.testing.assert_frame_equal(df, test_df)
+        pd.testing.assert_frame_equal(test_df, df)
 
     def test_get_dividends(self):
         """Get historical dividends for a specified list of securities."""
-        # Test data
-        # Longer date range test causes a decision to use the EOD API service
-        # NOTE: This decision is currently depreciated due to issues.
-        from_date1 = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        # Listed securities test instances
+        Listed.from_data_frame(self.session, self.securities_dataframe)
+        # Securities test instances list
+        securities_list = self.session.query(Listed).all()
+        # Date range
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
         to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
-        columns = [
-            "date_stamp",
-            "currency",
-            "declaration_date",
-            "payment_date",
-            "period",
-            "record_date",
-            "unadjusted_value",
-            "adjusted_value",
-            "isin",
-        ]
-        test_df = pd.DataFrame(
-            [  # Last 3 dividends
-                [
-                    "2020-10-21",
-                    "ZAC",
-                    None,
-                    None,
-                    None,
-                    None,
-                    9.1925,
-                    9.1925,
-                    "ZAE000027108",
-                ],
-                [
-                    "2020-11-06",
-                    "USD",
-                    "2020-10-29",
-                    "2020-11-12",
-                    "Quarterly",
-                    "2020-11-09",
-                    0.2050,
-                    0.2050,
-                    "US0378331005",
-                ],
-                [
-                    "2020-11-30",
-                    "USD",
-                    "2020-10-08",
-                    "2020-12-15",
-                    "Quarterly",
-                    "2020-12-01",
-                    1.2900,
-                    1.2900,
-                    "US5801351017",
-                ],
-            ],
-            columns=columns,
+        # Test data
+        test_csv = (
+            "date_stamp,currency,declaration_date,payment_date,period,record_date,unadjusted_value,adjusted_value,isin\n"
+            "2020-01-15,ZAC,,,,,7.9238,7.9238,ZAE000027108\n"
+            "2020-02-07,USD,2020-01-28,2020-02-13,Quarterly,2020-02-10,0.77,0.1925,US0378331005\n"
+            "2020-02-28,USD,2020-01-29,2020-03-16,Quarterly,2020-03-02,1.25,1.25,US5801351017\n"
+            "2020-04-15,ZAC,,,,,7.1194,7.1194,ZAE000027108\n"
+            "2020-05-08,USD,2020-04-30,2020-05-14,Quarterly,2020-05-11,0.82,0.205,US0378331005\n"
+            "2020-05-29,USD,2020-05-22,2020-06-15,Quarterly,2020-06-01,1.25,1.25,US5801351017\n"
+            "2020-07-15,ZAC,,,,,31.5711,31.5711,ZAE000027108\n"
+            "2020-08-07,USD,2020-07-30,2020-08-13,Quarterly,2020-08-10,0.82,0.205,US0378331005\n"
+            "2020-08-31,USD,2020-07-21,2020-09-15,Quarterly,2020-09-01,1.25,1.25,US5801351017\n"
+            "2020-10-21,ZAC,,,,,9.1925,9.1925,ZAE000027108\n"
+            "2020-11-06,USD,2020-10-29,2020-11-12,Quarterly,2020-11-09,0.205,0.205,US0378331005\n"
+            "2020-11-30,USD,2020-10-08,2020-12-15,Quarterly,2020-12-01,1.29,1.29,US5801351017\n"
         )
-
-        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
-        df = self.feed.get_dividends(self.securities_list, from_date1, to_date)
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        test_df['declaration_date'] = pd.to_datetime(test_df['declaration_date'])
+        test_df['payment_date'] = pd.to_datetime(test_df['payment_date'])
+        test_df['record_date'] = pd.to_datetime(test_df['record_date'])
+        # Call
+        df = self.feed.get_dividends(securities_list, from_date, to_date)
+        # Do not test for `adjusted_value` as it changes
+        test_df.drop(columns="adjusted_value", inplace=True)
+        df.drop(columns="adjusted_value", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        df = df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
         # Test
-        self.assertEqual(len(df), 12)
-        df.reset_index(inplace=True, drop=True)
-        # Test against last 3 dividends
-        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        date_to_str(df)  # Convert Timestamps
-        date_to_str(test_df)  # Convert Timestamps
-        pd.testing.assert_frame_equal(df, test_df)
+        pd.testing.assert_frame_equal(test_df, df)
+
 
     def test_get_forex(self):
         """Get historical EOD for a specified list of securities."""
-        # Test data
-        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
-        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
-        columns = ["date_stamp", "ticker", "close", "high", "low", "open", "volume"]
-        # NOTE: This data may change as EOD historical make corrections
-        test_df = pd.DataFrame(
-            [  # Last date data
-                ["2020-12-31", "USDEUR", 0.8185, 0.8191, 0.8123, 0.8131, 89060],
-                ["2020-12-31", "USDGBP", 0.7311, 0.7351, 0.7307, 0.7340, 152240],
-                ["2020-12-31", "USDUSD", 1.0000, 1.0000, 1.0000, 1.0000, 0],
-            ],
-            columns=columns,
+        # Create Forex instances from Currency instances. do not populate Forex
+        # time series yet as that is for the tests.
+        Forex.update_all(self.session)
+        # Forex test instances list
+        forex_list = (
+            self.session.query(Forex).filter(Forex.ticker.in_(self.forex_tickers)).all()
         )
-        test_df["date_stamp"] = pd.to_datetime(test_df["date_stamp"])
-        # Call
-        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
-        df = self.feed.get_forex(self.forex_list, from_date, to_date)
-        # Do not test for 'adjusted_close' as it changes
-        df.drop(columns="adjusted_close", inplace=True)
-        # Test against last date data
-        self.assertFalse(df.empty)
-        # Condition columns for testing
-        df = df[columns]
-        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        pd.testing.assert_frame_equal(df, test_df)
-
-    def test_get_index(self):
-        """Get historical EOD for a specified list of securities."""
+        # Dates
+        date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Test data
-        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
-        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
-        columns = ["date_stamp", "ticker", "close", "high", "low", "open", "volume"]
-        # NOTE: This data may change as EOD historical make corrections
-        test_df = pd.DataFrame(
-            [  # Last date data
-                ["2020-12-31", "ASX", 3673.63, 3723.98, 3664.69, 3723.98, 49334000],
-                [
-                    "2020-12-31",
-                    "GSPC",
-                    3756.0701,
-                    3760.2,
-                    3726.8799,
-                    3733.27,
-                    3172510000,
-                ],
-                ["2020-12-31", "J200", 54379.58, 54615.33, 53932.88, 54615.33, 0],
-            ],
-            columns=columns,
+        test_csv = (
+            "date_stamp,ticker,adjusted_close,close,high,low,open,volume\n"
+            "2020-12-31,USDEUR,0.8185,0.8185,0.8191,0.8123,0.8131,89060\n"
+            "2020-12-31,USDGBP,0.7311,0.7311,0.7351,0.7307,0.734,152240\n"
+            "2020-12-31,USDUSD,1.0,1.0,1.0,1.0,1.0,0\n"
         )
-        test_df["date_stamp"] = pd.to_datetime(test_df["date_stamp"])
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         # Call
-        # Dates provided by test, not by Asset instance. Tested in `test_asset`.
-        df = self.feed.get_indices(self.index_list, from_date, to_date)
-        # Do not test for 'adjusted_close' as it changes
+        df = self.feed.get_forex(forex_list, date, date)
+        # Do not test for `adjusted_close` as it changes
+        test_df.drop(columns="adjusted_close", inplace=True)
         df.drop(columns="adjusted_close", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('ticker').sort_index(axis='columns')
+        df = df.sort_values('ticker').sort_index(axis='columns')
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
         # Test
-        # Test against last date data
-        self.assertFalse(df.empty)
-        # Condition columns for testing
-        df = df[columns]
-        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        pd.testing.assert_frame_equal(df, test_df)
-        # FIXME: fails above test. Why? Note wrong tickers in test_df
-        # ipdb> df
-        # date_stamp ticker       close      high         low      open      volume
-        # 0 2020-12-30   J200  54615.3300  54973.53  54196.1300  54196.13           0
-        # 1 2020-12-31   GSPC   3756.0701   3760.20   3726.8799   3733.27  3172510000
-        # 2 2020-12-31   J200  54379.5800  54615.33  53932.8800  54615.33           0
-        # ipdb> test_df
-        # date_stamp ticker       close      high         low      open      volume
-        # 0 2020-12-31    ASX   3673.6300   3723.98   3664.6900   3723.98    49334000
-        # 1 2020-12-31   GSPC   3756.0701   3760.20   3726.8799   3733.27  3172510000
-        # 2 2020-12-31   J200  54379.5800  54615.33  53932.8800  54615.33           0
-        # ipdb>
+        pd.testing.assert_frame_equal(test_df, df)
+
+    def test_get_indices(self):
+        """Get historical EOD for a specified list of securities."""
+        # Small set of test index tickers
+        index_tickers = ("SP500-35", "SP500-45", "SP500TR")
+        # Create index instances
+        Index.update_all(self.session, MetaData().get_indices)
+        # Index test instances list
+        self.index_list = (
+            self.session.query(Index).filter(Index.ticker.in_(index_tickers)).all()
+        )
+        # Dates
+        date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
+        # Test data
+        test_csv = (
+            "date_stamp,ticker,adjusted_close,close,high,low,open,volume\n"
+            "2020-12-31,SP500-35,1324.01,1324.01,1325.21,1305.53,1309.3101,136352800\n"
+            "2020-12-31,SP500-45,2291.28,2291.28,2294.5601,2269.8701,2284.47,344958200\n"
+            "2020-12-31,SP500TR,7759.3501,7759.3501,7767.1699,7699.0498,7712.2402,0\n"
+        )
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        # Call
+        df = self.feed.get_indices(self.index_list, date, date)
+        # Do not test for 'adjusted_close' as it changes
+        test_df.drop(columns="adjusted_close", inplace=True)
+        df.drop(columns="adjusted_close", inplace=True)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values('ticker').sort_index(axis='columns')
+        df = df.sort_values('ticker').sort_index(axis='columns')
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Test
+        pd.testing.assert_frame_equal(test_df, df)
 
 
 class TestDump(unittest.TestCase):
