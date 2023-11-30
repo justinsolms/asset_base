@@ -67,5 +67,5 @@ logging.config.dictConfig(config)
 
 # Record the current version and log it.
 # __version__ = version("asset_base")  # FIXME: importlib.metadata.PackageNotFoundError: asset_base
-__version__ = "x.x.x"
+__version__ = "1.0.0"
 logging.info("Version-%s" % __version__)

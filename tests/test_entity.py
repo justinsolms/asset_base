@@ -41,6 +41,10 @@ class TestCurrency(unittest.TestCase):
         self.test_session = TestSession()
         self.session = self.test_session.session
 
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        del self.test_session
+
     def test___init__(self):
         """Initialization."""
         # Use GBP - a list of countries use GBP
@@ -202,6 +206,10 @@ class TestDomicile(unittest.TestCase):
         self.currency = Currency.factory(self.session, self.currency_ticker)
         self.currency1 = Currency.factory(self.session, self.currency_ticker1)
 
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        del self.test_session
+
     def test___init__(self):
         domicile = Domicile(self.country_code, self.country_name, self.currency)
         self.assertIsInstance(domicile, Domicile)
@@ -320,6 +328,10 @@ class TestEntity(unittest.TestCase):
         # Add all Domicile objects to the asset_base
         Domicile.update_all(self.session, get_method=Static().get_domicile)
         self.domicile = Domicile.factory(self.session, self.country_code)
+
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        del self.test_session
 
     def test___init__(self):
         entity = Entity(self.name, self.domicile)

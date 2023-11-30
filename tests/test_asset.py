@@ -994,7 +994,6 @@ class TestListed(TestShare):
         eod = listed.get_eod()
         eod.reset_index(inplace=True)
         last_eod = eod.iloc[-1]
-        last_eod["date_stamp"] = last_eod["date_stamp"].to_pydatetime().date()
         last_dict_test = last_eod.to_dict()
         self.assertIsInstance(last_dict, dict)
         self.assertIsInstance(last_dict_test, dict)
@@ -1139,6 +1138,7 @@ class TestListedEquity(TestListed):
         listed = ListedEquity(
             self.name, issuer, self.isin, self.exchange, self.ticker, status=self.status
         )
+        self.session.add(listed)
         self.assertIsInstance(listed, ListedEquity)
         self.assertEqual(listed.name, self.name)
         self.assertEqual(listed.issuer, issuer)
@@ -1170,6 +1170,7 @@ class TestListedEquity(TestListed):
             sector_code=self.sector_code,
             sub_sector_code=self.sub_sector_code,
         )
+        self.session.add(listed)
         self.assertIsInstance(listed, ListedEquity)
         self.assertEqual(listed.name, self.name)
         self.assertEqual(listed.issuer, issuer)
@@ -1194,9 +1195,8 @@ class TestListedEquity(TestListed):
         self.assertEqual(icb.sector_code, self.sector_code)
         self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
 
-        # Test class the polymorphism functionality.
-        # Query the superclass Asset which should produce a Cash polymorphic
-        # instance
+        # Test class the polymorphism functionality. Query the superclass Asset
+        # which should produce a ListedEquity polymorphic instance
         instances = self.session.query(Asset).all()  # There are two, see above!
         instance1, instance2 = instances
         self.assertEqual(instance1._class_name, "ListedEquity")
