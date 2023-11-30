@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 
-from asset_base.common import Base
-from asset_base.exceptions import ReconcileError
+from .common import Base
+from .exceptions import ReconcileError
 
 
 class IndustryClassICB(Base):

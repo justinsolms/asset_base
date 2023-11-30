@@ -30,8 +30,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .asset import Asset
 
-from asset_base.common import Base
-from asset_base.financial_data import Dump
+from .common import Base
+from .financial_data import Dump
 
 # Get module-named logger.
 import logging

@@ -28,7 +28,7 @@ import pandas as pd
 from src.asset_base.financial_data import Dump
 from src.asset_base.asset import Forex, ListedEquity
 from src.asset_base.time_series import Dividend, ListedEOD
-from src.asset_base.manager import replace_time_series_labels
+from src.asset_base.manager import ManagerBase, replace_time_series_labels
 from src.asset_base.exceptions import TimeSeriesNoData
 
 import warnings
