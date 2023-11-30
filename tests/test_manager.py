@@ -25,11 +25,11 @@ methods such as ``factory``, ``from_dataframe``, and lots more.
 import unittest
 import pandas as pd
 
-from asset_base.financial_data import Dump
-from asset_base.asset import Forex, ListedEquity
-from asset_base.time_series import Dividend, ListedEOD
-from asset_base.manager import replace_time_series_labels
-from asset_base.exceptions import TimeSeriesNoData
+from src.asset_base.financial_data import Dump
+from src.asset_base.asset import Forex, ListedEquity
+from src.asset_base.time_series import Dividend, ListedEOD
+from src.asset_base.manager import replace_time_series_labels
+from src.asset_base.exceptions import TimeSeriesNoData
 
 import warnings
 

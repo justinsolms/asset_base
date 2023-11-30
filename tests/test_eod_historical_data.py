@@ -20,11 +20,11 @@ import numpy as np
 import pandas as pd
 
 # Classes to be tested
-from asset_base.eod_historical_data import APISessionManager, Exchanges
-from asset_base.eod_historical_data import Historical
-from asset_base.eod_historical_data import Bulk
-from asset_base.eod_historical_data import MultiHistorical
-from asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns
+from src.asset_base.eod_historical_data import APISessionManager, Exchanges
+from src.asset_base.eod_historical_data import Historical
+from src.asset_base.eod_historical_data import Bulk
+from src.asset_base.eod_historical_data import MultiHistorical
+from src.asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns
 
 
 def assert_date_index(tester, df):
