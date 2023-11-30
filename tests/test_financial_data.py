@@ -16,14 +16,12 @@ import datetime
 import unittest
 import pandas as pd
 
-from fundmanage3.utils import date_to_str
-
-from asset_base.common import TestSession
-from asset_base.financial_data import Dump, DumpReadError, Static
-from asset_base.financial_data import MetaData
-from asset_base.financial_data import History
-from asset_base.entity import Currency, Domicile, Exchange
-from asset_base.asset import Forex, Index, Listed
+from src.asset_base.common import TestSession
+from src.asset_base.financial_data import Dump, DumpReadError, Static
+from src.asset_base.financial_data import MetaData
+from src.asset_base.financial_data import History
+from src.asset_base.entity import Currency, Domicile, Exchange
+from src.asset_base.asset import Forex, Index, Listed
 
 
 class TestStatic(unittest.TestCase):

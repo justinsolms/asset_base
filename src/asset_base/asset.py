@@ -23,14 +23,14 @@ from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from asset_base.exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData
-from asset_base.exceptions import ReconcileError
-from asset_base.exceptions import BadISIN
-from asset_base.financial_data import Dump
-from asset_base.entity import Currency, Exchange, Issuer
-from asset_base.common import Common
-from asset_base.industry_class import IndustryClassICB
-from asset_base.time_series import (
+from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData
+from .exceptions import ReconcileError
+from .exceptions import BadISIN
+from .financial_data import Dump
+from .entity import Currency, Exchange, Issuer
+from .common import Common
+from .industry_class import IndustryClassICB
+from .time_series import (
     Dividend,
     ForexEOD,
     IndexEOD,

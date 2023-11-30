@@ -10,7 +10,10 @@ The fundmanage module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
-from asset_base._version import get_versions
+import sys
+
+# read version from installed package
+from importlib.metadata import version
 
 import logging
 import logging.config
@@ -63,6 +66,6 @@ with open(os.path.join(path, "logconf.yaml"), "r") as stream:
 logging.config.dictConfig(config)
 
 # Record the current version and log it.
-__version__ = get_versions()["version"]
+# __version__ = version("asset_base")  # FIXME: importlib.metadata.PackageNotFoundError: asset_base
+__version__ = "x.x.x"
 logging.info("Version-%s" % __version__)
-del get_versions

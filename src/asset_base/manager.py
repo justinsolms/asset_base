@@ -79,12 +79,12 @@ from sqlalchemy_utils import create_database
 from sqlalchemy_utils import database_exists
 from sqlalchemy.orm.exc import NoResultFound
 
-from asset_base.__init__ import get_var_path
-from asset_base.exceptions import TimeSeriesNoData
-from asset_base.financial_data import Dump, DumpReadError, History, MetaData, Static
-from asset_base.common import Base
-from asset_base.entity import Domicile, Exchange
-from asset_base.asset import (
+from .__init__ import get_var_path
+from .exceptions import TimeSeriesNoData
+from .financial_data import Dump, DumpReadError, History, MetaData, Static
+from .common import Base
+from .entity import Domicile, Exchange
+from .asset import (
     Asset,
     ExchangeTradeFund,
     Forex,

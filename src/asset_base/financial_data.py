@@ -26,9 +26,9 @@ import os
 # Abstract base class.
 import abc
 
-from asset_base.eod_historical_data import Exchanges, MultiHistorical
-from asset_base.exceptions import _BaseException, TimeSeriesNoData
-from asset_base.__init__ import get_data_path, get_var_path
+from .eod_historical_data import Exchanges, MultiHistorical
+from .exceptions import _BaseException, TimeSeriesNoData
+from .__init__ import get_data_path, get_var_path
 
 # Get module-named logger.
 import logging

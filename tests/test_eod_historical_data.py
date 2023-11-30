@@ -20,11 +20,11 @@ import numpy as np
 import pandas as pd
 
 # Classes to be tested
-from asset_base.eod_historical_data import APISessionManager, Exchanges
-from asset_base.eod_historical_data import Historical
-from asset_base.eod_historical_data import Bulk
-from asset_base.eod_historical_data import MultiHistorical
-from asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns
+from src.asset_base.eod_historical_data import APISessionManager, Exchanges
+from src.asset_base.eod_historical_data import Historical
+from src.asset_base.eod_historical_data import Bulk
+from src.asset_base.eod_historical_data import MultiHistorical
+from src.asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns
 
 
 def assert_date_index(tester, df):
@@ -556,24 +556,6 @@ class TestMultiHistorical(unittest.TestCase):
         df = self.historical.get_dividends(symbol_list)
         assert_date_ticker_exchange_index(self, df)
         assert_dividend_columns(self, df)
-
-        # Shorter date range test causes a decision to use the Bulk API service
-        # In case EOD fixes the bulk dividends API, see tested method docstring
-        # from_date2 = '2020-12-25'
-        # df = self.bulk.get_dividends(self.symbol_list, from_date2, to_date)
-        # df2 = df.copy()
-        # # Test
-        # self.assertEqual(len(df), 12)
-        # self.assertEqual(set(df.index.names), set(index_names))
-        # df.reset_index(inplace=True)
-        # self.assertEqual(set(df.columns), set(columns))
-        # # Test against last 3 dividends
-        # df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        # date_to_str(df)  # Convert Timestamps
-        # self.assertTrue(df.equals(test_df))
-
-        # # Test that results are the same across methods used
-        # self.assertTrue(df1.iloc[-N:].equals(df2.iloc[-N:]))
 
     def test_get_forex(self):
         """Get daily, EOD historial forex."""

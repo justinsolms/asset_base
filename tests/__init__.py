@@ -1,12 +1,9 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
+"""Functional tests for package-level functionality."""
+import os
+import sys
 
-"""Testing the asset_base package.
+from src import asset_base
 
-Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
-This file is part of the fundmanage module.
-The fundmanage module can not be modified, copied and/or
-distributed without the express permission of Justin Solms.
-
-"""
+PROJECT_PATH = os.getcwd()
+SOURCE_PATH = os.path.join(PROJECT_PATH, "src")
+# sys.path.append(SOURCE_PATH)
