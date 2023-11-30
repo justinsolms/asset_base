@@ -16,8 +16,6 @@ import datetime
 import unittest
 import pandas as pd
 
-from fundmanage3.utils import date_to_str
-
 from asset_base.common import TestSession
 from asset_base.financial_data import Dump, DumpReadError, Static
 from asset_base.financial_data import MetaData

@@ -3,14 +3,12 @@ import unittest
 import datetime
 import pandas as pd
 
-from asset_base.financial_data import Dump, MetaData, History, Static
 from asset_base.common import TestSession
+from asset_base.financial_data import Dump, MetaData, History, Static
 from asset_base.entity import Currency, Domicile, Issuer, Exchange
 from asset_base.asset import Forex, Index, Listed, ListedEquity
 from asset_base.time_series import Dividend, ForexEOD, IndexEOD, SimpleEOD
 from asset_base.time_series import TimeSeriesBase, ListedEOD, TradeEOD
-
-from utils import date_to_str
 
 
 class TestTimeSeriesBase(unittest.TestCase):
