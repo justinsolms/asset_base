@@ -62,8 +62,14 @@ def assert_no_index_duplicates(security, security1, security2):
                 "has duplicates in it's index.",
             )
 
+class TestManagerSession(unittest.TestLoader):
+    """Manager sessions with different backend databases"""
 
-class TestAssetBase(unittest.TestCase):
+    def test_make_session(self):
+        """Make database sessions in either sqlite, mysql or memory."""
+
+
+class TestManager(unittest.TestCase):
     """Set up and tear down the asset_base manager.
 
     This test is complex and different enough that it warrants it's own test.
@@ -94,13 +100,13 @@ class TestAssetBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        self.asset_base = ManagerBase(dialect="memory", testing=True)
-        self.session = self.asset_base.session
+        self.manager = ManagerBase(dialect="memory", testing=True)
+        self.session = self.manager.session
         # For a fresh test delete any previously dumped data. Do not delete the
         # folder which was set up as a required test fixture.
-        self.asset_base.dumper.delete(delete_folder=False)
+        self.manager.dumper.delete(delete_folder=False)
         # Set-up the database with selected test securities
-        self.asset_base.set_up(
+        self.manager.set_up(
             _test_isin_list=self.isin_list,
             _test_forex_list=self.foreign_currencies_list,
         )
@@ -110,16 +116,16 @@ class TestAssetBase(unittest.TestCase):
         """Tear down test case fixtures."""
         # Tear down asset_base and delete the dump folder and its contents so
         # it does not pollute other tests.
-        self.asset_base.tear_down(delete_dump_data=True)
+        self.manager.tear_down(delete_dump_data=True)
         # This is also a test of Manager.set_up() and Manager.tear_down()
 
     def test___init__(self):
         """Instance initialization."""
-        self.assertIsInstance(self.asset_base, ManagerBase)
+        self.assertIsInstance(self.manager, ManagerBase)
 
     def test_dump(self):
         """Dump re-usable content to disk files."""
-        self.asset_base.dump()
+        self.manager.dump()
         # Must have dumped ListedEquity data for this test to work!
         dumper = Dump(testing=True)
         data = dumper.read(["ListedEquity", "ListedEOD", "Dividend"])
@@ -136,11 +142,11 @@ class TestAssetBase(unittest.TestCase):
         dividend_test_data = Dividend.to_data_frame(self.session, ListedEquity)
         # Tear down asset_base dumping data so that we can initialise the
         # database by reusing the dumped data
-        self.asset_base.tear_down(delete_dump_data=False)
+        self.manager.tear_down(delete_dump_data=False)
         # Set-up the database using only dumped data, do not update from API.
-        self.asset_base.set_up(update=False, _test_isin_list=self.isin_list)
+        self.manager.set_up(update=False, _test_isin_list=self.isin_list)
         # Get the newly created session
-        self.session = self.asset_base.session
+        self.session = self.manager.session
 
         # Get reused database data which was instantiated from the dumped data
         securities_data = ListedEquity.to_data_frame(self.session)
@@ -176,7 +182,7 @@ class TestAssetBase(unittest.TestCase):
         """Test all securities time series."""
         # Test total-return product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
-        data = self.asset_base.time_series(securities_list, return_type="total_return")
+        data = self.manager.time_series(securities_list, return_type="total_return")
         replace_time_series_labels(data, "ticker", inplace=True)
         data = data.loc["2020-01-01":"2021-01-01"]  # Fixed historical window
         data_check_prod = data.prod().to_dict()
@@ -191,8 +197,8 @@ class TestAssetBase(unittest.TestCase):
         """Test all securities time series with currency transformed to ZAR."""
         # Test total_return check-product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
-        data = self.asset_base.time_series(securities_list, return_type="total_return")
-        data_zar = self.asset_base.to_common_currency(data, "ZAR")
+        data = self.manager.time_series(securities_list, return_type="total_return")
+        data_zar = self.manager.to_common_currency(data, "ZAR")
         data = replace_time_series_labels(data, "ticker")
         data_zar = replace_time_series_labels(data_zar, "ticker")
         forex = Forex.get_rates_data_frame(self.session, "ZAR", ["USD"])
@@ -222,7 +228,7 @@ class Suite(object):
 
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
-            TestAssetBase,
+            TestManager,
         ]
 
         suites_list = list()

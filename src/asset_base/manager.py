@@ -248,6 +248,8 @@ class ManagerBase(object):
             Set to `True` for testing. This controls specifics in a way that
             avoids testing data clashes with operational data.
         """
+        self.testing = testing
+
         # Open main configuration YAML file and convert to a dict.
         path = os.path.dirname(os.path.realpath(__file__))
         with open(path + "/" + "conf.yaml", "r") as stream:
@@ -264,7 +266,7 @@ class ManagerBase(object):
             self.make_session()
 
         # Data dumper - dumps to dump folder - indicate testing or not.
-        self.dumper = Dump(testing=testing)
+        self.dumper = Dump(testing=self.testing)
 
     def close(self):
         """Close the database session."""
@@ -285,6 +287,7 @@ class ManagerBase(object):
             raise ex
 
     def make_session(self):
+        """Make database sessions in either sqlite, mysql or memory."""
         self._db_name = "asset_base"
         # Select database platform.
         if self._dialect == "mysql":
