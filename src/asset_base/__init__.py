@@ -28,6 +28,8 @@ _DATA = "data"
 
 # Variable data path
 _VAR = "var"
+# Variable data path for tests - should always delete after tests!
+_VAR_TEST = "var_test"
 
 
 def get_data_path(sub_path):
@@ -37,25 +39,26 @@ def get_data_path(sub_path):
     ----------
     sub_path: str
         Mandatory branch or child path.
-    file_name : str, optional
-        Return the name of the file to be found at the full path. If none
-        is provided then only the folder path is returned.
     """
     return os.path.join(_ROOT, _DATA, sub_path)
 
 
-def get_var_path(sub_path):
+def get_var_path(sub_path, testing=False):
     """Package path schema for variable data such as logs and databases.
 
     Parameters
     ----------
     sub_path: str
         Mandatory branch or child path.
-    file_name : str, optional
-        Return the name of the file to be found at the full path. If none
-        is provided then only the folder path is returned.
+    testing : bool
+        If `True` then the returned path string contains `/var_test/` instead of
+        the default `/var/`.
     """
-    return os.path.join(_ROOT, _VAR, sub_path)
+    if testing:
+        path = os.path.join(_ROOT, _VAR_TEST, sub_path)
+    else:
+        path = os.path.join(_ROOT, _VAR, sub_path)
+    return path
 
 
 # Open logging configuration YAML file and convert ot a dict.

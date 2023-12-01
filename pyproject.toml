@@ -2,9 +2,12 @@
 name = "asset_base"
 version = "1.0.0"
 description = "A package for obtaining, managing and provision of financial securities meta and time-series data."
-authors = ["Justin Solms" <justinsolms@gmail.com>]
+authors = ["Justin Solms <justinsolms@gmail.com>"]
 license = "MIT"
 readme = "README.md"
+homepage = "https://github.com/justinsolms/asset_base"
+repository = "https://github.com/justinsolms/asset_base"
+keywords = ["financial", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
 
 [tool.poetry.dependencies]
 python = "^3.9"

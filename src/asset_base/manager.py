@@ -74,9 +74,7 @@ from sqlalchemy import String
 from sqlalchemy import Column
 from sqlalchemy import MetaData as SQLAlchemyMetaData
 
-from sqlalchemy_utils import drop_database
-from sqlalchemy_utils import create_database
-from sqlalchemy_utils import database_exists
+from sqlalchemy_utils import drop_database, database_exists
 from sqlalchemy.orm.exc import NoResultFound
 
 from .__init__ import get_var_path
@@ -298,9 +296,9 @@ class ManagerBase(object):
             # Construct SQLite file name with path expansion for a URL
             self._db_name = "fundmanage.%s.db" % self._db_name
             # Put files in a `cache`` folder under the `var` path scheme.
-            cache_path = get_var_path("cache")
+            cache_path = get_var_path("cache", testing=True)
             if not os.path.exists(cache_path):
-                os.mkdir(cache_path)
+                os.makedirs(cache_path)
             db_file_name = os.path.join(cache_path, self._db_name)
             db_url = "sqlite:///" + db_file_name
             self._db_name = db_file_name
@@ -312,24 +310,24 @@ class ManagerBase(object):
         self.db_url = db_url
 
         # Create a database engine.
-        self.engine = create_engine(db_url)
+        self.engine = create_engine(self.db_url)
 
         # Create an empty database with all tables if it doesn't already exist.
-        if not database_exists(self.db_url) or self._dialect == "memory":
+        if not database_exists(self.db_url):
             try:
-                create_database(db_url)
-                Base.metadata.create_all(self.engine)
+                metadata.create_all(self.engine)
             except Exception as ex:
                 drop_database(db_url)
-                logger.debug("Failed to create new database %s" % self.db_url)
+                logger.exception(
+                    "Failed to create new database %s" % self.db_url)
                 raise ex
             else:
-                logger.debug("Created new database %s" % self.db_url)
+                logger.info("Created new database %s" % self.db_url)
         else:
-            logger.debug("Use existing database %s" % self.db_url)
+            logger.info("Use existing database %s" % self.db_url)
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.debug("New database session %s" % self.db_url)
+        logger.info("New database session %s" % self.db_url)
 
     def set_up(
         self, reuse=True, update=True, _test_isin_list=None, _test_forex_list=None
