@@ -48,10 +48,16 @@ class TestCurrency(unittest.TestCase):
     def test___init__(self):
         """Initialization."""
         # Use GBP - a list of countries use GBP
-        obj = Currency(
+        test_obj = Currency(
             ticker=self.ticker, name=self.name, country_code_list=self.country_code_list
         )
-        self.assertIsInstance(obj, Currency)
+        self.assertIsInstance(test_obj, Currency)
+        self.session.add(test_obj)
+        self.assertIsNone(test_obj.id)
+        self.session.flush()
+        self.assertIsNotNone(test_obj.id)
+        obj = self.session.query(Currency).one()
+        self.assertEqual(test_obj, obj)
         self.assertEqual(obj.ticker, self.ticker)
         self.assertEqual(obj.name, self.name)
         self.assertEqual(obj.country_code_list, self.country_code_list)

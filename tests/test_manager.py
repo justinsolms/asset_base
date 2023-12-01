@@ -71,26 +71,22 @@ class TestManagerInit(unittest.TestCase):
     def tearDown(self):
         """Tear down test case fixtures."""
         # Delete database
-        manager = self.manager
-        if database_exists(manager.engine.url):
-            manager.session.close()
-            manager.engine.dispose()
-            drop_database(manager.engine.url)
-            # Delete specific attributes
-            del manager.db_url
-            del manager.engine
-            del manager.session
+        del self.manager
 
     def common_todo(self):
         """Some common post creation tests using ``Common`` class."""
         test_name = 'Common class instance'
         session = self.manager.session
-        test_common = Common(test_name)
-        session.add(test_common)
-        # FIXME: (sqlite3.OperationalError) no such table: common
-        common = session.query(Common).one()
-        self.assertEqual(test_common, common)
-        self.assertEqual(common.name, test_name)
+        test_obj = Common(test_name)
+        self.assertIsInstance(test_obj, Common)
+        self.assertIsNone(test_obj.id)
+        session.add(test_obj)
+        self.assertIsNone(test_obj.id)
+        session.flush()
+        self.assertIsNotNone(test_obj.id)
+        obj = session.query(Common).filter(Common.name==test_name).one()
+        self.assertEqual(test_obj, obj)
+        self.assertEqual(obj.name, test_name)
 
     def test_make_session_memory(self):
         """Make database sessions in either sqlite, mysql or memory."""
@@ -100,6 +96,16 @@ class TestManagerInit(unittest.TestCase):
     def test_make_session_sqlite(self):
         """Make database sessions in either sqlite, mysql or memory."""
         self.manager = Manager(dialect='sqlite', testing=True)
+        self.common_todo()
+
+    def test_make_session_sqlite_not_testing(self):
+        """Make database sessions in either sqlite, mysql or memory.
+
+        Warning
+        -------
+        This messes with the deployed database!!!!!
+        """
+        self.manager = Manager(dialect='sqlite', testing=False)
         self.common_todo()
 
 

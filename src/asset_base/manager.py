@@ -67,9 +67,6 @@ import yaml
 import datetime
 import pandas as pd
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
-
 from sqlalchemy import String
 from sqlalchemy import Column
 from sqlalchemy import MetaData as SQLAlchemyMetaData
@@ -80,7 +77,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from .__init__ import get_var_path
 from .exceptions import TimeSeriesNoData
 from .financial_data import Dump, DumpReadError, History, MetaData, Static
-from .common import Base
+from .common import Base, SQLiteSession, TestSession
 from .entity import Domicile, Exchange
 from .asset import (
     Asset,
@@ -240,11 +237,12 @@ class ManagerBase(object):
 
         Parameters
         ----------
-        dialect : {'sqlite', 'mysql', 'memory'}, optional
+        dialect : {'sqlite', 'memory'}, optional
             The database dialect is the specific underlying database.
         testing : bool, optional
             Set to `True` for testing. This controls specifics in a way that
-            avoids testing data clashes with operational data.
+            avoids testing data clashes with operational data. This only affects
+            the 'sqlite' `dialect` argument option.
         """
         self.testing = testing
 
@@ -266,12 +264,13 @@ class ManagerBase(object):
         # Data dumper - dumps to dump folder - indicate testing or not.
         self.dumper = Dump(testing=self.testing)
 
+    def __del__(self):
+        """Destruction."""
+        del self.session_obj
+
     def close(self):
         """Close the database session."""
-        self.session.close()
-        logger.debug("Closed database session %s" % self.db_url)
-        self.engine.dispose()
-        logger.debug("Disposed of database engine %s" % self.db_url)
+        del self.session_obj
 
     def commit(self):
         """Session try-commit, exception-rollback."""
@@ -286,48 +285,12 @@ class ManagerBase(object):
 
     def make_session(self):
         """Make database sessions in either sqlite, mysql or memory."""
-        self._db_name = "asset_base"
-        # Select database platform.
-        if self._dialect == "mysql":
-            # MySQL URL.
-            db_url = self._config["backends"]["database"]
-            db_url = db_url["mysql"]["asset_base"] % self._db_name
-        elif self._dialect == "sqlite":
-            # Construct SQLite file name with path expansion for a URL
-            self._db_name = "fundmanage.%s.db" % self._db_name
-            # Put files in a `cache`` folder under the `var` path scheme.
-            cache_path = get_var_path("cache", testing=True)
-            if not os.path.exists(cache_path):
-                os.makedirs(cache_path)
-            db_file_name = os.path.join(cache_path, self._db_name)
-            db_url = "sqlite:///" + db_file_name
-            self._db_name = db_file_name
-        elif self._dialect == "memory":
-            db_url = "sqlite://"
-        else:
-            raise ValueError('Unrecognised dialect "%s"' % self._dialect)
+        if self._dialect == 'memory':
+            self.session_obj = TestSession()
+        elif self._dialect == 'sqlite':
+            self.session_obj = SQLiteSession(testing=self.testing)
 
-        self.db_url = db_url
-
-        # Create a database engine.
-        self.engine = create_engine(self.db_url)
-
-        # Create an empty database with all tables if it doesn't already exist.
-        if not database_exists(self.db_url):
-            try:
-                metadata.create_all(self.engine)
-            except Exception as ex:
-                drop_database(db_url)
-                logger.exception(
-                    "Failed to create new database %s" % self.db_url)
-                raise ex
-            else:
-                logger.info("Created new database %s" % self.db_url)
-        else:
-            logger.info("Use existing database %s" % self.db_url)
-
-        self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.info("New database session %s" % self.db_url)
+        self.session = self.session_obj.session
 
     def set_up(
         self, reuse=True, update=True, _test_isin_list=None, _test_forex_list=None
