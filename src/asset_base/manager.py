@@ -266,11 +266,17 @@ class ManagerBase(object):
 
     def __del__(self):
         """Destruction."""
-        del self.session_obj
+        # Sometimes __del__ is called when `session_obj` when self has no
+        # `session_obj`
+        if hasattr(self, "session_obj"):
+            del self.session_obj
 
     def close(self):
         """Close the database session."""
-        del self.session_obj
+        # Sometimes __del__ is called when `session_obj` when self has no
+        # `session_obj`
+        if hasattr(self, "session_obj"):
+            del self.session_obj
 
     def commit(self):
         """Session try-commit, exception-rollback."""
