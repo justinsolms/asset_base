@@ -48,7 +48,7 @@ class _Session(ABC):
         logger.info(f"Created database engine {self.db_url}")
 
         Base.metadata.create_all(self.engine)  # Using asset_base.Base
-        logger.info(f"Created all tables  in {self.db_url}.")
+        logger.info(f"Created all tables in {self.db_url}.")
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
         logger.info(f"Opened database session {self.db_url}")

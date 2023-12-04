@@ -25,8 +25,6 @@ methods such as ``factory``, ``from_dataframe``, and lots more.
 import unittest
 import pandas as pd
 
-from sqlalchemy_utils import drop_database, database_exists
-
 from src.asset_base.common import Common
 from src.asset_base.financial_data import Dump
 from src.asset_base.asset import Forex, ListedEquity

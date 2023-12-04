@@ -259,7 +259,7 @@ class ManagerBase(object):
 
         # Create a new database and engine if not existing
         if not hasattr(self, "session"):
-            self.make_session()
+            self._make_session()
 
         # Data dumper - dumps to dump folder - indicate testing or not.
         self.dumper = Dump(testing=self.testing)
@@ -278,6 +278,15 @@ class ManagerBase(object):
         if hasattr(self, "session_obj"):
             del self.session_obj
 
+    def _make_session(self):
+        """Make database sessions in either sqlite, mysql or memory."""
+        if self._dialect == "memory":
+            self.session_obj = TestSession()
+        elif self._dialect == "sqlite":
+            self.session_obj = SQLiteSession(testing=self.testing)
+
+        self.session = self.session_obj.session
+
     def commit(self):
         """Session try-commit, exception-rollback."""
         try:
@@ -288,15 +297,6 @@ class ManagerBase(object):
             logger.info("Rolled back.")
             # Rethrow the exception
             raise ex
-
-    def make_session(self):
-        """Make database sessions in either sqlite, mysql or memory."""
-        if self._dialect == 'memory':
-            self.session_obj = TestSession()
-        elif self._dialect == 'sqlite':
-            self.session_obj = SQLiteSession(testing=self.testing)
-
-        self.session = self.session_obj.session
 
     def set_up(
         self, reuse=True, update=True, _test_isin_list=None, _test_forex_list=None
@@ -314,7 +314,7 @@ class ManagerBase(object):
         """
         # Create a new database and engine if not existing
         if not hasattr(self, "session"):
-            self.make_session()
+            self._make_session()
 
         # Record creation moment as a string (item, value) pair if it does not
         # already exist.
@@ -404,6 +404,8 @@ class ManagerBase(object):
             _test_forex_list=_test_forex_list,  # Hidden arg. For testing only!
         )
 
+        # TODO: Include Index.update_all
+
     def dump(self):
         """Dump re-usable content to disk files.
 
@@ -486,10 +488,6 @@ class ManagerBase(object):
         dict
             A dictionary of assets with the specified id numbers. The id
             numbers are the keys of the dictionary.
-
-        See also
-        --------
-        .EntityBase.get_time_series_data_frame
         """
         if isinstance(id, list):
             # Get the list of matching funds and construct a new list.
