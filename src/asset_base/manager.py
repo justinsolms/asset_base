@@ -369,15 +369,7 @@ class ManagerBase(object):
                 logger.info("Successful dump of important asset_base data for re-use.")
 
         # Delete database
-        if database_exists(self.engine.url):
-            self.session.close()
-            self.engine.dispose()
-            drop_database(self.engine.url)
-            # Delete specific attributes
-            del self.db_url
-            del self.engine
-            del self.session
-            logger.info("Dropped database and closed session and engine")
+        self.close()
 
     def update(self, _test_isin_list=None, _test_forex_list=None):
         """Update all non-static data.
