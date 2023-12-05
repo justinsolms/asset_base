@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "asset_base"
 version = "1.0.0"
-description = "A package for obtaining, managing and provision of financial securities meta and time-series data."
+description = "A package for obtaining, managing and provision of financial securities meta-data and time-series data."
 authors = ["Justin Solms <justinsolms@gmail.com>"]
 license = "MIT"
 readme = "README.md"
@@ -23,6 +23,8 @@ aiohttp = "^3.9.1"
 aiounittest = "^1.4.2"
 sphinx = "^7.2.6"
 sphinxcontrib-napoleon = "^0.7"
+sphinx-autoapi = "^3.0.0"
+sphinx-rtd-theme = "^2.0.0"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
