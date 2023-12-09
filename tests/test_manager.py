@@ -25,10 +25,11 @@ methods such as ``factory``, ``from_dataframe``, and lots more.
 import unittest
 import pandas as pd
 
+from src.asset_base.common import Common
 from src.asset_base.financial_data import Dump
 from src.asset_base.asset import Forex, ListedEquity
 from src.asset_base.time_series import Dividend, ListedEOD
-from src.asset_base.manager import ManagerBase, replace_time_series_labels
+from src.asset_base.manager import Manager, replace_time_series_labels
 from src.asset_base.exceptions import TimeSeriesNoData
 
 import warnings
@@ -62,11 +63,48 @@ def assert_no_index_duplicates(security, security1, security2):
                 "has duplicates in it's index.",
             )
 
-class TestManagerSession(unittest.TestLoader):
+class TestManagerInit(unittest.TestCase):
     """Manager sessions with different backend databases"""
 
-    def test_make_session(self):
+    def tearDown(self):
+        """Tear down test case fixtures."""
+        # Delete database
+        del self.manager
+
+    def common_todo(self):
+        """Some common post creation tests using ``Common`` class."""
+        test_name = 'Common class instance'
+        session = self.manager.session
+        test_obj = Common(test_name)
+        self.assertIsInstance(test_obj, Common)
+        self.assertIsNone(test_obj.id)
+        session.add(test_obj)
+        self.assertIsNone(test_obj.id)
+        session.flush()
+        self.assertIsNotNone(test_obj.id)
+        obj = session.query(Common).filter(Common.name==test_name).one()
+        self.assertEqual(test_obj, obj)
+        self.assertEqual(obj.name, test_name)
+
+    def test_make_session_memory(self):
         """Make database sessions in either sqlite, mysql or memory."""
+        self.manager = Manager(dialect='memory', testing=True)
+        self.common_todo()
+
+    def test_make_session_sqlite(self):
+        """Make database sessions in either sqlite, mysql or memory."""
+        self.manager = Manager(dialect='sqlite', testing=True)
+        self.common_todo()
+
+    def test_make_session_sqlite_not_testing(self):
+        """Make database sessions in either sqlite, mysql or memory.
+
+        Warning
+        -------
+        This messes with the deployed database!!!!!
+        """
+        self.manager = Manager(dialect='sqlite', testing=False)
+        self.common_todo()
 
 
 class TestManager(unittest.TestCase):
@@ -80,7 +118,7 @@ class TestManager(unittest.TestCase):
         """Set up test class fixtures."""
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
-        cls.Cls = ManagerBase
+        cls.Cls = Manager
 
         # Make a memory based asset_base session with test data.
         # Set up with only AAPL, MCD and STX40 respectively
@@ -100,7 +138,7 @@ class TestManager(unittest.TestCase):
 
     def setUp(self):
         """Set up test case fixtures."""
-        self.manager = ManagerBase(dialect="memory", testing=True)
+        self.manager = Manager(dialect="memory", testing=True)
         self.session = self.manager.session
         # For a fresh test delete any previously dumped data. Do not delete the
         # folder which was set up as a required test fixture.
@@ -121,7 +159,7 @@ class TestManager(unittest.TestCase):
 
     def test___init__(self):
         """Instance initialization."""
-        self.assertIsInstance(self.manager, ManagerBase)
+        self.assertIsInstance(self.manager, Manager)
 
     def test_dump(self):
         """Dump re-usable content to disk files."""

@@ -41,13 +41,23 @@ class TestCurrency(unittest.TestCase):
         self.test_session = TestSession()
         self.session = self.test_session.session
 
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        del self.test_session
+
     def test___init__(self):
         """Initialization."""
         # Use GBP - a list of countries use GBP
-        obj = Currency(
+        test_obj = Currency(
             ticker=self.ticker, name=self.name, country_code_list=self.country_code_list
         )
-        self.assertIsInstance(obj, Currency)
+        self.assertIsInstance(test_obj, Currency)
+        self.session.add(test_obj)
+        self.assertIsNone(test_obj.id)
+        self.session.flush()
+        self.assertIsNotNone(test_obj.id)
+        obj = self.session.query(Currency).one()
+        self.assertEqual(test_obj, obj)
         self.assertEqual(obj.ticker, self.ticker)
         self.assertEqual(obj.name, self.name)
         self.assertEqual(obj.country_code_list, self.country_code_list)
@@ -202,6 +212,10 @@ class TestDomicile(unittest.TestCase):
         self.currency = Currency.factory(self.session, self.currency_ticker)
         self.currency1 = Currency.factory(self.session, self.currency_ticker1)
 
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        del self.test_session
+
     def test___init__(self):
         domicile = Domicile(self.country_code, self.country_name, self.currency)
         self.assertIsInstance(domicile, Domicile)
@@ -320,6 +334,10 @@ class TestEntity(unittest.TestCase):
         # Add all Domicile objects to the asset_base
         Domicile.update_all(self.session, get_method=Static().get_domicile)
         self.domicile = Domicile.factory(self.session, self.country_code)
+
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        del self.test_session
 
     def test___init__(self):
         entity = Entity(self.name, self.domicile)

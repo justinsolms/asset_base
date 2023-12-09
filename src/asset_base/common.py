@@ -4,7 +4,9 @@
 
 """ Declare common object infrastructure
 """
+from abc import ABC, abstractclassmethod
 
+import os
 import sys
 import datetime
 
@@ -14,10 +16,15 @@ from sqlalchemy import Integer, String, Date
 from sqlalchemy import Column
 from sqlalchemy import UniqueConstraint
 
+from sqlalchemy_utils import drop_database, database_exists
 from sqlalchemy.ext.declarative import declarative_base
 
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
+
+from .__init__ import get_var_path
+
+
 
 # Get module-named logger.
 import logging
@@ -29,25 +36,68 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 # Create the declarative base
 Base = declarative_base()
 
+class _Session(ABC):
+    """Set up a database and session (abstract class)."""
 
-class TestSession(object):
-    """Set up an `in-memory` test database and session."""
-
-    def __init__(self):
+    def __init__(self, url, testing):
         """Initialization."""
-        self.engine = create_engine("sqlite://", echo=False)  # No logging
-        logger.debug("Created database in-memory engine.")
+        self.testing = testing
+        self.db_url = url
+
+        self.engine = create_engine(self.db_url, echo=False)  # No logging
+        logger.info(f"Created database engine {self.db_url}")
+
         Base.metadata.create_all(self.engine)  # Using asset_base.Base
+        logger.info(f"Created all tables in {self.db_url}.")
+
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.debug("Obtained database in-memory session.")
+        logger.info(f"Opened database session {self.db_url}")
 
     def __del__(self):
         """Destruction."""
-        self.session.close()
-        logger.debug("Closed database session.")
-        self.engine.dispose()
-        logger.debug("Disposed of database engine.")
+        # Delete database
+        if database_exists(self.db_url):
+            self.session.close()
+            del self.session
+            logger.info(f"Closed database session {self.db_url}.")
+            self.engine.dispose()
+            del self.engine
+            logger.info(f"Disposed of database engine {self.db_url}.")
+            # Only delete database if we are testing - otherwise keep it.
+            if self.testing is True:
+                drop_database(self.db_url)
+                logger.warning(f"Dropped the entire database {self.db_url}.")
 
+
+class TestSession(_Session):
+    """Set up an `in-memory` test database and session."""
+
+    _URL = "sqlite://"
+
+    def __init__(self):
+        # Default is testing is True
+        super().__init__(self._URL, testing=True)
+
+
+class SQLiteSession(_Session):
+    """Set up an `in-memory` test database and session."""
+
+    _VAR_FOLDER = "cache"
+    _DB_NAME = "asset_base"
+
+    def __init__(self, testing=False):
+        # Construct SQLite file name with path expansion for a URL
+        self._db_name = "fundmanage.%s.db" % self._DB_NAME
+
+        # Put files in a `cache`` folder under the `var` path scheme.
+        cache_path = get_var_path(self._VAR_FOLDER, testing=testing)
+        if not os.path.exists(cache_path):
+            os.makedirs(cache_path)
+
+        db_file_name = os.path.join(cache_path, self._db_name)
+        db_url = "sqlite:///" + db_file_name
+
+        super().__init__(db_url, testing=testing)
 
 
 class Common(Base):

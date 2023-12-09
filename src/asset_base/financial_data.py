@@ -41,17 +41,11 @@ class DumpReadError(_BaseException):
 
 
 class _Feed(object, metaclass=abc.ABCMeta):
-    """Generic financial data feed class.
-
-    Parameters
-    ----------
-    asset_base : fundmanage.asset_base.EntityBase
-        An ``asset_base`` database manager with a session to the database.
-    """
+    """Generic financial data feed class. """
 
     _CLASS_DATA_PATH = None
 
-    def __init__(self, path=None):
+    def __init__(self):
         """Instance initialization."""
         # Make the absolute data path for writing.
         self.makedir()

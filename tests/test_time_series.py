@@ -60,6 +60,10 @@ class TestTimeSeriesBase(unittest.TestCase):
             self.session, self.issuer_name, self.issuer_domicile_code
         )
 
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        del self.test_session
+
     def test___init__(self):
         """Initialization."""
         # Get AAPL Inc instance form committed instances. Don't create this in
@@ -120,6 +124,7 @@ class TestSimpleEOD(TestTimeSeriesBase):
         instance = self.session.query(TimeSeriesBase).one()
         self.assertEqual(instance._class_name, "SimpleEOD")
         self.assertEqual(instance._discriminator, "simple_eod")
+        self.assertEqual(ts_item, instance)
 
 
 class TestTradeEOD(TestTimeSeriesBase):
@@ -234,6 +239,7 @@ class TestForexEOD(TestTradeEOD):
             adjusted_close=5.0,
             volume=6.0,
         )
+        self.session.add(forex_eod)
         self.assertIsInstance(forex_eod, ForexEOD)
         # test the inherited Asset backref
         self.assertEqual(forex_eod.base_obj, forex)
@@ -251,6 +257,7 @@ class TestForexEOD(TestTradeEOD):
         instance = self.session.query(TimeSeriesBase).one()
         self.assertEqual(instance._class_name, "ForexEOD")
         self.assertEqual(instance._discriminator, "forex_eod")
+        self.assertEqual(forex_eod, instance)
 
         # Test Forex._eod_series <-> ForexEOD.forex relationship
         self.assertEqual(forex._series[0], forex_eod)
@@ -272,6 +279,7 @@ class TestForexEOD(TestTradeEOD):
             adjusted_close=5.0,
             volume=6.0,
         )
+        self.session.add(listed_eod)
         # (again) Test Forex._eod_series <-> ForexEOD.forex relationship
         self.assertEqual(forex._series[0], forex_eod)
         self.assertEqual(forex._eod_series[0], forex_eod)
@@ -338,6 +346,7 @@ class TestIndexEOD(TestTradeEOD):
             adjusted_close=5.0,
             volume=6.0,
         )
+        self.session.add(index_eod)
         self.assertIsInstance(index_eod, IndexEOD)
         # test the inherited Asset backref
         self.assertEqual(index_eod.base_obj, index)
@@ -355,6 +364,7 @@ class TestIndexEOD(TestTradeEOD):
         instance = self.session.query(TimeSeriesBase).one()
         self.assertEqual(instance._class_name, "IndexEOD")
         self.assertEqual(instance._discriminator, "index_eod")
+        self.assertEqual(index_eod, instance)
 
         # Test Forex._eod_series <-> IndexEOD.index relationship
         self.assertEqual(index._series[0], index_eod)
@@ -376,6 +386,7 @@ class TestIndexEOD(TestTradeEOD):
             adjusted_close=5.0,
             volume=6.0,
         )
+        self.session.add(listed_eod)
         # (again) Test Forex._eod_series <-> IndexEOD.index relationship
         self.assertEqual(index._series[0], index_eod)
         self.assertEqual(index._eod_series[0], index_eod)
@@ -437,6 +448,7 @@ class TestListedEOD(TestTradeEOD):
             adjusted_close=5.0,
             volume=6.0,
         )
+        self.session.add(listed_eod)
         self.assertIsInstance(listed_eod, ListedEOD)
         # test the inherited Asset backref
         self.assertEqual(listed_eod.base_obj, listed)
@@ -454,6 +466,7 @@ class TestListedEOD(TestTradeEOD):
         instance = self.session.query(TimeSeriesBase).one()
         self.assertEqual(instance._class_name, "ListedEOD")
         self.assertEqual(instance._discriminator, "listed_eod")
+        self.assertEqual(listed_eod, instance)
 
         # Test Listed._eod_series <-> ListedEOD.listed relationship
         self.assertEqual(listed._series[0], listed_eod)
@@ -625,6 +638,7 @@ class TestDividend(TestTimeSeriesBase):
             unadjusted_value=1.0,
             adjusted_value=1.01,
         )
+        self.session.add(dividend)
         self.assertIsInstance(dividend, Dividend)
         self.assertEqual(dividend.base_obj, listed_equity)
         self.assertEqual(dividend.date_stamp, datetime.date.today())
@@ -641,6 +655,7 @@ class TestDividend(TestTimeSeriesBase):
         instance = self.session.query(TimeSeriesBase).one()
         self.assertEqual(instance._class_name, "Dividend")
         self.assertEqual(instance._discriminator, "dividend")
+        self.assertEqual(dividend, instance)
 
         # Test Listed._eod_series <-> ListedEOD.listed relationship
         self.assertEqual(listed_equity._series[0], dividend)
@@ -661,6 +676,7 @@ class TestDividend(TestTimeSeriesBase):
             adjusted_close=5.0,
             volume=6.0,
         )
+        self.session.add(listed_eod)
         # Test Listed._eod_series <-> ListedEOD.listed relationship
         self.assertEqual(len(listed_equity._eod_series), 1)
         self.assertEqual(listed_equity._eod_series[0], listed_eod)
