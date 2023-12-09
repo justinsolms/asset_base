@@ -21,7 +21,6 @@ from src.asset_base.asset import (
 from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
 
 from src.asset_base.utils import date_to_str
-import pytest
 
 
 class TestBase(unittest.TestCase):
@@ -76,19 +75,19 @@ class TestAsset(TestBase):
 
     def test___init__(self):
         asset = Asset(self.name, self.currency)
-        assert isinstance(asset, Asset)
+        self.assertIsInstance(asset, Asset)
 
     def test___str__(self):
         asset = Asset(self.name, self.currency)
-        assert self.test_str == asset.__str__()
+        self.assertEqual(self.test_str, asset.__str__())
 
     def test_key_code(self):
         asset = Asset(self.name, self.currency)
-        assert self.key_code == asset.key_code
+        self.assertEqual(self.key_code, asset.key_code)
 
     def test_identity_code(self):
         asset = Asset(self.name, self.currency)
-        assert self.identity_code == asset.identity_code
+        self.assertEqual(self.identity_code, asset.identity_code)
 
     def test_factory(self):
         """Test session add asset but domicile and currency already added."""
@@ -98,13 +97,13 @@ class TestAsset(TestBase):
         asset = Asset.factory(self.session, self.name, self.currency_ticker)
         asset = Asset.factory(self.session, self.name, self.currency_ticker)
         # Despite using factory twice there should be only one instance
-        assert len(self.session.query(Asset).all()) == 1
+        self.assertEqual(len(self.session.query(Asset).all()), 1)
         # Attributes
-        assert asset.name == self.name
-        assert asset.currency_ticker == self.currency.ticker
+        self.assertEqual(asset.name, self.name)
+        self.assertEqual(asset.currency_ticker, self.currency.ticker)
         # Get same
         asset1 = Asset.factory(self.session, self.name, self.currency_ticker)
-        assert asset == asset1
+        self.assertEqual(asset, asset1)
 
 
 class TestCash(TestAsset):
@@ -132,39 +131,39 @@ class TestCash(TestAsset):
     def test___init__(self):
         # Produce the Cash item with the currency
         cash = Cash(self.currency)
-        assert isinstance(cash, Cash)
-        assert cash.currency == self.currency
-        assert cash.name == self.currency_name
-        assert cash.ticker == self.currency_ticker
+        self.assertIsInstance(cash, Cash)
+        self.assertEqual(cash.currency, self.currency)
+        self.assertEqual(cash.name, self.currency_name)
+        self.assertEqual(cash.ticker, self.currency_ticker)
 
         # Test class the polymorphism functionality.
         # Query the superclass Asset which should produce a Cash polymorphic
         # instance
         self.session.add(cash)
         instance = self.session.query(Asset).one()  # There are two, see above!
-        assert instance._class_name == "Cash"
-        assert instance._discriminator == "cash"
+        self.assertEqual(instance._class_name, "Cash")
+        self.assertEqual(instance._discriminator, "cash")
 
     def test___str__(self):
         currency = Currency.factory(self.session, self.currency_ticker)
         cash = Cash(currency)
-        assert self.test_str == cash.__str__()
+        self.assertEqual(self.test_str, cash.__str__())
 
     def test_key_code(self):
         currency = Currency.factory(self.session, self.currency_ticker)
         cash = Cash(currency)
-        assert self.key_code == cash.key_code
+        self.assertEqual(self.key_code, cash.key_code)
 
     def test_identity_code(self):
         currency = Currency.factory(self.session, self.currency_ticker)
         cash = Cash(currency)
-        assert self.identity_code == cash.ticker
+        self.assertEqual(self.identity_code, cash.ticker)
 
     def test_get_locality(self):
         currency = Currency.factory(self.session, self.currency_ticker)
         cash = Cash(currency)
-        assert cash.get_locality("US") == "domestic"
-        assert cash.get_locality("UK") == "foreign"
+        self.assertTrue(cash.get_locality("US") == "domestic")
+        self.assertTrue(cash.get_locality("UK") == "foreign")
 
     def test_factory(self):
         """Test session add entity with domicile and currency already added."""
@@ -173,14 +172,14 @@ class TestCash(TestAsset):
         # Retrieve it
         cash = Cash.factory(self.session, self.currency_ticker)
         # Test
-        assert isinstance(cash, Cash)
-        assert cash.name == self.currency_name
-        assert cash.ticker == self.currency_ticker
+        self.assertIsInstance(cash, Cash)
+        self.assertEqual(cash.name, self.currency_name)
+        self.assertEqual(cash.ticker, self.currency_ticker)
 
     def test_factory_fail(self):
         """Test session add fail if second add has wrong currency ticker."""
         wrong_ticker = "---"
-        with pytest.raises(FactoryError):
+        with self.assertRaises(FactoryError):
             Cash.factory(self.session, wrong_ticker)
 
     def test_update_all(self):
@@ -195,7 +194,7 @@ class TestCash(TestAsset):
         codes = [item.ticker for item in cash_list]
         codes.sort()
         # Assert
-        assert codes == test_codes
+        self.assertEqual(codes, test_codes)
 
     def test_time_series(self):
         """Retrieve historic time-series for a set of class instances."""
@@ -206,10 +205,10 @@ class TestCash(TestAsset):
         # Test the method
         time_series = cash.time_series(date_index=date_index)
         # Test
-        assert (time_series.index == date_index).all()
-        assert (time_series == 1.0).all()
+        self.assertTrue((time_series.index == date_index).all())
+        self.assertTrue((time_series == 1.0).all())
         # Check Cash name
-        assert time_series.name.identity_code == cash.identity_code
+        self.assertEqual(time_series.name.identity_code, cash.identity_code)
 
 
 class TestForex(TestAsset):
@@ -267,32 +266,32 @@ class TestForex(TestAsset):
 
     def test___init__(self):
         forex = Forex(self.base_currency, self.price_currency)
-        assert isinstance(forex, Forex)
-        assert self.name == forex.name
-        assert self.identity_code == forex.identity_code
+        self.assertIsInstance(forex, Forex)
+        self.assertEqual(self.name, forex.name)
+        self.assertEqual(self.identity_code, forex.identity_code)
 
     def test___str__(self):
         forex = Forex(self.base_currency, self.price_currency)
-        assert self.test_str == forex.__str__()
+        self.assertEqual(self.test_str, forex.__str__())
 
     def test_key_code(self):
         forex = Forex(self.base_currency, self.price_currency)
-        assert self.key_code == forex.key_code
+        self.assertEqual(self.key_code, forex.key_code)
 
     def test_identity_code(self):
         forex = Forex(self.base_currency, self.price_currency)
-        assert self.identity_code == forex.identity_code
+        self.assertEqual(self.identity_code, forex.identity_code)
 
     def test_factory(self):
         forex = Forex.factory(self.session, self.base_ticker, self.price_ticker)
         forex = Forex.factory(self.session, self.base_ticker, self.price_ticker)
         # Despite using factory twice there should be only one instance
-        assert len(self.session.query(Asset).all()) == 1
+        self.assertEqual(len(self.session.query(Asset).all()), 1)
         # Verify strings
-        assert self.name == forex.name
-        assert self.test_str == forex.__str__()
-        assert self.key_code == forex.key_code
-        assert self.identity_code == forex.identity_code
+        self.assertEqual(self.name, forex.name)
+        self.assertEqual(self.test_str, forex.__str__())
+        self.assertEqual(self.key_code, forex.key_code)
+        self.assertEqual(self.identity_code, forex.identity_code)
 
     def test_update_all(self):
         """Full test forex time series history."""
@@ -300,7 +299,7 @@ class TestForex(TestAsset):
         # Make sure they are all present
         forex_list = self.session.query(Forex).all()
         ticker_list = [forex.price_currency_ticker for forex in forex_list]
-        assert set(Forex.foreign_currencies) == set(ticker_list)
+        self.assertEqual(set(Forex.foreign_currencies), set(ticker_list))
         # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame(
             [item.to_dict() for item in self.session.query(ForexEOD).all()]
@@ -311,7 +310,7 @@ class TestForex(TestAsset):
         # Test against last date test_values data
         last_date = pd.to_datetime(self.to_date)
         df = df[df["date_stamp"] == last_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         # Sort to remove ambiguity
@@ -349,7 +348,7 @@ class TestForex(TestAsset):
         # Test against last date test_values data
         last_date = pd.to_datetime(self.to_date)
         df = df[df["date_stamp"] == last_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
@@ -371,8 +370,8 @@ class TestForex(TestAsset):
         df = self.Cls.get_rates_data_frame(
             self.session, "ZAR", self.Cls.foreign_currencies
         )
-        assert all(df.dropna().ZAR == 1.0)
-        assert df.loc[date].tolist() == test_values
+        self.assertTrue(all(df.dropna().ZAR == 1.0))
+        self.assertEqual(df.loc[date].tolist(), test_values)
 
 
 class TestShare(TestAsset):
@@ -422,28 +421,28 @@ class TestShare(TestAsset):
 
     def test___init__(self):
         share = Share(self.name, self.issuer, quote_units=self.quote_units)
-        assert isinstance(share, Share)
-        assert share.name == self.name
-        assert share.issuer == self.issuer
-        assert share.currency == self.issuer.currency
-        assert share.quote_units == self.quote_units
+        self.assertIsInstance(share, Share)
+        self.assertEqual(share.name, self.name)
+        self.assertEqual(share.issuer, self.issuer)
+        self.assertEqual(share.currency, self.issuer.currency)
+        self.assertEqual(share.quote_units, self.quote_units)
         # Distributions attribute
         share = Share(self.name, self.issuer)
-        assert share.distributions == False
+        self.assertEqual(share.distributions, False)
         share = Share(self.name, self.issuer, distributions=True)
-        assert share.distributions == True
+        self.assertEqual(share.distributions, True)
 
     def test___str__(self):
         share = Share(self.name, self.issuer)
-        assert share.__str__() == "US.The Issuer.Test Share"
+        self.assertEqual(share.__str__(), "US.The Issuer.Test Share")
 
     def test_key_code(self):
         share = Share(self.name, self.issuer)
-        assert share.key_code == self.key_code
+        self.assertEqual(share.key_code, self.key_code)
 
     def test_identity_code(self):
         share = Share(self.name, self.issuer)
-        assert share.identity_code == self.identity_code
+        self.assertEqual(share.identity_code, self.identity_code)
 
 
 class TestListed(TestShare):
@@ -557,18 +556,18 @@ class TestListed(TestShare):
         listed = Listed(
             self.name, issuer, self.isin, self.exchange, self.ticker, status=self.status
         )
-        assert isinstance(listed, Listed)
-        assert listed.name == self.name
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertIsInstance(listed, Listed)
+        self.assertEqual(listed.name, self.name)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
 
     def test___str__(self):
         """Full parameter set provided."""
@@ -576,7 +575,7 @@ class TestListed(TestShare):
             self.session, self.issuer_name, self.issuer_domicile_code
         )
         listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
-        assert self.test_str == listed.__str__()
+        self.assertEqual(self.test_str, listed.__str__())
 
     def test_key_code(self):
         """Full parameter set provided."""
@@ -584,7 +583,7 @@ class TestListed(TestShare):
             self.session, self.issuer_name, self.issuer_domicile_code
         )
         listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
-        assert listed.key_code == self.isin
+        self.assertEqual(listed.key_code, self.isin)
 
     def test_identity_code(self):
         """Full parameter set provided."""
@@ -592,7 +591,7 @@ class TestListed(TestShare):
             self.session, self.issuer_name, self.issuer_domicile_code
         )
         listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
-        assert listed.identity_code == f"{self.isin}.{self.ticker}"
+        self.assertEqual(listed.identity_code, f"{self.isin}.{self.ticker}")
 
     def test_get_locality(self):
         """Test the domestic or foreign status of a share."""
@@ -607,8 +606,8 @@ class TestListed(TestShare):
             self.issuer_name,
         )
         #  Test.
-        assert listed.get_locality("US") == "domestic"
-        assert listed.get_locality("GB") == "foreign"
+        self.assertEqual(listed.get_locality("US"), "domestic")
+        self.assertEqual(listed.get_locality("GB"), "foreign")
 
     def test_factory(self):
         """Full suite of factory parameters with previously existing issuer."""
@@ -623,30 +622,30 @@ class TestListed(TestShare):
             self.issuer_name,
         )
         # Inspect database for expected number of entities
-        assert len(self.session.query(Issuer).all()) == 1
-        assert len(self.session.query(Listed).all()) == 1
+        self.assertEqual(len(self.session.query(Issuer).all()), 1)
+        self.assertEqual(len(self.session.query(Listed).all()), 1)
         # Different query argument sets produce the same instance
         # Firstly buy ISIN
         listed1 = Listed.factory(self.session, isin=self.isin)
-        assert listed == listed1
+        self.assertEqual(listed, listed1)
         # Secondly by (MIC,ticker)
         listed2 = Listed.factory(self.session, mic=self.mic, ticker=self.ticker)
-        assert listed == listed2
+        self.assertEqual(listed, listed2)
         # Attributes
-        assert listed.name == self.name
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN country code, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
 
     def test_factory_change(self):
         """Changes to existing instances."""
@@ -662,17 +661,17 @@ class TestListed(TestShare):
         )
         # Changes name
         listed1 = Listed.factory(self.session, self.isin, listed_name="new_name")
-        assert listed1 == listed
-        assert listed1.name == "new_name"
+        self.assertEqual(listed1, listed)
+        self.assertEqual(listed1.name, "new_name")
         # Change Exchange
         listed4 = Listed.factory(self.session, self.isin, mic="XLON")
-        assert listed4.name == "new_name"
+        self.assertEqual(listed4.name, "new_name")
         # Change ticker
         listed5 = Listed.factory(self.session, self.isin, ticker="ABC")
-        assert listed5.ticker == "ABC"
+        self.assertEqual(listed5.ticker, "ABC")
         # Change status
         listed6 = Listed.factory(self.session, self.isin, status="delisted")
-        assert listed6.status == "listed"
+        self.assertEqual(listed6.status, "listed")
 
     def test_factory_fail_change(self):
         """Fail with issuer change attempt."""
@@ -687,13 +686,13 @@ class TestListed(TestShare):
             self.issuer_name,
         )
         # New issuer
-        with pytest.raises(ReconcileError):
+        with self.assertRaises(ReconcileError):
             Listed.factory(self.session, self.isin, issuer_domicile_code="GB")
         # New issuer
-        with pytest.raises(ReconcileError):
+        with self.assertRaises(ReconcileError):
             Listed.factory(self.session, self.isin, issuer_name="new_issuer_name")
         # Check there are no new issuers as a result of the above
-        assert len(self.session.query(Issuer).all()) == 1
+        self.assertEqual(len(self.session.query(Issuer).all()), 1)
 
     def test_factory_fail_wrong_args(self):
         """Fail with incorrect arguments."""
@@ -708,10 +707,10 @@ class TestListed(TestShare):
             issuer_name=self.issuer_name,
         )
         # Test retrieval on ISIN fails Issuer requirement
-        with pytest.raises(FactoryError):
+        with self.assertRaises(FactoryError):
             Listed.factory(self.session, self.isin1)  # Wrong ISIN
         # Test retrieval on MIC, Ticker pair fails Issuer requirement
-        with pytest.raises(FactoryError):
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 ticker=self.ticker1,  # Wrong ticker
@@ -719,7 +718,7 @@ class TestListed(TestShare):
             )
         # Test retrieval on MIC, Ticker pair fails Listed.__init__ argument
         # requirements
-        with pytest.raises(FactoryError):
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 issuer_domicile_code=self.issuer_domicile_code,
@@ -728,7 +727,7 @@ class TestListed(TestShare):
                 mic=self.mic,
             )
         # Test retrieval on MIC, Ticker pair fails Exchange.mic argument
-        with pytest.raises(FactoryError):
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 issuer_domicile_code=self.issuer_domicile_code,
@@ -739,7 +738,7 @@ class TestListed(TestShare):
 
     def test_factory_no_create(self):
         """Test create parameter."""
-        with pytest.raises(FactoryError):
+        with self.assertRaises(FactoryError):
             Listed.factory(
                 self.session,
                 self.isin,
@@ -758,21 +757,21 @@ class TestListed(TestShare):
         # Test one Listed instance
         listed = Listed.factory(self.session, self.isin)
         # Attributes
-        assert isinstance(listed, Listed)
-        assert listed.name == self.name
+        self.assertIsInstance(listed, Listed)
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
 
     def test_to_data_frame(self):
         """Convert class data attributes into a factory compatible dataframe."""
@@ -801,21 +800,21 @@ class TestListed(TestShare):
         # Test one Listed instance
         listed = Listed.factory(self.session, self.isin)
         # Attributes
-        assert isinstance(listed, Listed)
-        assert listed.name == self.name
+        self.assertIsInstance(listed, Listed)
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
 
     def test_dump(self):
         """Dump and reuse class instances and their time series data to disk."""
@@ -836,8 +835,8 @@ class TestListed(TestShare):
         # Should dump Listed instances and their ListedEOD data
         Listed.dump(self.session, dumper)
         # Verify dump files exists.
-        assert dumper.exists(Listed), "Listed dump file not found."
-        assert dumper.exists(ListedEOD), "ListedEOD dump file not found."
+        self.assertTrue(dumper.exists(Listed), "Listed dump file not found.")
+        self.assertTrue(dumper.exists(ListedEOD), "ListedEOD dump file not found.")
 
         # Test reuse
         Listed.reuse(self.session, dumper)
@@ -845,21 +844,21 @@ class TestListed(TestShare):
         # Test one Listed instance post reuse.
         listed = Listed.factory(self.session, self.isin)
         # Attributes
-        assert isinstance(listed, Listed)
-        assert listed.name == self.name
+        self.assertIsInstance(listed, Listed)
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
 
         # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame(
@@ -871,14 +870,16 @@ class TestListed(TestShare):
         # Test against last date test_values data
         last_date = pd.to_datetime(self.to_date)
         df = df[df["date_stamp"] == last_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
         pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
         # Test security time series last date
         securities_list = self.session.query(ListedEquity).all()
-        assert all(x.get_last_eod_date() == last_date for x in securities_list)
+        self.assertTrue(
+            all(x.get_last_eod_date() == last_date for x in securities_list)
+        )
 
     def test_key_code_id_table(self):
         """A table of all instance's ``Entity.id`` against ``key_code``."""
@@ -917,7 +918,7 @@ class TestListed(TestShare):
         # Test against last date test_values data
         last_date = pd.to_datetime(self.to_date)
         df = df[df["date_stamp"] == last_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
@@ -925,7 +926,9 @@ class TestListed(TestShare):
         # Test security time series last date
         # Securities asset_base instances list
         securities_list = self.session.query(ListedEquity).all()
-        assert all(x.get_last_eod_date() == last_date for x in securities_list)
+        self.assertTrue(
+            all(x.get_last_eod_date() == last_date for x in securities_list)
+        )
 
     def test_get_eod(self):
         """Return the EOD time series for the asset."""
@@ -962,7 +965,7 @@ class TestListed(TestShare):
         # Test against last date test_values data
         last_date = pd.to_datetime(self.to_date)
         df = df[df["date_stamp"] == last_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
@@ -992,9 +995,9 @@ class TestListed(TestShare):
         eod.reset_index(inplace=True)
         last_eod = eod.iloc[-1]
         last_dict_test = last_eod.to_dict()
-        assert isinstance(last_dict, dict)
-        assert isinstance(last_dict_test, dict)
-        assert last_dict == last_dict_test
+        self.assertIsInstance(last_dict, dict)
+        self.assertIsInstance(last_dict_test, dict)
+        self.assertEqual(last_dict, last_dict_test)
 
     def test_get_live_trades(self):
         """Return live trade data if available else use the last EOD trades."""
@@ -1012,12 +1015,12 @@ class TestListed(TestShare):
         listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
         # Assert a chosen isin to be identical to test data
         test_isin = "US0378331005"
-        assert self.isin == test_isin
+        self.assertEqual(self.isin, test_isin)
         # Test ISIN
         listed._check_isin(test_isin)
         # Test Bad ISIN
         bad_isin = "US0378331006"  # Test ISIN last digit modified
-        with pytest.raises(BadISIN):
+        with self.assertRaises(BadISIN):
             listed._check_isin(bad_isin)
 
 
@@ -1136,18 +1139,18 @@ class TestListedEquity(TestListed):
             self.name, issuer, self.isin, self.exchange, self.ticker, status=self.status
         )
         self.session.add(listed)
-        assert isinstance(listed, ListedEquity)
-        assert listed.name == self.name
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
 
         # Test with industry classification
         listed = ListedEquity(
@@ -1168,38 +1171,38 @@ class TestListedEquity(TestListed):
             sub_sector_code=self.sub_sector_code,
         )
         self.session.add(listed)
-        assert isinstance(listed, ListedEquity)
-        assert listed.name == self.name
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
         # Check industry classification info
-        assert listed.industry_class == self.industry_class
+        self.assertEqual(listed.industry_class, self.industry_class)
         icb = listed.industry_class_instance
-        assert icb.industry_name == self.industry_name
-        assert icb.super_sector_name == self.super_sector_name
-        assert icb.sector_name == self.sector_name
-        assert icb.sub_sector_name == self.sub_sector_name
-        assert icb.industry_code == self.industry_code
-        assert icb.super_sector_code == self.super_sector_code
-        assert icb.sector_code == self.sector_code
-        assert icb.sub_sector_code == self.sub_sector_code
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
 
         # Test class the polymorphism functionality. Query the superclass Asset
         # which should produce a ListedEquity polymorphic instance
         instances = self.session.query(Asset).all()  # There are two, see above!
         instance1, instance2 = instances
-        assert instance1._class_name == "ListedEquity"
-        assert instance1._discriminator == "listed_equity"
-        assert instance2._class_name == "ListedEquity"
-        assert instance2._discriminator == "listed_equity"
+        self.assertEqual(instance1._class_name, "ListedEquity")
+        self.assertEqual(instance1._discriminator, "listed_equity")
+        self.assertEqual(instance2._class_name, "ListedEquity")
+        self.assertEqual(instance2._discriminator, "listed_equity")
 
     def test_factory(self):
         """Full suite of factory parameters with previously existing issuer."""
@@ -1224,41 +1227,41 @@ class TestListedEquity(TestListed):
             sub_sector_code=self.sub_sector_code,
         )
         # Inspect database for expected number of entities
-        assert len(self.session.query(Issuer).all()) == 1
-        assert len(self.session.query(ListedEquity).all()) == 1
+        self.assertEqual(len(self.session.query(Issuer).all()), 1)
+        self.assertEqual(len(self.session.query(ListedEquity).all()), 1)
         # Different query argument sets produce the same instance
         # Firstly buy ISIN
         listed1 = ListedEquity.factory(self.session, isin=self.isin)
-        assert listed == listed1
+        self.assertEqual(listed, listed1)
         # Secondly by (MIC,ticker)
         listed2 = ListedEquity.factory(self.session, mic=self.mic, ticker=self.ticker)
-        assert listed == listed2
+        self.assertEqual(listed, listed2)
         # Attributes
-        assert listed.name == self.name
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN country code, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
         # Check industry classification info
-        assert listed.industry_class == self.industry_class
+        self.assertEqual(listed.industry_class, self.industry_class)
         icb = listed.industry_class_instance
-        assert icb.industry_name == self.industry_name
-        assert icb.super_sector_name == self.super_sector_name
-        assert icb.sector_name == self.sector_name
-        assert icb.sub_sector_name == self.sub_sector_name
-        assert icb.industry_code == self.industry_code
-        assert icb.super_sector_code == self.super_sector_code
-        assert icb.sector_code == self.sector_code
-        assert icb.sub_sector_code == self.sub_sector_code
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
 
     def test_from_data_frame(self):
         """Get data from a pandas.DataFrame."""
@@ -1267,32 +1270,32 @@ class TestListedEquity(TestListed):
         # Test one ListedEquity instance
         listed = ListedEquity.factory(self.session, self.isin)
         # Attributes
-        assert isinstance(listed, ListedEquity)
-        assert listed.name == self.name
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
         # Check industry classification info
-        assert listed.industry_class == self.industry_class
+        self.assertEqual(listed.industry_class, self.industry_class)
         icb = listed.industry_class_instance
-        assert icb.industry_name == self.industry_name
-        assert icb.super_sector_name == self.super_sector_name
-        assert icb.sector_name == self.sector_name
-        assert icb.sub_sector_name == self.sub_sector_name
-        assert icb.industry_code == self.industry_code
-        assert icb.super_sector_code == self.super_sector_code
-        assert icb.sector_code == self.sector_code
-        assert icb.sub_sector_code == self.sub_sector_code
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
 
     def test_to_data_frame(self):
         """Convert class data attributes into a factory compatible dataframe."""
@@ -1321,32 +1324,32 @@ class TestListedEquity(TestListed):
         # Test one ListedEquity instance
         listed = ListedEquity.factory(self.session, self.isin)
         # Attributes
-        assert isinstance(listed, ListedEquity)
-        assert listed.name == self.name
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
         # Check industry classification info
-        assert listed.industry_class == self.industry_class
+        self.assertEqual(listed.industry_class, self.industry_class)
         icb = listed.industry_class_instance
-        assert icb.industry_name == self.industry_name
-        assert icb.super_sector_name == self.super_sector_name
-        assert icb.sector_name == self.sector_name
-        assert icb.sub_sector_name == self.sub_sector_name
-        assert icb.industry_code == self.industry_code
-        assert icb.super_sector_code == self.super_sector_code
-        assert icb.sector_code == self.sector_code
-        assert icb.sub_sector_code == self.sub_sector_code
+        self.assertEqual(icb.industry_name, self.industry_name)
+        self.assertEqual(icb.super_sector_name, self.super_sector_name)
+        self.assertEqual(icb.sector_name, self.sector_name)
+        self.assertEqual(icb.sub_sector_name, self.sub_sector_name)
+        self.assertEqual(icb.industry_code, self.industry_code)
+        self.assertEqual(icb.super_sector_code, self.super_sector_code)
+        self.assertEqual(icb.sector_code, self.sector_code)
+        self.assertEqual(icb.sub_sector_code, self.sub_sector_code)
 
     def test_dump(self):
         """Dump and reuse class instances and their time series data to disk."""
@@ -1368,9 +1371,9 @@ class TestListedEquity(TestListed):
         # Methods to be tested
         ListedEquity.dump(self.session, dumper)
         # Verify dump files exists.
-        assert dumper.exists(ListedEquity), "Listed dump file not found."
-        assert dumper.exists(ListedEOD), "ListedEOD dump file not found."
-        assert dumper.exists(Dividend), "Dividend dump file not found."
+        self.assertTrue(dumper.exists(ListedEquity), "Listed dump file not found.")
+        self.assertTrue(dumper.exists(ListedEOD), "ListedEOD dump file not found.")
+        self.assertTrue(dumper.exists(Dividend), "Dividend dump file not found.")
 
         # Dumper
         ListedEquity.reuse(self.session, dumper)
@@ -1378,21 +1381,21 @@ class TestListedEquity(TestListed):
         # Test one ListedEquity instance
         listed = ListedEquity.factory(self.session, self.isin)
         # Attributes
-        assert isinstance(listed, ListedEquity)
-        assert listed.name == self.name
+        self.assertIsInstance(listed, ListedEquity)
+        self.assertEqual(listed.name, self.name)
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        assert listed.issuer == issuer
-        assert listed.isin == self.isin
-        assert listed.exchange.mic == self.mic
-        assert listed.ticker == self.ticker
+        self.assertEqual(listed.issuer, issuer)
+        self.assertEqual(listed.isin, self.isin)
+        self.assertEqual(listed.exchange.mic, self.mic)
+        self.assertEqual(listed.ticker, self.ticker)
         # Check domicile, against ISIN, against issuer arguments.
-        assert listed.domicile.country_code == self.isin[0:2]
-        assert listed.domicile.country_code == self.issuer_domicile_code
-        assert listed.domicile == listed.issuer.domicile
+        self.assertEqual(listed.domicile.country_code, self.isin[0:2])
+        self.assertEqual(listed.domicile.country_code, self.issuer_domicile_code)
+        self.assertEqual(listed.domicile, listed.issuer.domicile)
         # Check status
-        assert listed.status == listed.status
+        self.assertEqual(listed.status, listed.status)
 
         # Retrieve the submitted ListedEOD data from asset_base
         df = pd.DataFrame(
@@ -1404,7 +1407,7 @@ class TestListedEquity(TestListed):
         # Test against last date test_values data
         last_date = pd.to_datetime(self.to_date)
         df = df[df["date_stamp"] == last_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
@@ -1420,9 +1423,9 @@ class TestListedEquity(TestListed):
         df = df.loc[self.div_from_date : self.div_to_date]
         df.reset_index(inplace=True)
         # Test
-        assert len(df) == 12
+        self.assertEqual(len(df), 12)
         df.reset_index(inplace=True, drop=True)
-        assert set(df.columns) == set(self.div_columns)
+        self.assertEqual(set(df.columns), set(self.div_columns))
         # Test against last 3 dividends
         df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
         date_to_str(df)  # Convert Timestamps
@@ -1461,7 +1464,7 @@ class TestListedEquity(TestListed):
         # Test against last date test_values data
         last_date = pd.to_datetime(self.to_date)
         df = df[df["date_stamp"] == last_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
@@ -1477,17 +1480,19 @@ class TestListedEquity(TestListed):
         df = df.loc[self.div_from_date : self.div_to_date]
         df.reset_index(inplace=True)
         # Test
-        assert len(df) == 12
+        self.assertEqual(len(df), 12)
         df.reset_index(inplace=True, drop=True)
-        assert set(df.columns) == set(self.div_columns)
+        self.assertEqual(set(df.columns), set(self.div_columns))
         # Test against last 3 dividends
         df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
         date_to_str(df)  # Convert Timestamps
         df.replace({pd.NaT: None}, inplace=True)  # Replace pandas NaT with None
-        assert df.sort_index(axis="columns").equals(
+        self.assertTrue(
+            df.sort_index(axis="columns").equals(
                 self.div_test_df.sort_index(axis="columns")
-            ), \
-            "Dividend test data mismatch"
+            ),
+            "Dividend test data mismatch",
+        )
 
     def test_get_dividend_series(self):
         """Return the EOD trade data series for the security."""
@@ -1541,13 +1546,13 @@ class TestListedEquity(TestListed):
         # NOTE: These values may change as EOD historical data gets corrected
         last_date = pd.to_datetime(self.to_date)
         price = listed.time_series()
-        assert price[last_date] == 54.60
+        self.assertEqual(price[last_date], 54.60)
         volume = listed.time_series(series="volume")
-        assert volume[last_date] == 112700
+        self.assertEqual(volume[last_date], 112700)
         dividend = listed.time_series(series="dividend")
-        assert dividend.loc["2020-10-21"] == 0.091925
+        self.assertEqual(dividend.loc["2020-10-21"], 0.091925)
         total_price = listed.time_series(return_type="total_price")
-        assert total_price[last_date] == 81.24353503753133
+        self.assertEqual(total_price[last_date], 81.24353503753133)
 
 
 class TestIndex(TestBase):
@@ -1600,20 +1605,20 @@ class TestIndex(TestBase):
     def test___init__(self):
         """Initialization."""
         index = Index(self.index_name, self.ticker, self.currency, True)
-        assert isinstance(index, Index)
-        assert index.total_return
+        self.assertIsInstance(index, Index)
+        self.assertTrue(index.total_return)
 
     def test___str__(self):
         index = Index(self.index_name, self.ticker, self.currency)
-        assert self.test_str == index.__str__()
+        self.assertEqual(self.test_str, index.__str__())
 
     def test_key_code(self):
         index = Index(self.index_name, self.ticker, self.currency)
-        assert self.key_code == index.key_code
+        self.assertEqual(self.key_code, index.key_code)
 
     def test_identity_code(self):
         index = Index(self.index_name, self.ticker, self.currency)
-        assert self.identity_code == index.identity_code
+        self.assertEqual(self.identity_code, index.identity_code)
 
     def test_factory(self):
         """Manufacture/retrieve an instance from the given parameters."""
@@ -1625,15 +1630,15 @@ class TestIndex(TestBase):
             self.session, self.index_name, self.ticker, self.currency_ticker
         )
         # Despite using factory twice there should be only one instance
-        assert len(self.session.query(Index).all()) == 1
+        self.assertEqual(len(self.session.query(Index).all()), 1)
         # Attributes
-        assert index.name == self.index_name
-        assert index.currency_ticker == self.currency_ticker
+        self.assertEqual(index.name, self.index_name)
+        self.assertEqual(index.currency_ticker, self.currency_ticker)
         # Get same
         indx1 = Index.factory(
             self.session, self.index_name, self.ticker, self.currency_ticker
         )
-        assert index == indx1
+        self.assertEqual(index, indx1)
 
     def test_update_all(self):
         """Update/create all the objects in the asset_base session."""

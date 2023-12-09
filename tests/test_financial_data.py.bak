@@ -22,7 +22,6 @@ from src.asset_base.financial_data import MetaData
 from src.asset_base.financial_data import History
 from src.asset_base.entity import Currency, Domicile, Exchange
 from src.asset_base.asset import Forex, Index, Listed
-import pytest
 
 
 class TestStatic(unittest.TestCase):
@@ -37,54 +36,56 @@ class TestStatic(unittest.TestCase):
 
     def test___init__(self):
         """Initialization."""
-        assert isinstance(self.feed, Static)
-        assert self.feed._CLASS_DATA_PATH == "static"
+        self.assertIsInstance(self.feed, Static)
+        self.assertEqual(self.feed._CLASS_DATA_PATH, "static")
 
     def test_get_currency(self):
         """Get currency data from local static file."""
         columns = ["ticker", "name", "country_code_list"]
         data = self.feed.get_currency()
         country_code_list = "GB,GG,IM,JE"  # for GPB
-        assert data.columns.tolist() == columns
+        self.assertListEqual(data.columns.tolist(), columns)
         for i, row in data.iterrows():
             item0 = row[columns[0]]
             item1 = row[columns[1]]
-            assert isinstance(item0, str)
-            assert isinstance(item1, str)
-            assert len(item0) == 3
+            self.assertIsInstance(item0, str)
+            self.assertIsInstance(item1, str)
+            self.assertEqual(len(item0), 3)
         # Test country code list
-        assert set(data[data.ticker == "GBP"]["country_code_list"].tolist()[0]) == \
-            set(country_code_list)
+        self.assertEqual(
+            set(data[data.ticker == "GBP"]["country_code_list"].tolist()[0]),
+            set(country_code_list),
+        )
 
     def test_get_domicile(self):
         """Get currency data from local static file."""
         columns = ["country_code", "country_name", "currency_ticker"]
         data = self.feed.get_domicile()
-        assert set(data.columns.tolist()) == set(columns)
+        self.assertEqual(set(data.columns.tolist()), set(columns))
         for i, row in data.iterrows():
             item0 = row[columns[0]]
             item1 = row[columns[1]]
             item2 = row[columns[2]]
-            assert isinstance(item0, str)
-            assert isinstance(item1, str)
-            assert isinstance(item2, str)
-            assert len(item0) == 2
-            assert len(item2) == 3
+            self.assertIsInstance(item0, str)
+            self.assertIsInstance(item1, str)
+            self.assertIsInstance(item2, str)
+            self.assertEqual(len(item0), 2)
+            self.assertEqual(len(item2), 3)
 
     def test_get_exchange(self):
         """Get currency data from local static file."""
         columns = ["country_code", "mic", "exchange_name", "eod_code"]
         data = self.feed.get_exchange()
-        assert set(data.columns.tolist()) == set(columns)
+        self.assertEqual(set(data.columns.tolist()), set(columns))
         for i, row in data.iterrows():
             item0 = row[columns[0]]
             item1 = row[columns[1]]
             item2 = row[columns[2]]
-            assert isinstance(item0, str)
-            assert isinstance(item1, str)
-            assert isinstance(item2, str)
-            assert len(item0) == 2
-            assert len(item1) == 4
+            self.assertIsInstance(item0, str)
+            self.assertIsInstance(item1, str)
+            self.assertIsInstance(item2, str)
+            self.assertEqual(len(item0), 2)
+            self.assertEqual(len(item1), 4)
 
 
 class TestMetaData(unittest.TestCase):
@@ -101,8 +102,8 @@ class TestMetaData(unittest.TestCase):
 
     def test___init__(self):
         """Initialization."""
-        assert isinstance(self.feed, MetaData)
-        assert self.feed._CLASS_DATA_PATH == "static"
+        self.assertIsInstance(self.feed, MetaData)
+        self.assertEqual(self.feed._CLASS_DATA_PATH, "static")
 
     def test_get_etfs(self):
         """Fetch JSE ETF mata-data from a local file."""
@@ -131,7 +132,7 @@ class TestMetaData(unittest.TestCase):
             "distributions": bool,
         }
         data = self.feed.get_etfs()
-        assert set(data.columns.tolist()) == set(columns_dict.keys())
+        self.assertEqual(set(data.columns.tolist()), set(columns_dict.keys()))
 
     def test_get_indices(self):
         """Fetch indices form the feeds."""
@@ -194,8 +195,8 @@ class TestSecuritiesHistory(unittest.TestCase):
 
     def test___init__(self):
         """Initialization."""
-        assert isinstance(self.feed, History)
-        assert self.feed._CLASS_DATA_PATH == None
+        self.assertIsInstance(self.feed, History)
+        self.assertEqual(self.feed._CLASS_DATA_PATH, None)
 
     def test_get_eod(self):
         """Get historical EOD for a specified list of securities."""
@@ -376,7 +377,7 @@ class TestDump(unittest.TestCase):
     def test___init__(self):
         """Initialization."""
         path = self.dumper._path()
-        assert os.path.isdir(path), "Dump path does not exist."
+        self.assertTrue(os.path.isdir(path), "Dump path does not exist.")
 
     def test_write_read(self):
         """Write and read back a dict of data frames to CSV files."""
@@ -384,7 +385,7 @@ class TestDump(unittest.TestCase):
         # Test if dump files exist
         for file_name in self.data_files:
             path = self.dumper._path(file_name)
-            assert os.path.isfile(path), f"Dump path {path} does not exist."
+            self.assertTrue(os.path.isfile(path), f"Dump path {path} does not exist.")
         # Test read back data
         name_list = self.data_dict.keys()
         dump_dict = self.dumper.read(name_list)
@@ -395,7 +396,7 @@ class TestDump(unittest.TestCase):
     def test_read_fail(self):
         """Fails dump file read."""
         name_list = self.data_dict.keys()
-        with pytest.raises(DumpReadError):
+        with self.assertRaises(DumpReadError):
             self.dumper.read(name_list)
 
     def test_delete(self):

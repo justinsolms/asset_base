@@ -9,7 +9,6 @@ from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
 from src.asset_base.asset import Forex, Index, Listed, ListedEquity
 from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, SimpleEOD
 from src.asset_base.time_series import TimeSeriesBase, ListedEOD, TradeEOD
-import pytest
 
 
 class TestTimeSeriesBase(unittest.TestCase):
@@ -78,9 +77,9 @@ class TestTimeSeriesBase(unittest.TestCase):
             status=self.status,
         )
         ts_item = TimeSeriesBase(self.listed, date_stamp=datetime.date.today())
-        assert isinstance(ts_item, TimeSeriesBase)
-        assert ts_item._asset_id == self.listed.id
-        assert ts_item.date_stamp == datetime.date.today()
+        self.assertIsInstance(ts_item, TimeSeriesBase)
+        self.assertEqual(ts_item._asset_id, self.listed.id)
+        self.assertEqual(ts_item.date_stamp, datetime.date.today())
 
     def test_unique_constraint(self):
         """Fail the UniqueConstraint('_listed_id', 'date_stamp')"""
@@ -100,7 +99,7 @@ class TestTimeSeriesBase(unittest.TestCase):
         ts_item2 = TimeSeriesBase(self.listed, date_stamp=datetime.date.today())
         self.session.add(ts_item1)
         self.session.add(ts_item2)
-        with pytest.raises(IntegrityError):
+        with self.assertRaises(IntegrityError):
             self.session.flush()
 
 
@@ -123,9 +122,9 @@ class TestSimpleEOD(TestTimeSeriesBase):
         # Query the superclass Asset which should produce a Cash polymorphic
         # instance
         instance = self.session.query(TimeSeriesBase).one()
-        assert instance._class_name == "SimpleEOD"
-        assert instance._discriminator == "simple_eod"
-        assert ts_item == instance
+        self.assertEqual(instance._class_name, "SimpleEOD")
+        self.assertEqual(instance._discriminator, "simple_eod")
+        self.assertEqual(ts_item, instance)
 
 
 class TestTradeEOD(TestTimeSeriesBase):
@@ -241,34 +240,34 @@ class TestForexEOD(TestTradeEOD):
             volume=6.0,
         )
         self.session.add(forex_eod)
-        assert isinstance(forex_eod, ForexEOD)
+        self.assertIsInstance(forex_eod, ForexEOD)
         # test the inherited Asset backref
-        assert forex_eod.base_obj == forex
-        assert forex_eod.date_stamp == datetime.date.today()
-        assert forex_eod._close == forex_eod._close
-        assert forex_eod._open == 1.0
-        assert forex_eod._close == 2.0
-        assert forex_eod._high == 3.0
-        assert forex_eod._low == 4.0
-        assert forex_eod._adjusted_close == 5.0
-        assert forex_eod._volume == 6.0
+        self.assertEqual(forex_eod.base_obj, forex)
+        self.assertEqual(forex_eod.date_stamp, datetime.date.today())
+        self.assertEqual(forex_eod._close, forex_eod._close)
+        self.assertEqual(forex_eod._open, 1.0)
+        self.assertEqual(forex_eod._close, 2.0)
+        self.assertEqual(forex_eod._high, 3.0)
+        self.assertEqual(forex_eod._low, 4.0)
+        self.assertEqual(forex_eod._adjusted_close, 5.0)
+        self.assertEqual(forex_eod._volume, 6.0)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        assert instance._class_name == "ForexEOD"
-        assert instance._discriminator == "forex_eod"
-        assert forex_eod == instance
+        self.assertEqual(instance._class_name, "ForexEOD")
+        self.assertEqual(instance._discriminator, "forex_eod")
+        self.assertEqual(forex_eod, instance)
 
         # Test Forex._eod_series <-> ForexEOD.forex relationship
-        assert forex._series[0] == forex_eod
-        assert forex._eod_series[0] == forex_eod
-        assert forex_eod.forex == forex
+        self.assertEqual(forex._series[0], forex_eod)
+        self.assertEqual(forex._eod_series[0], forex_eod)
+        self.assertEqual(forex_eod.forex, forex)
 
         # Test that ListedEquity._eod_series lists purely ListedEOD instances
         # and Forex._eod_series lists purely ForexEOD instances.
         # This requires the addition of a Listed in addition to the ListedEOD.
-        assert len(forex._series) == 1
+        self.assertEqual(len(forex._series), 1)
         listed = Listed.factory(self.session, isin=self.isin)
         listed_eod = ListedEOD(
             listed,
@@ -282,19 +281,19 @@ class TestForexEOD(TestTradeEOD):
         )
         self.session.add(listed_eod)
         # (again) Test Forex._eod_series <-> ForexEOD.forex relationship
-        assert forex._series[0] == forex_eod
-        assert forex._eod_series[0] == forex_eod
-        assert forex_eod.forex == forex
+        self.assertEqual(forex._series[0], forex_eod)
+        self.assertEqual(forex._eod_series[0], forex_eod)
+        self.assertEqual(forex_eod.forex, forex)
         # Test Listed._eod_series <-> ListedEOD.listed relationship
-        assert len(listed._eod_series) == 1
-        assert listed._eod_series[0] == listed_eod
-        assert listed_eod.listed == listed
+        self.assertEqual(len(listed._eod_series), 1)
+        self.assertEqual(listed._eod_series[0], listed_eod)
+        self.assertEqual(listed_eod.listed, listed)
         # There should now be two time TimeSeriesBase instances
-        assert len(forex._series) == 1
-        assert len(listed._series) == 1
+        self.assertEqual(len(forex._series), 1)
+        self.assertEqual(len(listed._series), 1)
         # Test equivalence of the TimeSeriesBase._series parent attribute
-        assert forex._series == forex._eod_series
-        assert listed._series == listed._eod_series
+        self.assertEqual(forex._series, forex._eod_series)
+        self.assertEqual(listed._series, listed._eod_series)
 
 
 class TestIndexEOD(TestTradeEOD):
@@ -348,34 +347,34 @@ class TestIndexEOD(TestTradeEOD):
             volume=6.0,
         )
         self.session.add(index_eod)
-        assert isinstance(index_eod, IndexEOD)
+        self.assertIsInstance(index_eod, IndexEOD)
         # test the inherited Asset backref
-        assert index_eod.base_obj == index
-        assert index_eod.date_stamp == datetime.date.today()
-        assert index_eod._close == index_eod._close
-        assert index_eod._open == 1.0
-        assert index_eod._close == 2.0
-        assert index_eod._high == 3.0
-        assert index_eod._low == 4.0
-        assert index_eod._adjusted_close == 5.0
-        assert index_eod._volume == 6.0
+        self.assertEqual(index_eod.base_obj, index)
+        self.assertEqual(index_eod.date_stamp, datetime.date.today())
+        self.assertEqual(index_eod._close, index_eod._close)
+        self.assertEqual(index_eod._open, 1.0)
+        self.assertEqual(index_eod._close, 2.0)
+        self.assertEqual(index_eod._high, 3.0)
+        self.assertEqual(index_eod._low, 4.0)
+        self.assertEqual(index_eod._adjusted_close, 5.0)
+        self.assertEqual(index_eod._volume, 6.0)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        assert instance._class_name == "IndexEOD"
-        assert instance._discriminator == "index_eod"
-        assert index_eod == instance
+        self.assertEqual(instance._class_name, "IndexEOD")
+        self.assertEqual(instance._discriminator, "index_eod")
+        self.assertEqual(index_eod, instance)
 
         # Test Forex._eod_series <-> IndexEOD.index relationship
-        assert index._series[0] == index_eod
-        assert index._eod_series[0] == index_eod
-        assert index_eod.index == index
+        self.assertEqual(index._series[0], index_eod)
+        self.assertEqual(index._eod_series[0], index_eod)
+        self.assertEqual(index_eod.index, index)
 
         # Test that `ListedEquity._eod_series` lists purely `ListedEOD`
         # instances and Forex._eod_series lists purely IndexEOD instances. This
         # requires the addition of a `Listed` in addition to the `ListedEOD`.
-        assert len(index._series) == 1
+        self.assertEqual(len(index._series), 1)
         listed = Listed.factory(self.session, isin=self.isin)
         listed_eod = ListedEOD(
             listed,
@@ -389,19 +388,19 @@ class TestIndexEOD(TestTradeEOD):
         )
         self.session.add(listed_eod)
         # (again) Test Forex._eod_series <-> IndexEOD.index relationship
-        assert index._series[0] == index_eod
-        assert index._eod_series[0] == index_eod
-        assert index_eod.index == index
+        self.assertEqual(index._series[0], index_eod)
+        self.assertEqual(index._eod_series[0], index_eod)
+        self.assertEqual(index_eod.index, index)
         # Test Listed._eod_series <-> ListedEOD.listed relationship
-        assert len(listed._eod_series) == 1
-        assert listed._eod_series[0] == listed_eod
-        assert listed_eod.listed == listed
+        self.assertEqual(len(listed._eod_series), 1)
+        self.assertEqual(listed._eod_series[0], listed_eod)
+        self.assertEqual(listed_eod.listed, listed)
         # There should now be two time TimeSeriesBase instances
-        assert len(index._series) == 1
-        assert len(listed._series) == 1
+        self.assertEqual(len(index._series), 1)
+        self.assertEqual(len(listed._series), 1)
         # Test equivalence of the TimeSeriesBase._series parent attribute
-        assert index._series == index._eod_series
-        assert listed._series == listed._eod_series
+        self.assertEqual(index._series, index._eod_series)
+        self.assertEqual(listed._series, listed._eod_series)
 
 
 class TestListedEOD(TestTradeEOD):
@@ -450,29 +449,29 @@ class TestListedEOD(TestTradeEOD):
             volume=6.0,
         )
         self.session.add(listed_eod)
-        assert isinstance(listed_eod, ListedEOD)
+        self.assertIsInstance(listed_eod, ListedEOD)
         # test the inherited Asset backref
-        assert listed_eod.base_obj == listed
-        assert listed_eod.date_stamp == datetime.date.today()
-        assert listed_eod._close == listed_eod._close
-        assert listed_eod._open == 1.0
-        assert listed_eod._close == 2.0
-        assert listed_eod._high == 3.0
-        assert listed_eod._low == 4.0
-        assert listed_eod._adjusted_close == 5.0
-        assert listed_eod._volume == 6.0
+        self.assertEqual(listed_eod.base_obj, listed)
+        self.assertEqual(listed_eod.date_stamp, datetime.date.today())
+        self.assertEqual(listed_eod._close, listed_eod._close)
+        self.assertEqual(listed_eod._open, 1.0)
+        self.assertEqual(listed_eod._close, 2.0)
+        self.assertEqual(listed_eod._high, 3.0)
+        self.assertEqual(listed_eod._low, 4.0)
+        self.assertEqual(listed_eod._adjusted_close, 5.0)
+        self.assertEqual(listed_eod._volume, 6.0)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        assert instance._class_name == "ListedEOD"
-        assert instance._discriminator == "listed_eod"
-        assert listed_eod == instance
+        self.assertEqual(instance._class_name, "ListedEOD")
+        self.assertEqual(instance._discriminator, "listed_eod")
+        self.assertEqual(listed_eod, instance)
 
         # Test Listed._eod_series <-> ListedEOD.listed relationship
-        assert listed._series[0] == listed_eod
-        assert listed._eod_series[0] == listed_eod
-        assert listed_eod.listed == listed
+        self.assertEqual(listed._series[0], listed_eod)
+        self.assertEqual(listed._eod_series[0], listed_eod)
+        self.assertEqual(listed_eod.listed, listed)
 
     def test_session_commit(self):
         """Committing to the database."""
@@ -492,7 +491,7 @@ class TestListedEOD(TestTradeEOD):
         )
         self.session.add(ts_item)
         self.session.commit()
-        assert ts_item.base_obj == listed
+        self.assertEqual(ts_item.base_obj, listed)
 
     def test_data_frame(self):
         """To and from dataframe."""
@@ -549,7 +548,7 @@ class TestListedEOD(TestTradeEOD):
         # Dump methods to be tested
         ListedEOD.dump(self.session, dumper, Listed)
         # Verify dump file exists.
-        assert dumper.exists(ListedEOD), "ListedEOD dump file not found."
+        self.assertTrue(dumper.exists(ListedEOD), "ListedEOD dump file not found.")
 
 
 class TestDividend(TestTimeSeriesBase):
@@ -640,33 +639,33 @@ class TestDividend(TestTimeSeriesBase):
             adjusted_value=1.01,
         )
         self.session.add(dividend)
-        assert isinstance(dividend, Dividend)
-        assert dividend.base_obj == listed_equity
-        assert dividend.date_stamp == datetime.date.today()
-        assert dividend.currency == "ZAR"
-        assert dividend.declaration_date == datetime.date.today()
-        assert dividend.payment_date == datetime.date.today()
-        assert dividend.period == "Quarterly"
-        assert dividend.record_date == datetime.date.today()
-        assert dividend._unadjusted_value == 1.0
-        assert dividend._adjusted_value == 1.01
+        self.assertIsInstance(dividend, Dividend)
+        self.assertEqual(dividend.base_obj, listed_equity)
+        self.assertEqual(dividend.date_stamp, datetime.date.today())
+        self.assertEqual(dividend.currency, "ZAR")
+        self.assertEqual(dividend.declaration_date, datetime.date.today())
+        self.assertEqual(dividend.payment_date, datetime.date.today())
+        self.assertEqual(dividend.period, "Quarterly")
+        self.assertEqual(dividend.record_date, datetime.date.today())
+        self.assertEqual(dividend._unadjusted_value, 1.0)
+        self.assertEqual(dividend._adjusted_value, 1.01)
 
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a Dividend polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        assert instance._class_name == "Dividend"
-        assert instance._discriminator == "dividend"
-        assert dividend == instance
+        self.assertEqual(instance._class_name, "Dividend")
+        self.assertEqual(instance._discriminator, "dividend")
+        self.assertEqual(dividend, instance)
 
         # Test Listed._eod_series <-> ListedEOD.listed relationship
-        assert listed_equity._series[0] == dividend
-        assert listed_equity._dividend_series[0] == dividend
-        assert dividend.listed_equity == listed_equity
+        self.assertEqual(listed_equity._series[0], dividend)
+        self.assertEqual(listed_equity._dividend_series[0], dividend)
+        self.assertEqual(dividend.listed_equity, listed_equity)
 
         # Test that ListedEquity._eod_series lists purely ListedEOD instances
         # and ListedEquity._dividend_series lists purely Dividend instances.
         # This requires the addition of a ListedEOD in addition to the Dividend.
-        assert len(listed_equity._series) == 1
+        self.assertEqual(len(listed_equity._series), 1)
         listed_eod = ListedEOD(
             listed_equity,
             date_stamp=datetime.date.today(),
@@ -679,15 +678,15 @@ class TestDividend(TestTimeSeriesBase):
         )
         self.session.add(listed_eod)
         # Test Listed._eod_series <-> ListedEOD.listed relationship
-        assert len(listed_equity._eod_series) == 1
-        assert listed_equity._eod_series[0] == listed_eod
-        assert listed_eod.listed == listed_equity
+        self.assertEqual(len(listed_equity._eod_series), 1)
+        self.assertEqual(listed_equity._eod_series[0], listed_eod)
+        self.assertEqual(listed_eod.listed, listed_equity)
         # (again) Test Listed._eod_series <-> ListedEOD.listed relationship
-        assert len(listed_equity._dividend_series) == 1
-        assert listed_equity._dividend_series[0] == dividend
-        assert dividend.listed_equity == listed_equity
+        self.assertEqual(len(listed_equity._dividend_series), 1)
+        self.assertEqual(listed_equity._dividend_series[0], dividend)
+        self.assertEqual(dividend.listed_equity, listed_equity)
         # There should now be two time TimeSeriesBase instances
-        assert len(listed_equity._series) == 2
+        self.assertEqual(len(listed_equity._series), 2)
 
     def test_session_commit(self):
         """Committing to the database."""
@@ -709,8 +708,8 @@ class TestDividend(TestTimeSeriesBase):
         )
         self.session.add(ts_item)
         self.session.commit()
-        assert ts_item.base_obj == listed_equity
-        assert ts_item._asset_id == listed_equity.id
+        self.assertEqual(ts_item.base_obj, listed_equity)
+        self.assertEqual(ts_item._asset_id, listed_equity.id)
 
     def test_data_frame(self):
         """Convert all instances to a single data table."""
@@ -779,7 +778,7 @@ class TestDividend(TestTimeSeriesBase):
         # Methods to be tested
         Dividend.dump(self.session, dumper, ListedEquity)
         # Verify dump file exists.
-        assert dumper.exists(Dividend), "Dividend dump file not found."
+        self.assertTrue(dumper.exists(Dividend), "Dividend dump file not found.")
 
 
 class Suite(object):

@@ -25,7 +25,6 @@ from src.asset_base.eod_historical_data import Historical
 from src.asset_base.eod_historical_data import Bulk
 from src.asset_base.eod_historical_data import MultiHistorical
 from src.asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns
-import pytest
 
 
 def assert_date_index(tester, df):
@@ -148,7 +147,7 @@ class TestAPI(aiounittest.AsyncTestCase):
     async def test___init__(self):
         """Test Initialization."""
         async with APISessionManager() as api:
-            assert isinstance(api, APISessionManager)
+            self.assertIsInstance(api, APISessionManager)
 
     async def test_get(self):
         """Get with the possibility of retries to the API."""
@@ -158,7 +157,7 @@ class TestAPI(aiounittest.AsyncTestCase):
 
     async def test_bad_ticker(self):
         """Fail with ticker not found."""
-        with pytest.raises(Exception):
+        with self.assertRaises(Exception):
             async with APISessionManager() as api:
                 await api.get(self.endpoint_bad, self.params)
 
@@ -202,7 +201,7 @@ class TestHistorical(aiounittest.AsyncTestCase):
         """Test Initialization."""
         # Is this a subclass of _API?
         async with Historical() as historical:
-            assert isinstance(historical, APISessionManager)
+            self.assertIsInstance(historical, APISessionManager)
 
     async def test_get_eod(self):
         """Get daily, EOD historical over a date range."""
@@ -261,7 +260,7 @@ class TestBulk(aiounittest.AsyncTestCase):
         """Test Initialization."""
         # Is this a subclass of _API?
         async with Bulk() as bulk:
-            assert isinstance(bulk, APISessionManager)
+            self.assertIsInstance(bulk, APISessionManager)
 
     async def test_get_eod(self):
         """Get bulk EOD price and volume for the exchange on a date."""
@@ -295,13 +294,13 @@ class TestBulk(aiounittest.AsyncTestCase):
         ]
         test_df = pd.Series(column_types, index=columns)
         pd.testing.assert_series_equal(test_df, df.dtypes)
-        assert index_type == df.index.dtype
-        assert index_names == df.index.names
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
         test_index_list = [
             (pd.Timestamp("2020-12-31 00:00:00"), "AAPL", "US"),
             (pd.Timestamp("2020-12-31 00:00:00"), "MCD", "US"),
         ]
-        assert test_index_list == df.index.tolist()
+        self.assertEqual(test_index_list, df.index.tolist())
 
     async def test_get_dividends(self):
         """Get bulk EOD dividends for the exchange on a date."""
@@ -331,8 +330,8 @@ class TestBulk(aiounittest.AsyncTestCase):
         ]
         test_df = pd.Series(column_types, index=columns)
         pd.testing.assert_series_equal(test_df, df.dtypes)
-        assert index_type == df.index.dtype
-        assert index_names == df.index.names
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
         # The index is too long to test content.
 
     async def test_get_splits(self):
@@ -347,8 +346,8 @@ class TestBulk(aiounittest.AsyncTestCase):
         column_types = [np.dtype("object")]
         test_df = pd.Series(column_types, index=columns)
         pd.testing.assert_series_equal(test_df, df.dtypes)
-        assert index_type == df.index.dtype
-        assert index_names == df.index.names
+        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(index_names, df.index.names)
         # The index is too long to test content.
 
 
@@ -378,8 +377,10 @@ class TestExchanges(unittest.TestCase):
         ]
         test_row = ["USA Stocks", "US", "XNAS, XNYS", "USA", "USD", "US", "USA"]
         table = self.exchanges.get_exchanges()
-        assert test_columns == table.columns.tolist()
-        assert test_row == table[table["Name"] == "USA Stocks"].values.tolist()[0]
+        self.assertEqual(test_columns, table.columns.tolist())
+        self.assertEqual(
+            test_row, table[table["Name"] == "USA Stocks"].values.tolist()[0]
+        )
 
     def test_get_exchange_symbol_list(self):
         """Get the full list symbols (tickers) on the exchange."""
@@ -402,8 +403,8 @@ class TestExchanges(unittest.TestCase):
             "ZAE000063863",
         ]
         table = self.exchanges.get_exchange_symbols(self.exchange)
-        assert test_columns == table.columns.tolist()
-        assert test_row == table[table["Code"] == "WHL"].values.tolist()[0]
+        self.assertEqual(test_columns, table.columns.tolist())
+        self.assertEqual(test_row, table[table["Code"] == "WHL"].values.tolist()[0])
 
     def test_get_indices_list(self):
         """Get a list of supported indices."""
@@ -463,7 +464,7 @@ class TestMultiHistorical(unittest.TestCase):
 
     def test___init__(self):
         """Test Initialization."""
-        assert isinstance(self.historical, MultiHistorical)
+        self.assertIsInstance(self.historical, MultiHistorical)
 
     def test__get_eod(self):
         """Get historical data for a list of securities."""
@@ -513,14 +514,16 @@ class TestMultiHistorical(unittest.TestCase):
         # Test-rank columns
         df = df[columns]
         # Test
-        assert set(df.index.names) == set(index_names)
-        assert set(df.columns) == set(columns)
+        self.assertEqual(set(df.index.names), set(index_names))
+        self.assertEqual(set(df.columns), set(columns))
         df = df.loc[to_date]
-        assert not df.empty
+        self.assertFalse(df.empty)
         for i, item in enumerate(df.iterrows()):
             symbol, series = item
-            assert test_values[i] == \
-                series.tolist()
+            self.assertEqual(
+                test_values[i],
+                series.tolist(),
+            )
 
     def test_get_eod(self):
         """Get historical data for a list of securities."""

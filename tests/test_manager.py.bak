@@ -57,9 +57,11 @@ def assert_no_index_duplicates(security, security1, security2):
                 pass  # No data, therefore no duplicates
             # Parameter `keep=False` actually means "keep duplicates"!!!
             index = data.index.duplicated(keep=False)
-            assert not index.any(), \
-                f"The {series} series of {sec.identity_code} " \
-                "has duplicates in it's index."
+            self.assertFalse(  # BUG: We cannot use `self` here
+                index.any(),
+                f"The {series} series of {sec.identity_code} "
+                "has duplicates in it's index.",
+            )
 
 class TestManagerInit(unittest.TestCase):
     """Manager sessions with different backend databases"""
@@ -74,15 +76,15 @@ class TestManagerInit(unittest.TestCase):
         test_name = 'Common class instance'
         session = self.manager.session
         test_obj = Common(test_name)
-        assert isinstance(test_obj, Common)
-        assert test_obj.id is None
+        self.assertIsInstance(test_obj, Common)
+        self.assertIsNone(test_obj.id)
         session.add(test_obj)
-        assert test_obj.id is None
+        self.assertIsNone(test_obj.id)
         session.flush()
-        assert test_obj.id is not None
+        self.assertIsNotNone(test_obj.id)
         obj = session.query(Common).filter(Common.name==test_name).one()
-        assert test_obj == obj
-        assert obj.name == test_name
+        self.assertEqual(test_obj, obj)
+        self.assertEqual(obj.name, test_name)
 
     def test_make_session_memory(self):
         """Make database sessions in either sqlite, mysql or memory."""
@@ -157,7 +159,7 @@ class TestManager(unittest.TestCase):
 
     def test___init__(self):
         """Instance initialization."""
-        assert isinstance(self.manager, Manager)
+        self.assertIsInstance(self.manager, Manager)
 
     def test_dump(self):
         """Dump re-usable content to disk files."""
@@ -165,10 +167,10 @@ class TestManager(unittest.TestCase):
         # Must have dumped ListedEquity data for this test to work!
         dumper = Dump(testing=True)
         data = dumper.read(["ListedEquity", "ListedEOD", "Dividend"])
-        assert isinstance(data, dict)
-        assert "ListedEquity" in data.keys()
-        assert "ListedEOD" in data.keys()
-        assert "Dividend" in data.keys()
+        self.assertIsInstance(data, dict)
+        self.assertIn("ListedEquity", data.keys())
+        self.assertIn("ListedEOD", data.keys())
+        self.assertIn("Dividend", data.keys())
 
     def test_reuse(self):
         """Reuse dumped data as a database initialization resource."""
@@ -227,7 +229,7 @@ class TestManager(unittest.TestCase):
             "AAPL": 0.4557730329977179,
             "MCD": 1.113204809354809,
         }
-        assert test_data == data_check_prod
+        self.assertEqual(test_data, data_check_prod)
 
     def test_time_series_forex(self):
         """Test all securities time series with currency transformed to ZAR."""
@@ -248,11 +250,11 @@ class TestManager(unittest.TestCase):
         aapl = recover["AAPL"][~recover["AAPL"].isna()]
         mcd = recover["MCD"][~recover["MCD"].isna()]
         # The MCD and APPL should, within rounding errors, correspond
-        assert all(aapl.round(6) == mcd.round(6))
+        self.assertTrue(all(aapl.round(6) == mcd.round(6)))
         # This is ZAR to ZAR and should all be 1.0
-        assert all(stx_40 == 1.0)
+        self.assertTrue(all(stx_40 == 1.0))
         # The ZARUSD exchange rate is properly recovered
-        assert all(forex.reindex(aapl.index).USD.round(6) == aapl.round(6))
+        self.assertTrue(all(forex.reindex(aapl.index).USD.round(6) == aapl.round(6)))
 
 
 class Suite(object):
