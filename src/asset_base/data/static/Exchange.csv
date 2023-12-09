@@ -1,0 +1,666 @@
+Name,MIC,CountryCode,CountryName
+Abu Dhabi Securities Market,XADS,AE,United Arab Emirates
+Dubai Financial Market,XDFM,AE,United Arab Emirates
+Dubai Gold & Commodities Exchange Dmcc,DGCX,AE,United Arab Emirates
+Dubai Mercantile Exchange,DUMX,AE,United Arab Emirates
+Nasdaq Dubai,DIFX,AE,United Arab Emirates
+Tirana Stock Exchange,XTIR,AL,Albania
+Armenian Stock Exchange,XARM,AM,Armenia
+A1,XA1X,AR,Argentina
+Bolsa De Comercio Confederada S.A.,XCNF,AR,Argentina
+Bolsa De Comercio De Corboda,XBCC,AR,Argentina
+Bolsa De Comercio De Santa Fe,BCFS,AR,Argentina
+Bolsa De Comercio Rosario,XROS,AR,Argentina
+Bolsa De Commercio De Mendoza S.A.,XBCM,AR,Argentina
+Buenos Aires Cereal Exchange,BACE,AR,Argentina
+Buenos Aires Stock Exchange,XBUE,AR,Argentina
+Mercado A Termino De Buenos Aires S.A.,XMTB,AR,Argentina
+Mercado Abierto Electronico S.A.,XMAB,AR,Argentina
+Mercado De Valores De Buenos Aires S.A.,XMEV,AR,Argentina
+Mercado De Valores De Corboda,MVCX,AR,Argentina
+Mercado De Valores De Mendoza,XBCX,AR,Argentina
+Mercado De Valores De Rosario,XROX,AR,Argentina
+Mercado De Valores Del Litoral,XMVL,AR,Argentina
+Nueva Bolsa De Comercio De Tucuman S.A.,XTUC,AR,Argentina
+Rosario Future Exchange,ROFX,AR,Argentina
+Austrian Energy Exchange,EXAA,AT,Austria
+Wiener Boerse Ag,XWBO,AT,Austria
+Wiener Boerse Ag Amtlicher Handel (OFFICIAL Market) ,WBAH,AT,Austria
+Wiener Boerse Ag Dritter Markt (THIRD Market),WBDM,AT,Austria
+Wiener Boerse Ag Geregelter Freiverkehr (SEMI-OFFICIAL Market),WBGF,AT,Austria
+Asx - Sydney Futures Exchange Limited,XSFE,AU,Australia
+Australian Securities Exchange Limited,XASX,AU,Australia
+Australian Wheat Board,AWBX,AU,Australia
+Australian Wool Exchange,AWEX,AU,Australia
+Bendigo Stock Exchange Limited,NSXB,AU,Australia
+National Stock Exchange Of Australia Limited,XNEC,AU,Australia
+Yieldbroker Pty Ltd,XYIE,AU,Australia
+Baku Interbank Currency Exchange,XIBE,AZ,Azerbaijan
+Baku Stock Exchange,BSEX,AZ,Azerbaijan
+Banja Luka Stock Exchange,XBLB,BA,Bosnia and Herzegovina
+Sarajevo Stock Exchange,XSSE,BA,Bosnia and Herzegovina
+Barbados Stock Exchange,XBAB,BB,Barbados
+Chittagong Stock Exchange Ltd.,XCHG,BD,Bangladesh
+Dhaka Stock Exchange Ltd,XDHA,BD,Bangladesh
+Belgian Power Exchange,BLPX,BE,Belgium
+Fonds Des Rentes / Rentenfonds,FRRF,BE,Belgium
+Mts Belgium,BMTS,BE,Belgium
+Mts Denmark,MTSD,BE,Belgium
+Mts Finland,MTSF,BE,Belgium
+Nyse Euronext - Alternext Brussels,ALXB,BE,Belgium
+Nyse Euronext - Easy Next,ENXB,BE,Belgium
+Nyse Euronext - Euronext Brussels,XBRU,BE,Belgium
+Nyse Euronext - Euronext Brussels - Derivatives,XBRD,BE,Belgium
+Nyse Euronext - Marche Libre Brussels,MLXB,BE,Belgium
+Nyse Euronext - Trading Facility Brussels,TNLB,BE,Belgium
+Nyse Euronext - Ventes Publiques Brussels,VPXB,BE,Belgium
+Bulgarian Stock Exchange,XBUL,BG,Bulgaria
+Bahrain Stock Exchange,XBAH,BH,Bahrain
+Bermuda Stock Exchange Ltd,XBDA,BM,Bermuda
+Bolsa Boliviana De Valores S.A.,XBOL,BO,Bolivia Plurinational State of
+Bolsa De Mercadorias E Futuros,XBMF,BR,Brazil
+Bolsa De Valores De Sao Paulo,XBSP,BR,Brazil
+Cetip Sa - Balcao Organizado De Ativos E Derivativos,CETI,BR,Brazil
+Bahamas International Securities Exchange,XBAA,BS,Bahamas
+Botswana Stock Exchange,XBOT,BW,Botswana
+Belarus Currency And Stock Exchange,BCSE,BY,Belarus
+Alpha Ats,XATS,CA,Canada
+Canadian National Stock Exchange,XCNQ,CA,Canada
+Cannex Financial Exchange Lts,CANX,CA,Canada
+Chi-X Canada Ats,CHIC,CA,Canada
+Intercontinental Exchange - Ice Futures Canada,XWCE,CA,Canada
+Match Now,MATN,CA,Canada
+Montreal Climate Exchange,XMOC,CA,Canada
+Omega Ats,OMGA,CA,Canada
+Perimeter Financial Corp. - Blockbook Ats,XBBK,CA,Canada
+Pure Trading,PURE,CA,Canada
+The Montreal Exchange / Bourse De Montreal,XMOD,CA,Canada
+Toronto Stock Exchange,XTSE,CA,Canada
+Tsx Venture Exchange,XTSX,CA,Canada
+Tsx Venture Exchange - Nex,XTNX,CA,Canada
+Berne Stock Exchange,XBRN,CH,Switzerland
+Scoach Switzerland,XQMH,CH,Switzerland
+Six Swiss Exchange Ag,XVTX,CH,Switzerland
+Swiss Exchange,XSWX,CH,Switzerland
+Bourse Regionale Des Valeurs Mobilieres,XBRV,CI,?Côte d'Ivoire
+La Bolsa Electronica De Chile,XBCL,CL,Chile
+Santiago Stock Exchange,XSGO,CL,Chile
+Douala Stock Exchange,XDSX,CM,Cameroon
+China Financial Futures Exchange ,CCFX,CN,China
+China Foreign Exchange Trade System ,XCFE,CN,China
+Dalian Commodity Exchange,XDCE,CN,China
+Shanghai Futures Exchange,XSGE,CN,China
+Shanghai Gold Exchange,SGEX,CN,China
+Shanghai Stock Exchange,XSHG,CN,China
+Shenzhen Stock Exchange,XSHE,CN,China
+Zhengzhou Commodity Exchange,XZCE,CN,China
+Bolsa De Valores De Colombia,XBOG,CO,Colombia
+Bolsa Nacional De Valores S.A.,XBNV,CR,Costa Rica
+Cape Verde Stock Exchange,XBVC,CV,Cape Verde
+Cyprus Stock Exchange,XCYS,CY,Cyprus
+Cyprus Stock Exchange - Otc,XCYO,CY,Cyprus
+Mtf - Cyprus Exchange,XECM,CY,Cyprus
+Prague Energy Exchange,XPXE,CZ,Czech Republic
+Rm-System (MOS),XRMO,CZ,Czech Republic
+Rm-System A.S.,XRMZ,CZ,Czech Republic
+The Prague Stock Exchange,XPRA,CZ,Czech Republic
+360t,360T,DE,Germany
+Boerse Berlin,XBER,DE,Germany
+Boerse Berlin - Freiverkher,BERB,DE,Germany
+Boerse Berlin - Regulierter Markt,BERA,DE,Germany
+Boerse Berlin Equiduct Trading,XEQT,DE,Germany
+Boerse Berlin Equiduct Trading - Berlin Second Regulated Market,EQTB,DE,Germany
+Boerse Berlin Equiduct Trading - Regulierter Markt,EQTA,DE,Germany
+Boerse Duesseldorf,XDUS,DE,Germany
+Boerse Duesseldorf - Freiverkehr,DUSB,DE,Germany
+Boerse Duesseldorf - Quotrix - Regulierter Markt,DUSC,DE,Germany
+Boerse Duesseldorf - Quotrix Mtf,DUSD,DE,Germany
+Boerse Duesseldorf - Regulierter Markt,DUSA,DE,Germany
+Boerse Frankfurt - Freiverkehr,FRAB,DE,Germany
+Boerse Frankfurt - Regulierter Markt,FRAA,DE,Germany
+Boerse Hamburg - Freiverkehr,HAMB,DE,Germany
+Boerse Hamburg - Regulierter Markt,HAMA,DE,Germany
+Boerse Hannover - Freiverkehr,HANB,DE,Germany
+Boerse Hannover - Regulierter Markt,HANA,DE,Germany
+Boerse Muenchen,XMUN,DE,Germany
+Boerse Muenchen - Freiverkehr,MUNB,DE,Germany
+Boerse Muenchen - Freiverkher - Plus - Europe,PLUS,DE,Germany
+Boerse Muenchen - Regulierter Markt,MUNA,DE,Germany
+Boerse Stuttgart,XSTU,DE,Germany
+Boerse Stuttgart - Freiverkehr,STUB,DE,Germany
+Boerse Stuttgart - Regulierter Markt,STUA,DE,Germany
+Deutsche Bank Off Exchange Trading,DBOX,DE,Germany
+Deutsche Boerse Ag,XFRA,DE,Germany
+Eurex Bonds,XEUB,DE,Germany
+Eurex Clearing Ag,ECAG,DE,Germany
+Eurex Deutschland,XEUR,DE,Germany
+Eurex Repo Gmbh,XEUP,DE,Germany
+European Energy Exchange Ag,XEEE,DE,Germany
+Euwax,EUWX,DE,Germany
+Hanseatische Wertpapierboerse Hamburg,XHAM,DE,Germany
+Investro,XINV,DE,Germany
+Mts Deutschland Ag,GMTS,DE,Germany
+Newex,XNEW,DE,Germany
+Niedersaechsische Boerse Zu Hannover,XHAN,DE,Germany
+Risk Management Exchange,XHCE,DE,Germany
+Rtr (REUTERS-REALTIME-DATEN),XRTR,DE,Germany
+Tradegate Exchange - Freiverkehr,XGAT,DE,Germany
+Tradegate Exchange - Regulierter Markt,XGRM,DE,Germany
+Xetra,XETR,DE,Germany
+Xetra - Freiverkehr,XETB,DE,Germany
+Xetra - Regulierter Markt,XETA,DE,Germany
+Xetra International Market,XETI,DE,Germany
+Xetra International Market - Open Market,XETD,DE,Germany
+Xetra International Market - Regulated Market,XETC,DE,Germany
+Zobex,ZOBX,DE,Germany
+Danish Authorised Market Place Ltd.,DAMP,DK,Denmark
+Dansk Otc,DKTC,DK,Denmark
+First North Denmark,XFND,DK,Denmark
+Omx Nordic Exchange Copenhagen A/S,XCSE,DK,Denmark
+Bolsa De Valores De La Republica Dominicana Sa.,XBVR,DO,Dominican Republic
+Algiers Stock Exchange,XALG,DZ,Algeria
+Guayaquil Stock Exchange,XGUA,EC,Ecuador
+Quito Stock Exchange,XQUI,EC,Ecuador
+First North Estonia,FNEE,EE,Estonia
+Nasdaq Omx Tallinn,XTAL,EE,Estonia
+Egyptian Exchange,XCAI,EG,Egypt
+Aiaf - Mercado De Renta Fija,XDRF,ES,Spain
+Barcelona Stock Exchange,XBAR,ES,Spain
+Bolsa De Madrid,XMAD,ES,Spain
+Bolsa De Valencia,XVAL,ES,Spain
+Bolsa De Valores De Bilbao,XBIL,ES,Spain
+Cade - Mercado De Deuda Publica Anotada,XDPA,ES,Spain
+Latibex,XLAT,ES,Spain
+Meff Renta Fija,XMEF,ES,Spain
+Meff Renta Variable,XMRV,ES,Spain
+Mercado Alternativo Bursatil,MABX,ES,Spain
+Mercado Continuo Espanol,XMCE,ES,Spain
+Mercado De Futuros De Aceite De Oliva S.A.,XSRM,ES,Spain
+Mts Spain S.A.,SMTS,ES,Spain
+Operador De Mercado Iberico De Energia - Spain,OMEL,ES,Spain
+Sistema Espanol De Negociacion De Activos Financieros,XNAF,ES,Spain
+First North Finland,FNFI,FI,Finland
+Omx Nordic Exchange Helsinki Oy,XHEL,FI,Finland
+South Pacific Stock Exchange,XSPS,FJ,Fiji
+Alternativa France,XAFR,FR,France
+Bluenext - Mtf,XBLN,FR,France
+Epex Spot Se,EPEX,FR,France
+Euronext Paris Matif,XMAT,FR,France
+Euronext Paris Monep,XMON,FR,France
+Mts France Sas,FMTS,FR,France
+Nyse Euronext - Alternext Paris,ALXP,FR,France
+Nyse Euronext - Euronext Paris,XPAR,FR,France
+Nyse Euronext - Marche Libre Paris,XMLI,FR,France
+Powernext,XPOW,FR,France
+Altex-Ats,XALT,GB,United Kingdom
+Apx Power Uk,UKPX,GB,United Kingdom
+Baikal,BAIK,GB,United Kingdom
+Bats Europe,BATE,GB,United Kingdom
+Bgc Brokers Lp,BGCI,GB,United Kingdom
+Blink,BLNK,GB,United Kingdom
+Blockcross,BLKX,GB,United Kingdom
+Blockmatch,BLOX,GB,United Kingdom
+Bondscape,BOSC,GB,United Kingdom
+Cantor Spreadfair,FAIR,GB,United Kingdom
+Cantorco2e.Com Limited,CCO2,GB,United Kingdom
+Chi-X Europe Limited.,CHIX,GB,United Kingdom
+Coredeal Mts,CRDL,GB,United Kingdom
+Creditex Realtime,CXRT,GB,United Kingdom
+Edx London Limited,XEDX,GB,United Kingdom
+Euro-Millennium,NYFX,GB,United Kingdom
+Eurobenchmark Tres. Bills,TMTS,GB,United Kingdom
+Eurocredit Mts,CMTS,GB,United Kingdom
+Euroglobalmts,LMTS,GB,United Kingdom
+Euromts,EMTS,GB,United Kingdom
+Euromts Linkers Market,KMTS,GB,United Kingdom
+Gemma (GILT Edged Market Makers’association),GEMX,GB,United Kingdom
+Gfi Basismatch,XGFI,GB,United Kingdom
+Gfi Creditmatch,GFIC,GB,United Kingdom
+Gfi Energymatch,GFIN,GB,United Kingdom
+Gfi Forexmatch,GFIF,GB,United Kingdom
+Gfi Group,GFIA,GB,United Kingdom
+Gfi Marketmatch,GFIM,GB,United Kingdom
+Icap Electronic Broking (EUROPE),BTEE,GB,United Kingdom
+Icap Energy,ICEN,GB,United Kingdom
+Icap Europe,ICAP,GB,United Kingdom
+Icap Securities,ICSE,GB,United Kingdom
+Icap Shipping Tanker Derivatives Limited,ICAH,GB,United Kingdom
+Icap Truequote,ICTQ,GB,United Kingdom
+Icap Wclk,WCLK,GB,United Kingdom
+Icma,XCOR,GB,United Kingdom
+Intercontinental Exchange - Ice Futures Europe,ICEU,GB,United Kingdom
+Knight Link Europe,KLEU,GB,United Kingdom
+Liquidnet Systems,LIQU,GB,United Kingdom
+Lmax,LMAX,GB,United Kingdom
+Lmax - Equities,LMAE,GB,United Kingdom
+Lmax - Fx,LMAF,GB,United Kingdom
+Lmax - Indices/Rates/Commodities,LMAO,GB,United Kingdom
+London Bullion Market,XLBM,GB,United Kingdom
+London Metal Exchange,XLME,GB,United Kingdom
+London Platinum And Palladium Market,LPPM,GB,United Kingdom
+London Stock Exchange,XLON,GB,United Kingdom
+Marketaxess Europe Limited,MAEL,GB,United Kingdom
+Markit Boat,BOAT,GB,United Kingdom
+Mf Global Energy Mtf,MFGL,GB,United Kingdom
+Mts Austrian Market,MTSA,GB,United Kingdom
+Mts Cedulas Market,UMTS,GB,United Kingdom
+Mts Greek Market,MTSG,GB,United Kingdom
+Mts Ireland,IMTS,GB,United Kingdom
+Mts Israel,RMTS,GB,United Kingdom
+Mts Quasi Government,QMTS,GB,United Kingdom
+Mts Slovenia,VMTS,GB,United Kingdom
+Mts Swap Market,MTSS,GB,United Kingdom
+Mytreasury,MYTR,GB,United Kingdom
+N2ex,N2EX,GB,United Kingdom
+Nasdaq Omx Europe,NURO,GB,United Kingdom
+New Euromts,NMTS,GB,United Kingdom
+Nx,NXEU,GB,United Kingdom
+Nyse Euronext - Euronext London,XLDN,GB,United Kingdom
+Nyse Euronext Liffe,XLIF,GB,United Kingdom
+Oilx,OILX,GB,United Kingdom
+Pipeline - Mtf,PIEU,GB,United Kingdom
+Plus Markets,XPLU,GB,United Kingdom
+Q-Wixx Platform,QWIX,GB,United Kingdom
+Reuters Transaction Services Limited,RTSL,GB,United Kingdom
+Secfinex,SECF,GB,United Kingdom
+Sharemark,SHAR,GB,United Kingdom
+Sigma X Mtf,SGMX,GB,United Kingdom
+Smartpool,XSMP,GB,United Kingdom
+Spectronlive,SPEC,GB,United Kingdom
+Spreadzero,SPRZ,GB,United Kingdom
+Swapstream,SWAP,GB,United Kingdom
+Swx Swiss Block,XSWB,GB,United Kingdom
+Tfs Green Screen,TFSG,GB,United Kingdom
+Tfs Variance Swaps System,TFSS,GB,United Kingdom
+The Baltic Exchange,BALT,GB,United Kingdom
+The Cazenove Mtf,CAZE,GB,United Kingdom
+The Property Investment Exchange,TPIE,GB,United Kingdom
+The Property Investment Market,TPIM,GB,United Kingdom
+Tradeweb Europe Limited ,TREU,GB,United Kingdom
+Tradition Cds,TCDS,GB,United Kingdom
+Tullett Prebon Energytrade,XTPE,GB,United Kingdom
+Tullett Prebon Plc - Tp Creditdeal,TPCD,GB,United Kingdom
+Tullett Prebon Plc - Tp Repo,TPRE,GB,United Kingdom
+Tullett Prebon Plc - Tp Tradeblade,TBLA,GB,United Kingdom
+Tullett Prebon Plc - Tullet Prebon Energy,TBEN,GB,United Kingdom
+Turquoise,TRQX,GB,United Kingdom
+Vega-Chi,VEGA,GB,United Kingdom
+Volbroker,TFSV,GB,United Kingdom
+Georgia Stock Exchange,XGSE,GE,Georgia
+Channel Islands Stock Exchange,XCIE,GG,Guernsey
+Ghana Stock Exchange,XGHA,GH,Ghana
+Athens Exchange Alternative Market,ENAX,GR,Greece
+Athens Exchange S.A. Cash Market,XATH,GR,Greece
+Athens Exchange S.A. Derivatives Market,XADE,GR,Greece
+Electronic Secondary Securities Market (HDAT),HDAT,GR,Greece
+Hellenic Exchange Otc Market,HOTC,GR,Greece
+Bolsa De Valores Nacional Sa,XGTG,GT,Guatemala
+Chi-X Australia,CHIA,HK,Hong Kong
+Chinese Gold & Silver Exchange Society,XCGS,HK,Hong Kong
+E-Otc,EOTC,HK,Hong Kong
+Hong Kong Futures Exchange Ltd.,XHKF,HK,Hong Kong
+Hong Kong Growth Enterprises Market,XGEM,HK,Hong Kong
+Hong Kong Mercantile Exchange,HKME,HK,Hong Kong
+Instinet Pacific Ltd,XIHK,HK,Hong Kong
+Stock Exchange Of Hong Kong Ltd,XHKG,HK,Hong Kong
+Bolsa Centroamericana De Valores S.A.,XBCV,HN,Honduras
+The Zagreb Stock Exchange Mtf,XZAM,HR,Croatia
+Zagreb Money And Short Term Securities Market Inc,XTRZ,HR,Croatia
+Zagreb Stock Exchange,XZAG,HR,Croatia
+Budapest Stock Exchange,XBUD,HU,Hungary
+Hungarian Power Exchange,HUPX,HU,Hungary
+Quote Mtf,QMTF,HU,Hungary
+Indonesia Commodity And Derivatives Exchange,ICDX,ID,Indonesia
+Indonesia Stock Exchange,XIDX,ID,Indonesia
+Jakarta Futures Exchange (BURSA Berjangka Jakarta),XBBJ,ID,Indonesia
+Jakarta Negotiated Board,XJNB,ID,Indonesia
+Baxter Financial Services,XCDE,IE,Ireland
+Finex (NEW York And Dublin),XFNX,IE,Ireland
+Irish Enterprise Exchange,XIEX,IE,Ireland
+Irish Stock Exchange - Global Exchange Market,XASM,IE,Ireland
+Irish Stock Exchange - Main Market,XDUB,IE,Ireland
+Posit,XPOS,IE,Ireland
+Tel Aviv Stock Exchange,XTAE,IL,Israel
+Bangalore Stock Exchange Ltd,XBAN,IN,India
+Calcutta Stock Exchange,XCAL,IN,India
+Delhi Stock Exchange,XDES,IN,India
+Inter-Connected Stock Exchange Of India Ltd,ISEX,IN,India
+Madras Stock Exchange,XMDS,IN,India
+Multi Commodity Exchange Of India Ltd.,XIMC,IN,India
+Mumbai Stock Exchange,XBOM,IN,India
+National Board Of Trade Limited,NBOT,IN,India
+National Commodity & Derivatives Exchange Ltd,XNCD,IN,India
+National Multi-Commodity Exchange Of India,NMCE,IN,India
+National Stock Exchange Of India,XNSE,IN,India
+Otc Exchange Of India,OTCX,IN,India
+Power Exchange India Ltd.,PXIL,IN,India
+Irak Stock Exchange,XIQS,IQ,Iraq
+Tehran Stock Exchange,XTEH,IR,Iran Islamic Republic of
+First North Iceland,ISEC,IS,Iceland
+Omx Nordic Exchange Iceland Hf.,XICE,IS,Iceland
+Aim Italia,XAIM,IT,Italy
+Bondvision,BOND,IT,Italy
+E-Mid - E-Mider Market,EMDR,IT,Italy
+E-Mid Sim,EMID,IT,Italy
+Electronic Bond Market,MOTX,IT,Italy
+Electronic Open-End Funds And Etc Market,ETFP,IT,Italy
+Electronic Share Market,MTAA,IT,Italy
+Eurotlx,ETLX,IT,Italy
+Extramot,XMOT,IT,Italy
+Gestore Mercato Elettrico - Italian Power Exchange,XGME,IT,Italy
+Hi-Mtf,HMTF,IT,Italy
+Hi-Mtf Order Driven,HMOD,IT,Italy
+Italian Derivatives Market,XDMI,IT,Italy
+Market For Investment Vehicules,MIVX,IT,Italy
+Mercato Alternativo Del Capitale,MACX,IT,Italy
+Mts Corporate Market,MTSM,IT,Italy
+Mts S.P.A.,MTSC,IT,Italy
+Securitised Derivatives Market,SEDX,IT,Italy
+Sso Bondvision,SSOB,IT,Italy
+Tlx,XTLX,IT,Italy
+Jamaica Stock Exchange,XJAM,JM,Jamaica
+Amman Stock Exchange,XAMM,JO,Jordan
+Central Japan Commodities Exchange,XNKS,JP,Japan
+Chi-X Japan,CHIJ,JP,Japan
+Citi Match,CITX,JP,Japan
+Fukuoka Stock Exchange,XFKA,JP,Japan
+Instinet Japan,XIJP,JP,Japan
+Japancrossing,JASR,JP,Japan
+Japannext Pts,SBIJ,JP,Japan
+Jasdaq Securities Exchange,XJAS,JP,Japan
+Jasdaq Tachiaigai (OFF-FLOOR Market),JATA,JP,Japan
+Kabu.Com Pts,KABU,JP,Japan
+Kansai Commodities Exchange,XKAC,JP,Japan
+Nagoya Stock Exchange,XNGO,JP,Japan
+Nippon New Market - Hercules,XHER,JP,Japan
+Osaka Securities Exchange,XOSE,JP,Japan
+Osaka Securities Exchange J-Net,XOSJ,JP,Japan
+Sapporo Securities Exchange,XSAP,JP,Japan
+Tokyo Aim,XTAM,JP,Japan
+Tokyo Financial Exchange,XTFF,JP,Japan
+Tokyo Kogyoin Torihikijo (COMMODITY Exchange),XTKT,JP,Japan
+Tokyo Kokumotsu Shohin Torihikijo (GRAIN Exchange),XTKO,JP,Japan
+Tokyo Stock Exchange,XTKS,JP,Japan
+Tokyo Stock Exchange - Tostnet-1,XTK1,JP,Japan
+Tokyo Stock Exchange - Tostnet-2,XTK2,JP,Japan
+Nairobi Stock Exchange,XNAI,KE,Kenya
+Kyrgyz Stock Exchange,XKSE,KG,Kyrgyzstan
+Eastern Caribbean Securities Exchange,XECS,KN,Saint Kitts and Nevis
+Korea Exchange (FUTURES Market),XKFE,KR,Korea Republic of
+Korea Exchange (KOSDAQ),XKOS,KR,Korea Republic of
+Korea Exchange (STOCK Market),XKRX,KR,Korea Republic of
+Kuwait Stock Exchange,XKUW,KW,Kuwait
+Cayman Islands Stock Exchange,XCAY,KY,Cayman Islands
+Kazakhstan Stock Exchange,XKAZ,KZ,Kazakhstan
+Bourse De Beyrouth - Beirut Stock Exchange,XBEY,LB,Lebanon
+Colombo Stock Exchange,XCOL,LK,Sri Lanka
+Baltpool,BAPX,LT,Lithuania
+First North Lithuania,FNLT,LT,Lithuania
+Nasdaq Omx Baltic,NASB,LT,Lithuania
+Nasdaq Omx Vilnius,XLIT,LT,Lithuania
+Euro Mtf,EMTF,LU,Luxembourg
+Finesti S.A.,CCLX,LU,Luxembourg
+Luxembourg Stock Exchange,XLUX,LU,Luxembourg
+Vestima+,XVES,LU,Luxembourg
+First North Latvia,FNLV,LV,Latvia
+Nasdaq Omx Riga,XRIS,LV,Latvia
+Libyan Stock Market,XLSM,LY,Libyan Arab Jamahiriya
+Casablanca Stock Exchange,XCAS,MA,Morocco
+Moldova Stock Exchange,XMOL,MD,Moldova Republic of
+Montenegro Stock Exchange,XMNX,ME,Montenegro
+Marche Interbancaire Des Devises M.I.D.,XMDG,MG,Madagascar
+Macedonian Stock Exchange,XMAE,MK,Macedonia the former Yugoslav Republic of
+Mongolian Stock Exchange,XULA,MN,Mongolia
+Malta Stock Exchange,XMAL,MT,Malta
+Stock Exchange Of Mauritius Ltd,XMAU,MU,Mauritius
+Malawi Stock Exchange,XMSW,MW,Malawi
+Bolsa Mexicana De Valores (MEXICAN Stock Exchange),XMEX,MX,Mexico
+Mercado Mexicano De Derivados,XEMD,MX,Mexico
+Bursa Malaysia,XKLS,MY,Malaysia
+Labuan International Financial Exchange,XLFX,MY,Malaysia
+Mesdaq,MESQ,MY,Malaysia
+Ringgit Bond Market,XRBM,MY,Malaysia
+Maputo Stock Exchange,XMAP,MZ,Mozambique
+Namibian Stock Exchange,XNAM,NA,Namibia
+Nigerian Stock Exchange,XNSA,NG,Nigeria
+Bolsa De Valores De Nicaragua,XMAN,NI,Nicaragua
+Apx Power Nl,NLPX,NL,Netherlands
+Climex,CLMX,NL,Netherlands
+Euronext Com Commodities Futures And Options,XEUC,NL,Netherlands
+Euronext Eqf Equities And Indices Derivatives,XEUE,NL,Netherlands
+Euronext Irf Interest Rate Future And Options,XEUI,NL,Netherlands
+European Climate Exchange,ECXE,NL,Netherlands
+European Energy Derivatives Exchange N.V.,NDEX,NL,Netherlands
+Mts Amsterdam N.V.,AMTS,NL,Netherlands
+Nyse Arca Europe,XHFT,NL,Netherlands
+Nyse Euronext - Alternext Amsterdam,ALXA,NL,Netherlands
+Nyse Euronext - Euronext Amsterdam,XAMS,NL,Netherlands
+Nyse Euronext - Traded But Not Listed Amsterdam,TNLA,NL,Netherlands
+Tom The Order Machine,TOMX,NL,Netherlands
+Fish Pool Asa,FISH,NO,Norway
+Fishex,FSHX,NO,Norway
+Icap Energy As,ICAS,NO,Norway
+International Martime Exchange,XIMA,NO,Norway
+Nord Pool Asa,NORX,NO,Norway
+Norwegian Over The Counter Market,NOTC,NO,Norway
+Oslo Axess,XOAS,NO,Norway
+Oslo Bors Alternative Bond Market,XOAM,NO,Norway
+Oslo Bors Asa,XOSL,NO,Norway
+Nepal Stock Exchange,XNEP,NP,Nepal
+New Zealand Exchange Ltd,XNZE,NZ,New Zealand
+New Zealand Futures & Options,NZFX,NZ,New Zealand
+Muscat Securities Market,XMUS,OM,Oman
+Bolsa De Valores De Panama S.A.,XPTY,PA,Panama
+Bolsa De Valores De Lima,XLIM,PE,Peru
+Port Moresby Stock Exchange,XPOM,PG,Papua New Guinea
+Philippine Stock Exchange Inc.,XPHS,PH,Philippines
+Islamabad Stock Exchange,XISL,PK,Pakistan
+Karachi Stock Exchange (GUARANTEE) Limited,XKAR,PK,Pakistan
+Lahore Stock Exchange,XLAH,PK,Pakistan
+National Commodity Exchange Limited,NCEL,PK,Pakistan
+Ceto Securities Market,RPWC,PL,Poland
+Mts Poland,MTSP,PL,Poland
+Mts-Ceto S.A.,CETO,PL,Poland
+New Connect,XNCO,PL,Poland
+Towarowa Gielda Energii S.A. (POLISH Power Exchange),PLPX,PL,Poland
+Warsaw Stock Exchange,XWAR,PL,Poland
+Palestine Securities Exchange,XPAE,PS,Palestinian Territory Occupied
+Medip (MTS Portugal Sgmr Sa),MDIP,PT,Portugal
+Nyse Euronext - Easynext Lisbon,ENXL,PT,Portugal
+Nyse Euronext - Euronext Lisbon,XLIS,PT,Portugal
+Nyse Euronext - Market Without Quotations Lisbon,WQXL,PT,Portugal
+Nyse Euronext - Mercado De Futuros E Opções,MFOX,PT,Portugal
+Operador De Mercado Iberico De Energia - Portugal,OMIP,PT,Portugal
+Pex-Private Exchange,OPEX,PT,Portugal
+Bolsa De Valores Y Productos De Asuncion Sa,XVPA,PY,Paraguay
+Qatar Exchange,DSMD,QA,Qatar
+Derivatives Regulated Market - Bmfms,BMFM,RO,Romania
+Derivatives Regulated Market - Bvb,XBSD,RO,Romania
+Rasdaq,XRAS,RO,Romania
+Romanian Commodities Exchange,XBRM,RO,Romania
+Romanian Power Market,XRPM,RO,Romania
+Spot Regulated Market - Bmfms,SBMF,RO,Romania
+Spot Regulated Market - Bvb,XBSE,RO,Romania
+Belgrade Stock Exchange,XBEL,RS,Serbia
+Arena,RPDX,RU,Russian Federation
+International Stock Exchange Saint-Petersbourg,IXSP,RU,Russian Federation
+Internet Direct-Access Exchange,XRUS,RU,Russian Federation
+Moscow Interbank Currency Exchange,XMIC,RU,Russian Federation
+Moscow Stock Exchange,XMOS,RU,Russian Federation
+Nizhny Novgorod Stock And Currency Exchange,NNCS,RU,Russian Federation
+Regional Exchange Center - Micex Far East,XAPI,RU,Russian Federation
+Regional Exchange Centre - Micex South,XROV,RU,Russian Federation
+Russian Trading System Stock Exchange,RTSX,RU,Russian Federation
+Saint-Petersburg Currency Exchange,XPIC,RU,Russian Federation
+Samara Currency Interbank Exchange,XSAM,RU,Russian Federation
+Siberian Interbank Currency Exchange,XSIC,RU,Russian Federation
+Siberian Stock Exchange,XSIB,RU,Russian Federation
+Stock Exchange Saint Petersburg ,XPET,RU,Russian Federation
+Urals Regional Currency Exchange ,URCE,RU,Russian Federation
+Rwanda Otc Market,ROTC,RW,Rwanda
+Saudi Stock Exchange,XSAU,SA,Saudi Arabia
+Khartoum Stock Exchange,XKHA,SD,Sudan
+Aktietorget,XSAT,SE,Sweden
+Burgundy Nordic Mtf,BURG,SE,Sweden
+First North Stockholm,FNSE,SE,Sweden
+Nordic Derivatives Exchange,XNDX,SE,Sweden
+Nordic Growth Market,XNGM,SE,Sweden
+Nordic Mtf,NMTF,SE,Sweden
+Nordic Mtf Reporting,XNMR,SE,Sweden
+Omx Nordic Exchange Stockholm Ab,XSTO,SE,Sweden
+Omx Otc Publication Venue,XOPV,SE,Sweden
+Chi-East,CHIE,SG,Singapore
+Joint Asian Derivatives Exchange,JADX,SG,Singapore
+Singapore Catalist Market,XSCA,SG,Singapore
+Singapore Central Limit Order Book International,XSCL,SG,Singapore
+Singapore Commodity Exchange,XSCE,SG,Singapore
+Singapore Exchange,XSES,SG,Singapore
+Singapore Exchange Derivatives Clearing Limited,XSIM,SG,Singapore
+Singapore Mercantile Exchange Pte Ltd,SMEX,SG,Singapore
+Bsp Regional Energy Exchange - South Pool,XSOP,SI,Slovenia
+Ljubljana Stock Exchange (OFFICIAL Market),XLJU,SI,Slovenia
+Bratislava Stock Exchange,XBRA,SK,Slovakia
+El Salvador Stock Exchange,XSVA,SV,El Salvador
+Damascus Securities Exchange,XDSE,SY,Syrian Arab Republic
+Swaziland Stock Exchange,XSWA,SZ,Swaziland
+Agricultural Futures Exchange Of Thailand,AFET,TH,Thailand
+Bond Electronic Exchange,BEEX,TH,Thailand
+Stock Exchange Of Thailand,XBKK,TH,Thailand
+Stock Exchange Of Thailand - Foreign Board,XBKF,TH,Thailand
+Thailand Futures Exchange,TFEX,TH,Thailand
+Bourse De Tunis,XTUN,TN,Tunisia
+Istanbul Gold Exchange,XIAB,TR,Turkey
+Istanbul Stock Exchange,XIST,TR,Turkey
+Turkish Derivatives Exchange,XTUR,TR,Turkey
+Trinidad And Tobago Stock Exchange,XTRN,TT,Trinidad and Tobago
+Gretai Securities Market,ROCO,TW,Taiwan Province of China
+Taiwan Futures Exchange,XTAF,TW,Taiwan Province of China
+Taiwan Stock Exchange,XTAI,TW,Taiwan Province of China
+Dar Es Salaam Stock Exchange,XDAR,TZ,Tanzania United Republic of
+Donetsk Stock Exchange,XDFB,UA,Ukraine
+First Securities Trading System - Ukrainian Otc,PFTS,UA,Ukraine
+Kharkov Commodity Exchange,XKHR,UA,Ukraine
+Kiev International Stock Exchange,XKIS,UA,Ukraine
+Kiev Universal Exchange,XKIE,UA,Ukraine
+Odessa Commodity Exchange,XODE,UA,Ukraine
+Pridneprovsk Commodity Exchange,XPRI,UA,Ukraine
+Ukrainian Stock Exchange,XUAX,UA,Ukraine
+Ukrainian Universal Commodity Exchange,XUKR,UA,Ukraine
+Uganda Securities Exchange,XUGA,UG,Uganda
+Aqua Equities L.P.,AQUA,US,United States
+Automated Equity Finance Markets,XAQS,US,United States
+Barclay's Ats,BARX,US,United States
+Bats Exchange,BATS,US,United States
+Bats Exchange Options Market,BATO,US,United States
+Bats Y-Exchange Inc.,BATY,US,United States
+Bgc Financial Inc,BGCF,US,United States
+Bids Trading L.P.,BIDS,US,United States
+Bloomberg Tradebook Llc,BLTD,US,United States
+Bonddesk,BNDD,US,United States
+Boston Options Exchange,XBOX,US,United States
+Brut Ecn,XBRT,US,United States
+C2 Options Exchange Inc.,C2OX,US,United States
+Cantor Financial Futures Exchange,XCFF,US,United States
+Cboe Futures Exchange,XCBF,US,United States
+Cboe Stock Exchange,CBSX,US,United States
+Chicago Board Of Trade,XCBT,US,United States
+Chicago Board Of Trade (FLOOR),FCBT,US,United States
+Chicago Board Options Exchange,XCBO,US,United States
+Chicago Climate Exchange Inc,XCCX,US,United States
+Chicago Climate Futures Exchange,CCFE,US,United States
+Chicago Mercantile Exchange,XCME,US,United States
+Chicago Mercantile Exchange (FLOOR),FCME,US,United States
+Chicago Stock Exchange Inc,XCHI,US,United States
+Cme Globex,GLBX,US,United States
+Commodities Exchange Center,XCEC,US,United States
+Credit Suisse Aes Crossfinder,CAES,US,United States
+Currenex,XCUR,US,United States
+Direct Edge Ecn (EDGA),EDGA,US,United States
+Direct Edge Ecn (EDGX),EDGX,US,United States
+Elx,XELX,US,United States
+Financialcontent Indexes,XFCI,US,United States
+Finra Alternative Display Facility,XADF,US,United States
+Fxall,FXAL,US,United States
+Getco Execution Services Llc,GTCO,US,United States
+Goldman Sach Mtf,SGMA,US,United States
+Hedgestreet Exchange,HEGX,US,United States
+Hotspot Fx,HSFX,US,United States
+Icap Electronic Broking (US),BTEC,US,United States
+Ice Futures U.S. Inc,ICUS,US,United States
+Index And Options Market,XIOM,US,United States
+Instinet Blx,IBLX,US,United States
+Instinet Cbx (US),ICBX,US,United States
+Instinet Idx,IIDX,US,United States
+Instinet Vwap Cross,ICRO,US,United States
+Intercontinental Exchange,IEPA,US,United States
+International Monetary Market,XIMM,US,United States
+International Securities Exchange Llc,XISX,US,United States
+International Securities Exchange Llc - Alternative Markets,XISA,US,United States
+International Securities Exchange Llc - Equities,XISE,US,United States
+Island Ecn Ltd The ,ICEL,US,United States
+Itg - Posit Exchange,ITGI,US,United States
+Kansas City Board Of Trade,XKBT,US,United States
+Knight Link,KNLI,US,United States
+Knight Match Ats,KNMX,US,United States
+Lavafx,LAFX,US,United States
+Level Ats,LEVL,US,United States
+Merchants' Exchange,XMER,US,United States
+Minneapolis Grain Exchange,XMGE,US,United States
+Ms Pool Ats,MSPL,US,United States
+Nasdaq,XNAS,US,United States
+Nasdaq Capital Market,XNCM,US,United States
+Nasdaq Intermarket,XNIM,US,United States
+Nasdaq Omx Bx,XBOS,US,United States
+Nasdaq Omx Futures Exchange,XPBT,US,United States
+Nasdaq Omx Phlx,XPHL,US,United States
+Nasdaq Options Market,XNDQ,US,United States
+Nasdaq/Ngs (GLOBAL Select Market),XNGS,US,United States
+Nasdaq/Nms (GLOBAL Market),XNMS,US,United States
+National Stock Exchange,XCIS,US,United States
+New York Mercantile Exchange,XNYM,US,United States
+New York Mercantile Exchange - Energy Markets,XNYL,US,United States
+New York Mercantile Exchange - Otc Markets,XNYE,US,United States
+New York Stock Exchange Inc.,XNYS,US,United States
+Nodal Exchange,NODX,US,United States
+Nyse Amex Equities,XASE,US,United States
+Nyse Amex Options,AMXO,US,United States
+Nyse Arca,ARCX,US,United States
+Nyse Arca Options,ARCO,US,United States
+Nyse Liffe,XNLI,US,United States
+Onechicago Llc,XOCH,US,United States
+Otc Bulletin Board,XOTC,US,United States
+Otc Bulletin Board - Other Otc,OOTC,US,United States
+Otcqx,OTCQ,US,United States
+Philadelphia Options Exchange,XPHO,US,United States
+Pink Sheets Grey Market,PSGM,US,United States
+Pink Sheets Llc (NQB),PINX,US,United States
+Pipeline,PIPE,US,United States
+Portal,XPOR,US,United States
+The Green Exchange,GREE,US,United States
+Third Market Corporation,THRD,US,United States
+Tradeweb Llc,TRWB,US,United States
+Ubs Pin Ats,XPIN,US,United States
+Vortex,VTEX,US,United States
+Weeden Ats,XWEE,US,United States
+Bolsa De Valores De Montevideo,XMNT,UY,Uruguay
+Bolsa Electronica De Valores Del Uruguay,BVUR,UY,Uruguay
+Khorezm Interregion Commodity Exchange,XKCE,UZ,Uzbekistan
+Republican Stock Exchange,XSTE,UZ,Uzbekistan
+Universal Broker's Exchange 'TASHKENT',XUNI,UZ,Uzbekistan
+Uzbek Commodity Exchange,XCET,UZ,Uzbekistan
+Uzbekistan Republican Currency Exchange,XCUE,UZ,Uzbekistan
+Bolsa De Valores De Caracas,XCAR,VE,Venezuela Bolivarian Republic of
+Bolsa Electronica De Valores De Caracas,BVCA,VE,Venezuela Bolivarian Republic of
+Hanoi Stock Exchange,HSTC,VN,Viet Nam
+Hanoi Stock Exchange (UNLISTED Public Company Trading Platform),XHNX,VN,Viet Nam
+Hochiminh Stock Exchange,XSTC,VN,Viet Nam
+Gx Marketcenter,GXMA,VU,Vanuatu
+Alternative Exchange,ALTX,ZA,South Africa
+Bond Exchange Of South Africa,XBES,ZA,South Africa
+Jse Securities Exchange,XJSE,ZA,South Africa
+Jse Yield-X,YLDX,ZA,South Africa
+South African Futures Exchange,XSAF,ZA,South Africa
+South African Futures Exchange - Agricultural Market Division,XSFA,ZA,South Africa
+Lusaka Stock Exchange,XLUS,ZM,Zambia
+Zimbabwe Stock Exchange,XZIM,ZW,Zimbabwe
+No Market (EG Unlisted),XXXX,ZZ,No Country

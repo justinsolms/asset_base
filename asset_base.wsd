@@ -1,0 +1,184 @@
+@startuml asset_base
+
+top to bottom direction
+
+'skinparam handwritten true
+
+' Class definitions
+
+package "Common" {
+
+    abstract       Common {
+        +id : int
+        +name : str
+    }
+
+}
+
+package "Entities" {
+
+    class       Domicile {
+        +country_code : ISO 3166-1
+        +country_name : ISO 3166-1
+        +currency : Currency
+        +entity_list : Entity[0..*]
+    }
+
+    class       Currency {
+        +ticker : ISO 4217 3-letter
+        +name : Official name
+    }
+
+    abstract    Entity {
+        +domicile : Domicile
+        +asset_list : Asset[0..*]
+    }
+
+    abstract    Institution
+
+    class       Issuer {
+        +share_list : Share[0..*]
+    }
+
+    class       Exchange {
+        +mic : ISO 10383
+        +listing_list : Listed[0..*]
+    }
+
+    ' Common inheritance
+    Common <|-- Entity
+
+    ' Domicile and Currency
+    Currency "1" --* "*" Domicile : < denominates
+    Domicile "1" -r-* "*" Entity : < domiciled
+
+    ' Entities
+    Entity <|-- Institution
+    Institution <|-- Exchange
+    Institution <|-- Issuer
+
+}
+
+package "Assets" {
+
+    abstract    Base {
+        +currency : Currency
+        -_series : TimeSeriesBase
+    }
+
+    abstract    Asset {
+        +owner : Entity
+    }
+
+    class       Cash {
+    }
+
+    class       Forex {
+        +currency2 : Currency
+        -_eod_series : ForexEOD
+    }
+
+    class Index {
+        -_eod_series : IndexEOD
+    }
+
+    abstract    Share {
+        +issuer : Issuer
+    }
+
+    abstract    Listed {
+        +ticker : str
+        +isin : ISIN number
+        +exchange : Exchange
+        -_eod_series : ListedEOD
+    }
+
+    class       ListedEquity {
+        -_dividend_series : Dividend
+    }
+
+    class       ETF {
+        +index : Index
+    }
+
+    ' Common inheritance
+    Common <|-- Base
+
+    ' Assets
+    Base <|-- Asset
+    Asset <|-- Share
+    Asset <|-- Cash
+    Cash <|-- Forex
+    Base <|-- Index
+    Share <|-- Listed
+    Listed <|-- ListedEquity
+    ListedEquity <|-- ETF
+
+}
+
+package "Time Series" {
+
+    class TimeSeriesBase {
+        +date_stamp : date
+        +base_obj : Base
+    }
+
+    class Dividend {
+        +listed_equity : ListedEquity
+    }
+
+    class SimpleEOD {
+        +price : float
+    }
+
+    class TradeEOD {
+        +open : float
+        +close : float
+        +high : float
+        +low : float
+        +adjusted_close : float
+        +volume : float
+
+    }
+
+    class ForexEOD {
+        +forex : Forex
+    }
+
+    class IndexEOD {
+        +index : Index
+    }
+
+    class ListedEOD {
+        +listed : Listed
+    }
+
+    ' Time Series
+    TimeSeriesBase <|-- SimpleEOD
+    SimpleEOD <|-- TradeEOD
+    TradeEOD <|-- ListedEOD
+    TradeEOD <|-- ForexEOD
+    TradeEOD <|-- IndexEOD
+    TimeSeriesBase <|-- Dividend
+
+}
+
+' Pricing
+Currency "1" --* "1" Base : < priced in currency
+
+' Entities to Assets relationships
+Entity "1" *-- "*" Asset : > owns
+Issuer "1" -l-* "*" Share : > issues
+Exchange "1" -l-* "*" Listed : > lists
+
+' Asset to Asset relationships
+ETF "*" *-r- "1" Index : > replicates
+
+' Asset to Time Series relationships
+Base "1" *-- "*" TimeSeriesBase
+Listed "1" *-- "*" ListedEOD
+Forex "1" *-- "*" ForexEOD
+Index "1" *-- "*" IndexEOD
+ListedEquity "1" *-- "*" Dividend
+
+@enduml

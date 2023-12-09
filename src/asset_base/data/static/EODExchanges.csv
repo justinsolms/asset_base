@@ -1,0 +1,65 @@
+,EODCode,ExchangeName,CountryCode,MIC
+0,BA,Buenos Aires Exchange,AR,XBUE
+1,VI,Vienna Exchange,AT,XWBO
+2,AU,Australia Exchange,AU,XASX
+3,BR,Euronext Brussels,BE,XBRU
+4,CN,Canadian Securities Exchange,CA,XCNQ
+5,TO,Toronto Exchange,CA,XTSE
+6,V,TSX Venture Exchange,CA,XTSX
+7,SW,SIX Swiss Exchange,CH,XSWX
+9,SN,Chilean Stock Exchange,CL,XSGO
+10,SHG,Shanghai Exchange,CN,XSHG
+11,SHE,Shenzhen Exchange,CN,XSHE
+12,BE,Berlin Exchange,DE,XBER
+13,DU,Dusseldorf Exchange,DE,XDUS
+14,MU,Munich Exchange,DE,XMUN
+15,STU,Stuttgart Exchange,DE,XSTU
+16,F,Frankfurt Exchange,DE,XFRA
+17,HM,Hamburg Exchange,DE,XHAM
+18,HA,Hanover Exchange,DE,XHAN
+19,XETRA,XETRA Exchange,DE,XETR
+20,CO,Copenhagen Exchange,DK,XCSE
+22,TL,Tallinn Exchange,EE,XTAL
+23,HE,Helsinki Exchange,FI,XHEL
+24,PA,Euronext Paris,FR,XPAR
+25,LSE,London Exchange,GB,XLON
+27,HK,Hong Kong Exchange,HK,XHKG
+28,ZSE,Zagreb Stock Exchange,HR,XZAG
+29,BUD,Budapest Stock Exchange,HU,XBUD
+30,JK,Jakarta Exchange,ID,XIDX
+31,IR,Irish Exchange,IE,XDUB
+32,TA,Tel Aviv Exchange,IL,XTAE
+33,BSE,Bombay Exchange,IN,XBOM
+34,NSE,NSE (India),IN,XNSE
+35,IC,Iceland Exchange,IS,XICE
+36,KQ,KOSDAQ,KR,XKOS
+37,KO,Korea Stock Exchange,KR,XKRX
+38,VS,Vilnus Exchange,LT,XLIT
+39,LU,Luxembourg Stock Exchange,LU,XLUX
+40,RG,Riga Exchange,LV,XRIS
+41,MX,Mexican Exchange,MX,XMEX
+42,KLSE,Kuala Lumpur Exchange,MY,XKLS
+43,AS,Euronext Amsterdam,NL,XAMS
+44,OL,Oslo Stock Exchange,NO,XOSL
+45,LIM,Bolsa de Valores de Lima,PE,XLIM
+46,PSE,Philippine Stock Exchange,PH,XPHS
+47,KAR,Karachi Stock Exchange,PK,XKAR
+48,WAR,Warsaw Stock Exchange,PL,XWAR
+49,LS,Euronext Lisbon,PT,XLIS
+50,RO,Bucharest Stock Exchange,RO,XBSE
+51,SR,Saudi Arabia Exchange,SA,XSAU
+52,ST,Stockholm Exchange,SE,XSTO
+53,SG,Singapore Exchange,SG,XSES
+54,BK,Thailand Exchange,TH,XBKK
+55,IS,Istanbul Stock Exchange,TR,XIST
+56,TWO,Taiwan OTC Exchange,TW,ROCO
+57,TW,Taiwan Exchange,TW,XTAI
+58,US,USA Stocks,US,XNYS
+59,VN,Vietnam Stocks,VN,HSTC
+60,JSE,Johannesburg Exchange,ZA,XJSE
+61,NEO,NEO Exchange,CA,NEOE
+62,MI,Borsa Italiana,IT,XMIL
+63,MC,Madrid Exchange,ES,BMEX
+73,AT,Athens Exchange,GR,ASEX
+74,SA,Sao Paolo Exchange,BR,BVMF
+75,CC,Cryptocurrencies,ZZ,CRYP

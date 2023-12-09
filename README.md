@@ -1,2 +1,32 @@
 # asset_base
-Financial asset based database with financial timeseries
+
+A package for obtaining, managing and provision of financial securities meta-data and time-series data.
+
+## Installation
+
+```bash
+$ pip install asset_base
+```
+
+## Usage
+
+  - The package is at an early stage of development.
+  - There may still be some bugs.
+  - There is a good test suite which was used to develop the package. It is therefore a development test suite, not a use qualification test suite centred around the user. That still needs to be done. Code coverage analysis also needs to be done.
+  - The package is fairly well documented in the docstrings but still need a proper Sphinx document body.
+
+## Contributing
+
+Interested in contributing? Check out the contributing guidelines. Please note that this project is released with a Code of Conduct. By contributing to this project, you agree to abide by its terms.
+
+My development time on this package is quite limited by my other duties as an engineer and a quantitative portfolio manager so your contributions will be most welcome.
+
+## License
+
+`asset_base` was created by Justin Solms. It is licensed under the terms of the MIT license.
+
+## Credits
+
+The package has been motivate by and developed for internal use at Index Solutions. Index Solutions is a “trading as” name of Sunstrike Capital (Proprietary) Limited, an authorised Financial Services Provider (license number 44691) and a registered South African company (2011/004440/07).
+
+`asset_base` was created with [`cookiecutter`](https://cookiecutter.readthedocs.io/en/latest/) and the `py-pkgs-cookiecutter` [template](https://github.com/py-pkgs/py-pkgs-cookiecutter).
