@@ -17,7 +17,7 @@ from sqlalchemy import Column
 from sqlalchemy import UniqueConstraint
 
 from sqlalchemy_utils import drop_database, database_exists
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import declarative_base
 
 from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
