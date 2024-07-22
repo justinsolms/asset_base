@@ -63,6 +63,7 @@ See also
 """
 import os
 import logging
+import pkg_resources
 import yaml
 import datetime
 import pandas as pd
@@ -71,10 +72,8 @@ from sqlalchemy import String
 from sqlalchemy import Column
 from sqlalchemy import MetaData as SQLAlchemyMetaData
 
-from sqlalchemy_utils import drop_database, database_exists
 from sqlalchemy.orm.exc import NoResultFound
 
-from .__init__ import get_var_path
 from .exceptions import TimeSeriesNoData
 from .financial_data import Dump, DumpReadError, History, MetaData, Static
 from .common import Base, SQLiteSession, TestSession
@@ -247,8 +246,8 @@ class ManagerBase(object):
         self.testing = testing
 
         # Open main configuration YAML file and convert to a dict.
-        path = os.path.dirname(os.path.realpath(__file__))
-        with open(path + "/" + "conf.yaml", "r") as stream:
+        config_path = pkg_resources.resource_filename("config", "conf.yaml")
+        with open(config_path, "r") as stream:
             self._config = yaml.full_load(stream)
 
         # Path for data dumps.

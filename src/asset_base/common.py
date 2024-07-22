@@ -4,7 +4,7 @@
 
 """ Declare common object infrastructure
 """
-from abc import ABC, abstractclassmethod
+from abc import ABC
 
 import os
 import sys
