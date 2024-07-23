@@ -16,23 +16,27 @@ import yaml
 import os
 import pkg_resources
 
-# Package absolute root path
-_ROOT = os.path.abspath(os.path.dirname(__file__))
-
-# Data file parent path
+# Data path - folder must contain an `__init__.py` file to be discovered.
 _DATA = "data"
 
-# Config path
+# Config path - folder must contain an `__init__.py` file to be discovered.
 _CONFIG = "config"
+
+# Tests path - folder must contain an `__init__.py` file to be discovered.
+_TESTS = "tests"
 
 # Variable data path
 _VAR = "var"
 # Variable data path for tests - should always delete after tests!
 _VAR_TEST = "var_test"
 
-
 def get_data_path(sub_path):
     """Package path schema for fixed data
+
+    Note
+    ----
+    Relies on the ``_DATA`` folder containing and `__init__.py` file to be a
+    package.
 
     Parameters
     ----------
@@ -41,8 +45,13 @@ def get_data_path(sub_path):
     """
     return pkg_resources.resource_filename(_DATA, sub_path)
 
-def get_config_file(sub_path):
+def get_config_path(sub_path):
     """Package path schema for configuration files.
+
+    Note
+    ----
+    Relies on the ``_CONFIG`` folder containing and `__init__.py` file to be a
+    package.
 
     Parameters
     ----------
@@ -51,8 +60,25 @@ def get_config_file(sub_path):
     """
     return pkg_resources.resource_filename(_CONFIG, sub_path)
 
+def get_tests_path(sub_path):
+    """Package path schema for test files.
+
+    Note
+    ----
+    Relies on the ``_TESTS`` folder containing and `__init__.py` file to be a
+    package.
+
+    Parameters
+    ----------
+    sub_path: str
+        Mandatory branch or child path.
+    """
+    return pkg_resources.resource_filename(_TESTS, sub_path)
+
 def get_var_path(sub_path, testing=False):
     """Package path schema for variable data such as logs and databases.
+
+    Will put the var folder in the package folder
 
     Parameters
     ----------
@@ -80,9 +106,8 @@ def get_project_name(package_name):
     except pkg_resources.DistributionNotFound:
         return "Package not found"
 
-
 # Working folders - create them if they don't exist.
-config_path = get_config_file("config.yaml")
+config_path = get_config_path("config.yaml")
 with open(config_path, "r") as stream:
     config = yaml.full_load(stream)
     for directory in config["directories"]["working"].values():
@@ -91,11 +116,11 @@ with open(config_path, "r") as stream:
             os.makedirs(directory)
 
 # Set up logging
-log_config_path = get_config_file("log_config.yaml")
+log_config_path = get_config_path("log_config.yaml")
 with open(os.path.join(log_config_path), "r") as stream:
     log_config = yaml.full_load(stream)
     logging.config.dictConfig(log_config)
 
 # Record the current version and log it.
 __version__ = get_package_version("asset_base")
-logging.info("This is asset_base version %s" % __version__)
+logging.info("This is `asset_base` version %s" % __version__)

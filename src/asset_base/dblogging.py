@@ -25,7 +25,7 @@ import logging
 import yaml
 import os
 
-from asset_base import get_config_file
+from asset_base import get_config_path
 
 
 _db_url = "sqlite:///fundmanage.log.db"
@@ -69,7 +69,7 @@ class FileHandler(logging.handlers.TimedRotatingFileHandler):
     def __init__(self, **kwargs):
         """Initialization."""
         # Open main configuration YAML file as a dict.
-        config_path = get_config_file("config.yaml")
+        config_path = get_config_path("config.yaml")
         with open(config_path, "r") as stream:
             config = yaml.full_load(stream)
 
@@ -298,7 +298,7 @@ class SQLLogHandler(logging.Handler):
 # Configure the logging database.
 
 # Open main configuration YAML file and convert to a dict.
-config_path = get_config_file("config.yaml")
+config_path = get_config_path("config.yaml")
 with open(config_path, "r") as stream:
     config = yaml.full_load(stream)
     log_name = "fundmanage.log.db"

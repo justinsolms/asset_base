@@ -73,7 +73,7 @@ from sqlalchemy import MetaData as SQLAlchemyMetaData
 
 from sqlalchemy.orm.exc import NoResultFound
 
-from asset_base import get_config_file
+from asset_base import get_config_path
 
 from .exceptions import TimeSeriesNoData
 from .financial_data import Dump, DumpReadError, History, MetaData, Static
@@ -247,7 +247,7 @@ class ManagerBase(object):
         self.testing = testing
 
         # Open main configuration YAML file and convert to a dict.
-        config_path = get_config_file("config.yaml")
+        config_path = get_config_path("config.yaml")
         with open(config_path, "r") as stream:
             self._config = yaml.full_load(stream)
 
