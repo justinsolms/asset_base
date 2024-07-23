@@ -25,11 +25,13 @@ methods such as ``factory``, ``from_dataframe``, and lots more.
 import unittest
 import pandas as pd
 
+from sqlalchemy.exc import NoResultFound
+
 from src.asset_base.common import Common
 from src.asset_base.financial_data import Dump
 from src.asset_base.asset import Forex, ListedEquity
 from src.asset_base.time_series import Dividend, ListedEOD
-from src.asset_base.manager import Manager, replace_time_series_labels
+from src.asset_base.manager import Manager, Meta, replace_time_series_labels
 from src.asset_base.exceptions import TimeSeriesNoData
 
 import warnings
@@ -65,11 +67,6 @@ def assert_no_index_duplicates(security, security1, security2):
 
 class TestManagerInit(unittest.TestCase):
     """Manager sessions with different backend databases"""
-
-    def tearDown(self):
-        """Tear down test case fixtures."""
-        # Delete database
-        del self.manager
 
     def common_todo(self):
         """Some common post creation tests using ``Common`` class."""
@@ -160,6 +157,34 @@ class TestManager(unittest.TestCase):
     def test___init__(self):
         """Instance initialization."""
         self.assertIsInstance(self.manager, Manager)
+
+    def test_session(self):
+        """Test session."""
+        # Create a Meta object and add it to the session
+        # Query the session for the Meta object
+        # Compare the Meta object with the original object
+        meta = Meta("Test Meta", "Test Meta Description")
+        self.session.add(meta)
+        meta_query = self.session.query(Meta).filter(Meta.name == "Test Meta").one()
+        self.assertEqual(meta, meta_query)
+
+        # Tear down the database but keep the dump data
+        self.manager.tear_down(delete_dump_data=False)
+
+        # Set up the database and ist session again
+        self.manager.set_up(update=False, _test_isin_list=self.isin_list)
+        self.session = self.manager.session
+        # Make sure that the Meta object is no longer somehow in the session
+        with self.assertRaises(NoResultFound):
+            meta_query = self.session.query(Meta).filter(Meta.name == "Test Meta").one()
+
+        # Create another Meta object and add it to the session
+        # Query the session for the Meta object
+        # Compare the Meta object with the original object
+        meta = Meta("Test Meta", "Test Meta Description")
+        self.session.add(meta)
+        meta_query = self.session.query(Meta).filter(Meta.name == "Test Meta").one()
+        self.assertEqual(meta, meta_query)
 
     def test_dump(self):
         """Dump re-usable content to disk files."""
@@ -266,6 +291,7 @@ class Suite(object):
 
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
+            TestManagerInit,
             TestManager,
         ]
 

@@ -70,10 +70,16 @@ def get_var_path(sub_path, testing=False):
 
 def get_package_version(package_name):
     try:
-        version = pkg_resources.get_distribution(package_name).version
-        return version
+        return pkg_resources.get_distribution(package_name).version
     except pkg_resources.DistributionNotFound:
         return "Package not found"
+
+def get_project_name(package_name):
+    try:
+        return pkg_resources.get_distribution(package_name).project_name
+    except pkg_resources.DistributionNotFound:
+        return "Package not found"
+
 
 # Working folders - create them if they don't exist.
 config_path = get_config_file("config.yaml")
@@ -92,4 +98,4 @@ with open(os.path.join(log_config_path), "r") as stream:
 
 # Record the current version and log it.
 __version__ = get_package_version("asset_base")
-logging.info("This is fundmanage version %s" % __version__)
+logging.info("This is asset_base version %s" % __version__)

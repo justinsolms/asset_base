@@ -37,7 +37,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 Base = declarative_base()
 
 class _Session(ABC):
-    """Set up a database and session (abstract class)."""
+    """Set up and destroy a database and session."""
 
     def __init__(self, url, testing):
         """Initialization."""
@@ -55,18 +55,20 @@ class _Session(ABC):
 
     def __del__(self):
         """Destruction."""
-        # Delete database
-        if database_exists(self.db_url):
-            self.session.close()
-            del self.session
-            logger.info(f"Closed database session {self.db_url}.")
-            self.engine.dispose()
-            del self.engine
-            logger.info(f"Disposed of database engine {self.db_url}.")
-            # Only delete database if we are testing - otherwise keep it.
-            if self.testing is True:
-                drop_database(self.db_url)
-                logger.warning(f"Dropped the entire database {self.db_url}.")
+        # Delete database if it exists
+        if not database_exists(self.db_url):
+            return
+        # Properly close the session and dispose of the engine
+        self.session.close()
+        del self.session
+        logger.info(f"Closed database session {self.db_url}.")
+        self.engine.dispose()
+        del self.engine
+        logger.info(f"Disposed of database engine {self.db_url}.")
+        # Only delete database if we are testing - otherwise keep it.
+        if self.testing is True:
+            drop_database(self.db_url)
+            logger.warning(f"Dropped the entire database {self.db_url}.")
 
 
 class TestSession(_Session):

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset_base"
-version = "0.0.0"  # Placeholder version; setuptools-scm will override this
+version = "1.0.0"  # SCM is broken as this tag overides GIT tags
 description = "A package for obtaining, managing and provision of financial securities meta-data and time-series data."
 authors = [{name="Justin Solms", email="justinsolms@gmail.com" }]
 readme = "README.md"
@@ -29,5 +29,5 @@ include-package-data = true
 [tool.setuptools_scm]
 version_scheme = "guess-next-dev"
 local_scheme = "dirty-tag"
-write_to = "_version.py"  # Path to write version to a file.
-# fallback_version = "0.1.0"  # Fallback version if SCM is not available.
+write_to = "src/asset_base/_version.py"
+# tag_regex = '^v?(?P<version>\d+(\.\d+){1,2})$'  # This regex allows tags with and without 'v' prefix

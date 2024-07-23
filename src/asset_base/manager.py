@@ -63,7 +63,6 @@ See also
 """
 import os
 import logging
-import pkg_resources
 import yaml
 import datetime
 import pandas as pd
@@ -73,6 +72,8 @@ from sqlalchemy import Column
 from sqlalchemy import MetaData as SQLAlchemyMetaData
 
 from sqlalchemy.orm.exc import NoResultFound
+
+from asset_base import get_config_file
 
 from .exceptions import TimeSeriesNoData
 from .financial_data import Dump, DumpReadError, History, MetaData, Static
@@ -246,7 +247,7 @@ class ManagerBase(object):
         self.testing = testing
 
         # Open main configuration YAML file and convert to a dict.
-        config_path = pkg_resources.resource_filename("config", "conf.yaml")
+        config_path = get_config_file("config.yaml")
         with open(config_path, "r") as stream:
             self._config = yaml.full_load(stream)
 
@@ -267,8 +268,7 @@ class ManagerBase(object):
         """Destruction."""
         # Sometimes __del__ is called when `session_obj` when self has no
         # `session_obj`
-        if hasattr(self, "session_obj"):
-            del self.session_obj
+        self.close()
 
     def close(self):
         """Close the database session."""
@@ -276,6 +276,8 @@ class ManagerBase(object):
         # `session_obj`
         if hasattr(self, "session_obj"):
             del self.session_obj
+        if hasattr(self, "session"):
+            del self.session  # See _make_session
 
     def _make_session(self):
         """Make database sessions in either sqlite, mysql or memory."""
@@ -283,7 +285,6 @@ class ManagerBase(object):
             self.session_obj = TestSession()
         elif self._dialect == "sqlite":
             self.session_obj = SQLiteSession(testing=self.testing)
-
         self.session = self.session_obj.session
 
     def commit(self):
@@ -312,7 +313,7 @@ class ManagerBase(object):
 
         """
         # Create a new database and engine if not existing
-        if not hasattr(self, "session"):
+        if not hasattr(self, "session_obj"):
             self._make_session()
 
         # Record creation moment as a string (item, value) pair if it does not
