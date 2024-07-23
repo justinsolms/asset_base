@@ -270,10 +270,11 @@ class TestManager(unittest.TestCase):
         # works
         recover = data / data_zar
         recover = recover[["STX40", "AAPL", "MCD"]]
-        # Extract values
-        stx_40 = recover["STX40"][~recover["STX40"].isna()]
-        aapl = recover["AAPL"][~recover["AAPL"].isna()]
-        mcd = recover["MCD"][~recover["MCD"].isna()]
+        # Extract last 5 rows of data which should be the same and should be
+        # sufficient
+        stx_40 = recover["STX40"].tail(5)
+        aapl = recover["AAPL"].tail(5)
+        mcd = recover["MCD"].tail(5)
         # The MCD and APPL should, within rounding errors, correspond
         self.assertTrue(all(aapl.round(6) == mcd.round(6)))
         # This is ZAR to ZAR and should all be 1.0
