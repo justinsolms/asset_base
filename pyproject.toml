@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "asset_base"
-version = "1.0.0"  # SCM is broken as this tag overides GIT tags
+dynamic = ["version"]
 description = "A package for obtaining, managing and provision of financial securities meta-data and time-series data."
 authors = [{name="Justin Solms", email="justinsolms@gmail.com" }]
 readme = "README.md"
@@ -15,6 +15,9 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 keywords = ["financial", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
+
+[tool.setuptools.dynamic]
+version = {attr = "asset_base._version.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
