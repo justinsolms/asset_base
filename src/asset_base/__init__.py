@@ -16,13 +16,13 @@ import yaml
 import os
 import pkg_resources
 
-# Data path - folder must contain an `__init__.py` file to be discovered.
+# Data path
 _DATA = "data"
 
-# Config path - folder must contain an `__init__.py` file to be discovered.
+# Config path
 _CONFIG = "config"
 
-# Tests path - folder must contain an `__init__.py` file to be discovered.
+# Tests path
 _TESTS = "tests"
 
 # Variable data path
@@ -33,47 +33,53 @@ _VAR_TEST = "var_test"
 def get_data_path(sub_path):
     """Package path schema for fixed data
 
-    Note
-    ----
-    Relies on the ``_DATA`` folder containing and `__init__.py` file to be a
-    package.
-
     Parameters
     ----------
     sub_path: str
         Mandatory branch or child path.
     """
-    return pkg_resources.resource_filename(_DATA, sub_path)
+    # Get the directory of the current file (__init__.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the full path to the config folder
+    data_dir = os.path.join(current_dir, '..', '..', _DATA)
+    # Construct the full path to the configuration file
+    data_path = os.path.join(data_dir, sub_path)
+
+    return os.path.abspath(data_path)
 
 def get_config_path(sub_path):
     """Package path schema for configuration files.
 
-    Note
-    ----
-    Relies on the ``_CONFIG`` folder containing and `__init__.py` file to be a
-    package.
-
     Parameters
     ----------
     sub_path: str
         Mandatory branch or child path.
     """
-    return pkg_resources.resource_filename(_CONFIG, sub_path)
+    # Get the directory of the current file (__init__.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the full path to the config folder
+    config_dir = os.path.join(current_dir, '..', '..', _CONFIG)
+    # Construct the full path to the configuration file
+    config_path = os.path.join(config_dir, sub_path)
+
+    return os.path.abspath(config_path)
 
 def get_tests_path(sub_path):
     """Package path schema for test files.
 
-    Note
-    ----
-    Relies on the ``_TESTS`` folder containing and `__init__.py` file to be a
-    package.
-
     Parameters
     ----------
     sub_path: str
         Mandatory branch or child path.
     """
-    return pkg_resources.resource_filename(_TESTS, sub_path)
+    # Get the directory of the current file (__init__.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the full path to the config folder
+    tests_dir = os.path.join(current_dir, '..', '..', _TESTS)
+    # Construct the full path to the configuration file
+    tests_path = os.path.join(tests_dir, sub_path)
+
+    return os.path.abspath(tests_path)
 
 def get_var_path(sub_path, testing=False):
     """Package path schema for variable data such as logs and databases.
@@ -88,11 +94,17 @@ def get_var_path(sub_path, testing=False):
         If `True` then the returned path string contains `/var_test/` instead of
         the default `/var/`.
     """
+    # Get the directory of the current file (__init__.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Construct the full path to the config folder
     if testing:
-        path = pkg_resources.resource_filename(__name__, os.path.join(_VAR_TEST, sub_path))
+        var_dir = os.path.join(current_dir, '..', '..', _VAR_TEST)
     else:
-        path = pkg_resources.resource_filename(__name__, os.path.join(_VAR, sub_path))
-    return path
+        var_dir = os.path.join(current_dir, '..', '..', _VAR)
+    # Construct the full path to the configuration file
+    var_path = os.path.join(var_dir, sub_path)
+
+    return os.path.abspath(var_path)
 
 def get_package_version(package_name):
     try:
