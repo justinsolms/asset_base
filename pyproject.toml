@@ -34,3 +34,6 @@ version_scheme = "guess-next-dev"
 local_scheme = "dirty-tag"
 write_to = "src/asset_base/_version.py"
 # tag_regex = '^v?(?P<version>\d+(\.\d+){1,2})$'  # This regex allows tags with and without 'v' prefix
+
+[project.scripts]
+asset-base = "cli.__main__:cli"
