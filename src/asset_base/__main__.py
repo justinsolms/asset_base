@@ -14,7 +14,9 @@ logger = logging.getLogger(__name__)
 
 @click.group()
 def cli():
-    """Tool for updating the cached Finworks data with fresh API data.
+    """
+    Tool for managing the financial database and updating it with fresh data
+    from the API.
     """
     pass
 

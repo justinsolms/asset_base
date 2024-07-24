@@ -135,4 +135,4 @@ with open(os.path.join(log_config_path), "r") as stream:
 
 # Record the current version and log it.
 __version__ = get_package_version("asset_base")
-logging.info("This is `asset_base` version %s" % __version__)
+# logging.info("This is `asset_base` version %s" % __version__)
