@@ -246,15 +246,6 @@ class ManagerBase(object):
         """
         self.testing = testing
 
-        # Open main configuration YAML file and convert to a dict.
-        config_path = get_config_path("config.yaml")
-        with open(config_path, "r") as stream:
-            self._config = yaml.full_load(stream)
-
-        # Path for data dumps.
-        tmp_path = self._config["directories"]["working"]["tmp"]
-        self._tmp_path = os.path.expanduser(tmp_path)  # Full path.
-
         self._dialect = dialect
 
         # Create a new database and engine if not existing

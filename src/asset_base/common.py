@@ -6,28 +6,19 @@
 """
 from abc import ABC
 
-import os
 import sys
 import datetime
+import logging
 
 import pandas as pd
 
-from sqlalchemy import Integer, String, Date
-from sqlalchemy import Column
-from sqlalchemy import UniqueConstraint
-
-from sqlalchemy_utils import drop_database, database_exists
-from sqlalchemy.orm import declarative_base
-
-from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
+from sqlalchemy import Integer, String, Date, Column, UniqueConstraint
+from sqlalchemy.orm import declarative_base, Session
+from sqlalchemy_utils import drop_database, database_exists
 
-from .__init__ import get_var_path
+from asset_base import get_cache_path
 
-
-
-# Get module-named logger.
-import logging
 
 logger = logging.getLogger(__name__)
 # Change logging level here.
@@ -84,20 +75,15 @@ class TestSession(_Session):
 class SQLiteSession(_Session):
     """Set up an `in-memory` test database and session."""
 
-    _VAR_FOLDER = "cache"
     _DB_NAME = "asset_base"
 
     def __init__(self, testing=False):
         # Construct SQLite file name with path expansion for a URL
-        self._db_name = "fundmanage.%s.db" % self._DB_NAME
+        self._db_name = "%s.db" % self._DB_NAME
 
         # Put files in a `cache`` folder under the `var` path scheme.
-        cache_path = get_var_path(self._VAR_FOLDER, testing=testing)
-        if not os.path.exists(cache_path):
-            os.makedirs(cache_path)
-
-        db_file_name = os.path.join(cache_path, self._db_name)
-        db_url = "sqlite:///" + db_file_name
+        db_path = get_cache_path(self._db_name, testing=testing)
+        db_url = "sqlite:///" + db_path
 
         super().__init__(db_url, testing=testing)
 

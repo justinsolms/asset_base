@@ -11,7 +11,6 @@ distributed without the express permission of Justin Solms.
 
 """
 
-import pkg_resources
 from sqlalchemy import Column
 from sqlalchemy.types import DateTime, Integer, String, Boolean
 from sqlalchemy.sql import func
@@ -25,8 +24,7 @@ import logging
 import yaml
 import os
 
-from asset_base import get_config_path
-
+from fundmanage import get_config_path, get_log_path
 
 _db_url = "sqlite:///fundmanage.log.db"
 _db_engine = create_engine(_db_url)
@@ -35,7 +33,6 @@ _db_session = Session(_db_engine)
 
 # Get the base for ORM objects.
 Base = declarative_base()
-
 
 class FileHandler(logging.handlers.TimedRotatingFileHandler):
     """Solves the log file path problem for file logging.
@@ -68,17 +65,8 @@ class FileHandler(logging.handlers.TimedRotatingFileHandler):
 
     def __init__(self, **kwargs):
         """Initialization."""
-        # Open main configuration YAML file as a dict.
-        config_path = get_config_path("config.yaml")
-        with open(config_path, "r") as stream:
-            config = yaml.full_load(stream)
-
-        # Groom the log file name with path expansion.
-        log_path = config["directories"]["working"]["log"]
-        log_path = os.path.expanduser(log_path)  # Full path.
-        logfile_name = "%s/%s" % (log_path, self._log_file)
-
-        super(FileHandler, self).__init__(logfile_name, **kwargs)
+        log_file_name = get_log_path(self._log_file)
+        super(FileHandler, self).__init__(log_file_name, **kwargs)
 
 
 class FundLog(Base):
@@ -296,17 +284,8 @@ class SQLLogHandler(logging.Handler):
         _db_session.commit()
 
 # Configure the logging database.
-
-# Open main configuration YAML file and convert to a dict.
-config_path = get_config_path("config.yaml")
-with open(config_path, "r") as stream:
-    config = yaml.full_load(stream)
-    log_name = "fundmanage.log.db"
-    log_path = config["directories"]["working"]["log"]
-    log_path = os.path.expanduser(log_path)  # Full path.
-    logfile_name = "%s/%s" % (log_path, log_name)
-
-# Open the session.
+LOG_NAME = "fundmanage.log.db"
+logfile_name = get_log_path(LOG_NAME)
 _db_url = "sqlite:///" + logfile_name
 _db_engine = create_engine(_db_url)
 _db_session = Session(_db_engine)

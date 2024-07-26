@@ -17,8 +17,11 @@ import yaml
 import os
 import pkg_resources
 
-# Data path environment variable name
-_DATA = "DATA_PATH"
+# External MyDrive data path environment variable name
+_DATA_PATH = "DATA_PATH"
+
+# Data path
+_DATA = "data"
 
 # Config path
 _CONFIG = "config"
@@ -111,9 +114,19 @@ def get_art_path(sub_path=None):
     return art_path
 
 def get_data_path(sub_path=None):
-    data_path = os.environ.get(_DATA)
+    current_dir = os.path.dirname(__file__)
+    resources_path = os.path.join(current_dir, _DATA)
+    if not os.path.exists(resources_path):
+        raise FileNotFoundError("Resources directory not found")
+    # Add the sub_path if it is not None
+    if sub_path is not None:
+        resources_path = os.path.join(resources_path, sub_path)
+    return resources_path
+
+def get_external_data_path(sub_path=None):
+    data_path = os.environ.get(_DATA_PATH)
     if data_path is None:
-        raise ValueError(f"Environment variable {_DATA} not set.")
+        raise ValueError(f"Environment variable {_DATA_PATH} not set.")
     # Add the sub_path if it is not None
     if sub_path is not None:
         data_path = os.path.join(data_path, sub_path)
@@ -167,8 +180,8 @@ def get_var_path(sub_path=None, testing=False):
         var_path = os.path.abspath(os.path.join(var_path, sub_path))
     return var_path
 
-def get_log_path(sub_path=None):
-    var_dir = get_var_path()
+def get_log_path(sub_path=None, testing=False):
+    var_dir = get_var_path(testing=testing)
     log_path = os.path.join(var_dir, _LOG)
     # Create the log directory if it does not exist
     if not os.path.exists(log_path):
@@ -178,8 +191,8 @@ def get_log_path(sub_path=None):
         log_path = os.path.join(log_path, sub_path)
     return log_path
 
-def get_tmp_path(sub_path=None):
-    var_dir = get_var_path()
+def get_tmp_path(sub_path=None, testing=False):
+    var_dir = get_var_path(testing=testing)
     tmp_path = os.path.join(var_dir, _TMP)
     # Create the tmp directory if it does not exist
     if not os.path.exists(tmp_path):
@@ -189,8 +202,8 @@ def get_tmp_path(sub_path=None):
         tmp_path = os.path.join(tmp_path, sub_path)
     return tmp_path
 
-def get_cache_path(sub_path=None):
-    var_dir = get_var_path()
+def get_cache_path(sub_path=None, testing=False):
+    var_dir = get_var_path(testing=testing)
     cache_path = os.path.join(var_dir, _CACHE)
     # Create the cache directory if it does not exist
     if not os.path.exists(cache_path):

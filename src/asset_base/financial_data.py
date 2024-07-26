@@ -90,7 +90,7 @@ class Dump(_Feed):
     was originally designed to work with multiple class dumps at once.
 
     """
-
+    # TODO: Move the dump_dict to the external path pointed to by the DATA_PATH environment variable.
     _CLASS_DATA_PATH = "dumps"
     _CLASS_TEST_DATA_PATH = "test_dumps"
 
