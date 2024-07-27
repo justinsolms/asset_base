@@ -5,8 +5,8 @@
 """Logging handlers module.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
-This file is part of the fundmanage module.
-The fundmanage module can not be modified, copied and/or
+This file is part of the asset_base module.
+The asset_base module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
@@ -21,12 +21,9 @@ from sqlalchemy import create_engine
 import traceback
 import logging
 
-import yaml
-import os
+from asset_base import get_log_path
 
-from fundmanage import get_config_path, get_log_path
-
-_db_url = "sqlite:///fundmanage.log.db"
+_db_url = "sqlite:///asset_base.log.db"
 _db_engine = create_engine(_db_url)
 _db_session = Session(_db_engine)
 
@@ -61,7 +58,7 @@ class FileHandler(logging.handlers.TimedRotatingFileHandler):
 
     """
 
-    _log_file = "fundmanage.log"
+    _log_file = "asset_base.log"
 
     def __init__(self, **kwargs):
         """Initialization."""
@@ -284,7 +281,7 @@ class SQLLogHandler(logging.Handler):
         _db_session.commit()
 
 # Configure the logging database.
-LOG_NAME = "fundmanage.log.db"
+LOG_NAME = "asset_base.log.db"
 logfile_name = get_log_path(LOG_NAME)
 _db_url = "sqlite:///" + logfile_name
 _db_engine = create_engine(_db_url)
