@@ -36,13 +36,13 @@ class _Session(ABC):
         self.db_url = url
 
         self.engine = create_engine(self.db_url, echo=False)  # No logging
-        logger.info(f"Created database engine {self.db_url}")
+        logger.debug(f"Created database engine {self.db_url}")
 
         Base.metadata.create_all(self.engine)  # Using asset_base.Base
-        logger.info(f"Created all tables in {self.db_url}.")
+        logger.debug(f"Created all tables in {self.db_url}.")
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.info(f"Opened database session {self.db_url}")
+        logger.debug(f"Opened database session {self.db_url}")
 
     def __del__(self):
         """Destruction."""
@@ -52,10 +52,10 @@ class _Session(ABC):
         # Properly close the session and dispose of the engine
         self.session.close()
         del self.session
-        logger.info(f"Closed database session {self.db_url}.")
+        logger.debug(f"Closed database session {self.db_url}.")
         self.engine.dispose()
         del self.engine
-        logger.info(f"Disposed of database engine {self.db_url}.")
+        logger.debug(f"Disposed of database engine {self.db_url}.")
         # Only delete database if we are testing - otherwise keep it.
         if self.testing is True:
             drop_database(self.db_url)
