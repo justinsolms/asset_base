@@ -5,8 +5,8 @@
 """ Get financial data from the https://eodhistoricaldata.com/ API.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
-This file is part of the fundmanage module.
-The fundmanage module can not be modified, copied and/or
+This file is part of the asset_base module.
+The asset_base module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 This module has different levels of abstraction classes:

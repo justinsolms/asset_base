@@ -83,7 +83,7 @@ dependencies:
   - colorama=0.4.6=py312h06a4308_0
   - colorcet=3.1.0=py312h06a4308_0
   - comm=0.2.1=py312h06a4308_0
-  - conda=24.5.0=py312h06a4308_0
+  - conda=24.7.1=py312h06a4308_0
   - conda-build=24.5.1=py312h06a4308_0
   - conda-content-trust=0.2.0=py312h06a4308_1
   - conda-index=0.5.0=py312h06a4308_0
@@ -509,12 +509,19 @@ dependencies:
   - zstd=1.5.5=hc292b87_2
   - pip:
       - aiounittest==1.4.2
-      - asset-base==1.0.1.dev4+dirty
       - build==1.2.1
+      - click-completion==0.5.2
+      - fundmanage==1.0.1.dev0+dirty
       - fuzzywuzzy==0.18.0
       - ipdb==0.13.13
+      - levenshtein==0.25.1
       - pyproject-hooks==1.1.0
+      - python-levenshtein==0.25.1
       - python-stdnum==1.20
+      - rapidfuzz==3.9.4
       - setuptools-scm==8.1.0
+      - shellingham==1.5.4
       - sqlalchemy-utils==0.41.2
-prefix: /home/justin/anaconda3
+      - xlrd==2.0.1
+      - xlsxwriter==3.2.0
+prefix: /home/justin/.local/lib/anaconda
