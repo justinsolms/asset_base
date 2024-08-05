@@ -14,7 +14,20 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 keywords = ["financial", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
-dependencies = ["click", "click-completion"]
+dependencies = [
+    "aiohttp",
+    "aiounittest",
+    "click",
+    "numpy",
+    "pandas",
+    "python_stdnum",
+    "PyYAML",
+    "scipy",
+    "setuptools",
+    "SQLAlchemy",
+    "SQLAlchemy_Utils",
+]
+
 [[project.authors]]
 name = "Justin Solms"
 email = "justinsolms@gmail.com"

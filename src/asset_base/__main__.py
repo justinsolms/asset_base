@@ -22,7 +22,7 @@ def cli():
 
 @click.command()
 @click.option("-d", "--delete-dump-data", is_flag=True, help="Delete dump data.")
-def initialise(delete_dump_data):
+def init(delete_dump_data):
     """Initialize a fresh database and populate it with required data."""
     with Manager() as abm:
         if delete_dump_data:
@@ -33,7 +33,7 @@ def initialise(delete_dump_data):
             abm.tear_down(delete_dump_data=False)
         abm.set_up()
 
-cli.add_command(initialise)
+cli.add_command(init)
 
 if __name__ == "__main__":
     cli()
