@@ -96,41 +96,43 @@ logger = logging.getLogger(__name__)
 metadata = SQLAlchemyMetaData()
 
 
-def replace_time_series_labels(data_frame, identifier, inplace=False):
+def substitute_security_labels(data_frame, identifier, inplace=False, labels_only=False):
     """Replace time series column labels with the specified identifier.
 
     Parameters
     ----------
-        data_frame: pandas.DataFrame
-            The data in which column labels must be replaced.
-        identifier : str
-            Security identifiers are used to label the data columns in the
-            returned data, the choice of which is specified by the parameter
-            values:
+    data_frame: pandas.DataFrame
+        The data in which column labels must be replaced.
+    identifier : str
+        Security identifiers are used to label the data columns in the
+        returned data, the choice of which is specified by the parameter
+        values:
 
-            'id':
-                Uses the security (asset) ``id`` number attribute.
-            'identity_code':
-                Uses the security (asset) ``identity_code`` attribute.
-            'ticker':
-                Uses the security (asset) ``ticker`` attribute.
-            'isin':
-                Uses the security (asset) ``isin`` attribute.
-            'name':
-                Uses the security (asset) ``name`` attribute.
+        'id':
+            Uses the security (asset) ``id`` number attribute.
+        'identity_code':
+            Uses the security (asset) ``identity_code`` attribute.
+        'ticker':
+            Uses the security (asset) ``ticker`` attribute.
+        'isin':
+            Uses the security (asset) ``isin`` attribute.
+        'name':
+            Uses the security (asset) ``name`` attribute.
 
     inplace: bool
         If True, modifies the DataFrame in place (do not create a new object).
+        Else returns a new (copied) object with the column labels changed. May
+        not be used together with labels_only=True.
+    labels_only: bool
+        If True, returns only the list of column labels and not the DataFrame.
+        May not be used together with inplace=True.
 
     Returns
     -------
-    DataFrame or None
-        Changed row labels or None if ``inplace=True``.
+    pandas.DataFrame, list or None
+        See arguments `inplace` and `labels_only`.
 
     """
-    if not inplace:
-        data_frame = data_frame.copy()
-
     # Pick column label identifier.
     if identifier == "id":
         columns = [s.id for s in data_frame.columns]
@@ -149,13 +151,16 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
     else:
         raise ValueError('Unexpected value for "identifier" argument.')
 
-    if not inplace:
+    if inplace and labels_only:
+        raise ValueError("Cannot use both inplace=True and labels_only=True.")
+    elif labels_only:
+        return columns
+    elif inplace:
+        data_frame.columns = columns
+    else:
         data_frame = data_frame.copy()
         data_frame.columns = columns
         return data_frame
-    else:
-        data_frame.columns = columns
-        return None
 
 
 class Meta(Base):

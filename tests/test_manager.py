@@ -31,7 +31,7 @@ from src.asset_base.common import Common
 from src.asset_base.financial_data import Dump
 from src.asset_base.asset import Forex, ListedEquity
 from src.asset_base.time_series import Dividend, ListedEOD
-from src.asset_base.manager import Manager, Meta, replace_time_series_labels
+from src.asset_base.manager import Manager, Meta, substitute_security_labels
 from src.asset_base.exceptions import TimeSeriesNoData
 
 import warnings
@@ -246,7 +246,7 @@ class TestManager(unittest.TestCase):
         # Test total-return product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
         data = self.manager.time_series(securities_list, return_type="total_return")
-        replace_time_series_labels(data, "ticker", inplace=True)
+        substitute_security_labels(data, "ticker", inplace=True)
         data = data.loc["2020-01-01":"2021-01-01"]  # Fixed historical window
         data_check_prod = data.prod().to_dict()
         test_data = {
@@ -262,8 +262,8 @@ class TestManager(unittest.TestCase):
         securities_list = self.session.query(ListedEquity).all()
         data = self.manager.time_series(securities_list, return_type="total_return")
         data_zar = self.manager.to_common_currency(data, "ZAR")
-        data = replace_time_series_labels(data, "ticker")
-        data_zar = replace_time_series_labels(data_zar, "ticker")
+        data = substitute_security_labels(data, "ticker")
+        data_zar = substitute_security_labels(data_zar, "ticker")
         forex = Forex.get_rates_data_frame(self.session, "ZAR", ["USD"])
 
         # Recover exchange rates. Correct recovery is the test that everything
