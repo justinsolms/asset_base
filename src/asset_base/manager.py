@@ -371,6 +371,7 @@ class ManagerBase(object):
                 logger.info("Successful dump of important asset_base data for re-use.")
 
         # Delete database
+        # FIXME: The database should be deleted
         self.close()
 
     def update(self, _test_isin_list=None, _test_forex_list=None):
@@ -427,6 +428,8 @@ class ManagerBase(object):
             cls.dump(self.session, self.dumper)
 
     def reuse(self):
+        # TODO: FInd and make clear ho EOD and Dividend data is reused.
+        # TODO: Reuse FOREX data
         """Reuse dumped data as a database initialization resource.
 
         See also
