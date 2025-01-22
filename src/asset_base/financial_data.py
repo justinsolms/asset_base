@@ -73,7 +73,7 @@ class _Feed(object, metaclass=abc.ABCMeta):
             self._abs_data_path = get_data_path(self._CLASS_DATA_PATH)
             # Make directory if not existing
             if not os.path.isdir(self._abs_data_path):
-                logger.info("Created folder %s", self._abs_data_path)
+                logger.debug("Created folder %s", self._abs_data_path)
                 os.makedirs(self._abs_data_path)
         else:
             self._abs_data_path = None
@@ -131,13 +131,8 @@ class Dump(_Feed):
         for key, item in list(dump_dict.items()):
             file_name = f"{key}.pandas.dataframe.pkl"
             path = self._path(file_name)
-            try:
-                item.to_pickle(path)
-            except Exception:
-                logger.error("Could not write dump file %s", path)
-                raise
-            else:
-                logger.info("Write dump file %s", path)
+            item.to_pickle(path)
+            logger.info("Wrote dump file %s", path)
 
     def read(self, name_list):
         """Read a dict of ``pandas.DataFrame`` from CSV files.
@@ -158,15 +153,8 @@ class Dump(_Feed):
         for name in name_list:
             file_name = f"{name}.pandas.dataframe.pkl"
             path = self._path(file_name)
-            try:
-                dump_dict[name] = pd.read_pickle(path)
-            except FileNotFoundError:
-                raise DumpReadError(f"Could not read dump file {path}.")
-            except Exception as ex:
-                logger.exception(ex)
-                raise ex
-            else:
-                logger.info("Read dump file %s", path)
+            dump_dict[name] = pd.read_pickle(path)
+            logger.debug("Read dump file %s", path)
 
         return dump_dict
 
@@ -192,23 +180,15 @@ class Dump(_Feed):
         # First delete all the folder content files.
         for file_name in files:
             path = self._path(file_name)
-            try:
-                os.remove(path)
-            except Exception:
-                logger.warning("Could not delete dump file %s", path)
-            else:
-                logger.info("Deleted dump file %s", path)
+            os.remove(path)
+            logger.debug("Deleted dump file %s", path)
 
         # If required then delete the now empty folder too.
         if delete_folder:
             # Delete containing folder
             path = self._path()
-            try:
-                os.rmdir(path)
-            except Exception:
-                logger.warning("Could not delete dump folder %s", path)
-            else:
-                logger.info("Deleted dump folder %s", path)
+            os.rmdir(path)
+            logger.debug("Deleted dump folder %s", path)
 
     def exists(self, dump_class):
         """Verify that a dump file exits for a dumped class.
@@ -260,7 +240,7 @@ class Static(_Feed):
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info("Fetching currency data from {}.".format(path))
+        logger.debug("Fetching currency data from {}.".format(path))
         data = pd.read_csv(path, na_filter=False)
 
         # Extract by columns name and rename to a standard. This is also then a
@@ -295,7 +275,7 @@ class Static(_Feed):
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info("Fetching domicile data from {}.".format(path))
+        logger.debug("Fetching domicile data from {}.".format(path))
         data = pd.read_csv(path, na_filter=False)
 
         # Extract by columns name and rename to a standard. This is also then a
@@ -319,7 +299,7 @@ class Static(_Feed):
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info("Fetching exchange data from {}.".format(path))
+        logger.debug("Fetching exchange data from {}.".format(path))
         data = pd.read_csv(path, na_filter=False)
 
         # Extract by columns name and rename to a standard. This is also then a
@@ -467,7 +447,7 @@ class MetaData(_Feed):
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
-        logger.info("Fetching JSE ETFs meta-data from {}.".format(path))
+        logger.debug("Fetching JSE ETFs meta-data from {}.".format(path))
 
         # Read data with proper dat typing
         data = pd.read_csv(
@@ -499,11 +479,8 @@ class MetaData(_Feed):
                 "Currency": "currency_code",
             }
             # Try fetch the data form the feed
-            try:
-                data = feed.get_indices()
-            except Exception as ex:
-                logger.error("Failed to get Indices meta data.")
-                raise ex
+            data = feed.get_indices()
+            logger.debug("Got Indices meta data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
                 return pd.DataFrame
@@ -643,11 +620,8 @@ class History(_Feed):
                 "open": "open",
                 "volume": "volume",
             }
-            try:
-                data = feed.get_eod(symbol_list)
-            except Exception as ex:
-                logger.error("Failed to get EOD data.")
-                raise ex
+            data = feed.get_eod(symbol_list)
+            logger.debug("Got EOD data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
                 return pd.DataFrame
@@ -729,11 +703,8 @@ class History(_Feed):
                 "payment_date",
                 "record_date",
             ]
-            try:
-                data = feed.get_dividends(symbol_list)
-            except Exception() as ex:
-                logger.error("Failed to get dividend data.")
-                raise ex
+            data = feed.get_dividends(symbol_list)
+            logger.debug("Got dividend data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
                 return pd.DataFrame
@@ -809,11 +780,8 @@ class History(_Feed):
                 "open": "open",
                 "volume": "volume",
             }
-            try:
-                data = feed.get_forex(symbol_list)
-            except Exception as ex:
-                logger.error("Failed to get Forex data.")
-                raise ex
+            data = feed.get_forex(symbol_list)
+            logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
                 return pd.DataFrame
@@ -873,11 +841,8 @@ class History(_Feed):
                 "open": "open",
                 "volume": "volume",
             }
-            try:
-                data = feed.get_index(symbol_list)
-            except Exception as ex:
-                logger.error("Failed to get Forex data.")
-                raise ex
+            data = feed.get_index(symbol_list)
+            logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
                 return pd.DataFrame
