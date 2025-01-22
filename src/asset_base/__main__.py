@@ -4,10 +4,13 @@ The CLI provides the following commands:
 - init: Initialize a fresh database and populate it with required data.
 
 """
+# Immediately suppress numexpr < warning level logs so the autocomplete string
+# outputs work form the command line interface.
 import logging
+logging.getLogger("numexpr").setLevel(logging.WARNING)
+
 import click
 from asset_base.manager import Manager
-
 
 # Get module-named logger.
 logger = logging.getLogger(__name__)
