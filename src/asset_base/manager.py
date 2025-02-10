@@ -374,8 +374,14 @@ class ManagerBase(object):
             else:
                 logger.info("Successful dump of important asset_base data for re-use.")
 
-        # Delete database
+        # Delete the database contents, and the database itself. Use SQLAlchemy commands. The database session
+        self.session_obj.drop_all()
+
+
+        # FIXME: The database should be deleted
         self.close()
+
+
 
     def update(self, _test_isin_list=None, _test_forex_list=None):
         """Update all non-static data.
