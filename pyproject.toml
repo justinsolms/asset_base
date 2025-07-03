@@ -26,6 +26,7 @@ dependencies = [
     "setuptools",
     "SQLAlchemy",
     "SQLAlchemy_Utils",
+    "esbonio",
     "ipdb",
 ]
 
