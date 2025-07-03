@@ -5,8 +5,8 @@
 """Object relational mapping module to the ``asset_base`` database.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>.
-This file is part of the fundmanage module.
-The fundmanage module can not be modified, copied and/or
+This file is part of the asset_base module.
+The asset_base module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 FIXME: Re-write this doc post split of Entity and Asset class inheritance
@@ -71,10 +71,10 @@ from sqlalchemy import String
 from sqlalchemy import Column
 from sqlalchemy import MetaData as SQLAlchemyMetaData
 
-from sqlalchemy_utils import drop_database, database_exists
 from sqlalchemy.orm.exc import NoResultFound
 
-from .__init__ import get_var_path
+from asset_base import get_config_path
+
 from .exceptions import TimeSeriesNoData
 from .financial_data import Dump, DumpReadError, History, MetaData, Static
 from .common import Base, SQLiteSession, TestSession
@@ -96,41 +96,43 @@ logger = logging.getLogger(__name__)
 metadata = SQLAlchemyMetaData()
 
 
-def replace_time_series_labels(data_frame, identifier, inplace=False):
+def substitute_security_labels(data_frame, identifier, inplace=False, labels_only=False):
     """Replace time series column labels with the specified identifier.
 
     Parameters
     ----------
-        data_frame: pandas.DataFrame
-            The data in which column labels must be replaced.
-        identifier : str
-            Security identifiers are used to label the data columns in the
-            returned data, the choice of which is specified by the parameter
-            values:
+    data_frame: pandas.DataFrame
+        The data in which column labels must be replaced.
+    identifier : str
+        Security identifiers are used to label the data columns in the
+        returned data, the choice of which is specified by the parameter
+        values:
 
-            'id':
-                Uses the security (asset) ``id`` number attribute.
-            'identity_code':
-                Uses the security (asset) ``identity_code`` attribute.
-            'ticker':
-                Uses the security (asset) ``ticker`` attribute.
-            'isin':
-                Uses the security (asset) ``isin`` attribute.
-            'name':
-                Uses the security (asset) ``name`` attribute.
+        'id':
+            Uses the security (asset) ``id`` number attribute.
+        'identity_code':
+            Uses the security (asset) ``identity_code`` attribute.
+        'ticker':
+            Uses the security (asset) ``ticker`` attribute.
+        'isin':
+            Uses the security (asset) ``isin`` attribute.
+        'name':
+            Uses the security (asset) ``name`` attribute.
 
     inplace: bool
         If True, modifies the DataFrame in place (do not create a new object).
+        Else returns a new (copied) object with the column labels changed. May
+        not be used together with labels_only=True.
+    labels_only: bool
+        If True, returns only the list of column labels and not the DataFrame.
+        May not be used together with inplace=True.
 
     Returns
     -------
-    DataFrame or None
-        Changed row labels or None if ``inplace=True``.
+    pandas.DataFrame, list or None
+        See arguments `inplace` and `labels_only`.
 
     """
-    if not inplace:
-        data_frame = data_frame.copy()
-
     # Pick column label identifier.
     if identifier == "id":
         columns = [s.id for s in data_frame.columns]
@@ -149,13 +151,16 @@ def replace_time_series_labels(data_frame, identifier, inplace=False):
     else:
         raise ValueError('Unexpected value for "identifier" argument.')
 
-    if not inplace:
+    if inplace and labels_only:
+        raise ValueError("Cannot use both inplace=True and labels_only=True.")
+    elif labels_only:
+        return columns
+    elif inplace:
+        data_frame.columns = columns
+    else:
         data_frame = data_frame.copy()
         data_frame.columns = columns
         return data_frame
-    else:
-        data_frame.columns = columns
-        return None
 
 
 class Meta(Base):
@@ -246,15 +251,6 @@ class ManagerBase(object):
         """
         self.testing = testing
 
-        # Open main configuration YAML file and convert to a dict.
-        path = os.path.dirname(os.path.realpath(__file__))
-        with open(path + "/" + "conf.yaml", "r") as stream:
-            self._config = yaml.full_load(stream)
-
-        # Path for data dumps.
-        tmp_path = self._config["directories"]["working"]["tmp"]
-        self._tmp_path = os.path.expanduser(tmp_path)  # Full path.
-
         self._dialect = dialect
 
         # Create a new database and engine if not existing
@@ -268,8 +264,7 @@ class ManagerBase(object):
         """Destruction."""
         # Sometimes __del__ is called when `session_obj` when self has no
         # `session_obj`
-        if hasattr(self, "session_obj"):
-            del self.session_obj
+        self.close()
 
     def close(self):
         """Close the database session."""
@@ -277,6 +272,8 @@ class ManagerBase(object):
         # `session_obj`
         if hasattr(self, "session_obj"):
             del self.session_obj
+        if hasattr(self, "session"):
+            del self.session  # See _make_session
 
     def _make_session(self):
         """Make database sessions in either sqlite, mysql or memory."""
@@ -284,7 +281,6 @@ class ManagerBase(object):
             self.session_obj = TestSession()
         elif self._dialect == "sqlite":
             self.session_obj = SQLiteSession(testing=self.testing)
-
         self.session = self.session_obj.session
 
     def commit(self):
@@ -313,7 +309,7 @@ class ManagerBase(object):
 
         """
         # Create a new database and engine if not existing
-        if not hasattr(self, "session"):
+        if not hasattr(self, "session_obj"):
             self._make_session()
 
         # Record creation moment as a string (item, value) pair if it does not
@@ -375,6 +371,7 @@ class ManagerBase(object):
                 logger.info("Successful dump of important asset_base data for re-use.")
 
         # Delete database
+        # FIXME: The database should be deleted
         self.close()
 
     def update(self, _test_isin_list=None, _test_forex_list=None):
@@ -431,6 +428,8 @@ class ManagerBase(object):
             cls.dump(self.session, self.dumper)
 
     def reuse(self):
+        # TODO: FInd and make clear ho EOD and Dividend data is reused.
+        # TODO: Reuse FOREX data
         """Reuse dumped data as a database initialization resource.
 
         See also

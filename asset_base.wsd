@@ -116,6 +116,17 @@ package "Assets" {
 
 }
 
+package "Accounts" {
+
+    class CashAccount
+
+    class SettlementAccount
+
+    Assets.Cash <|-- CashAccount
+    Assets.Cash <|-- SettlementAccount
+
+}
+
 package "Time Series" {
 
     class TimeSeriesBase {

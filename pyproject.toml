@@ -1,31 +1,57 @@
-[tool.poetry]
-name = "asset_base"
-version = "1.0.0"
-description = "A package for obtaining, managing and provision of financial securities meta-data and time-series data."
-authors = ["Justin Solms <justinsolms@gmail.com>"]
-license = "MIT"
-readme = "README.md"
-homepage = "https://github.com/justinsolms/asset_base"
-repository = "https://github.com/justinsolms/asset_base"
-keywords = ["financial", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
-
-[tool.poetry.dependencies]
-python = "^3.9"
-pandas = "^2.1.3"
-sqlalchemy = "^2.0.23"
-numpy = "^1.26.2"
-scipy = "^1.11.4"
-python-stdnum = "^1.19"
-asyncio = "^3.4.3"
-aiohttp = "^3.9.1"
-
-[tool.poetry.dev-dependencies]
-aiounittest = "^1.4.2"
-sphinx = "^7.2.6"
-sphinxcontrib-napoleon = "^0.7"
-sphinx-autoapi = "^3.0.0"
-sphinx-rtd-theme = "^2.0.0"
-
 [build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+requires = ["setuptools>=42", "wheel", "setuptools-scm[toml]>=3.4"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "asset_base"
+dynamic = ["version"]
+description = "A package for obtaining, managing and provision of financial securities meta-data and time-series data."
+readme = "README.md"
+requires-python = "==3.12.4"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+keywords = ["financial", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
+dependencies = [
+    "aiohttp",
+    "aiounittest",
+    "click",
+    "numpy",
+    "pandas",
+    "python_stdnum",
+    "PyYAML",
+    "scipy",
+    "setuptools",
+    "SQLAlchemy",
+    "SQLAlchemy_Utils",
+    "esbonio",
+    "ipdb",
+]
+
+[[project.authors]]
+name = "Justin Solms"
+email = "justinsolms@gmail.com"
+
+[tool.setuptools.dynamic]
+version = {attr = "asset_base._version.__version__"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+your_package_name = ["data/*", "config/*"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "dirty-tag"
+write_to = "src/asset_base/_version.py"
+# tag_regex = '^v?(?P<version>\d+(\.\d+){1,2})$'  # This regex allows tags with and without 'v' prefix
+
+[project.scripts]
+asset-base = "asset_base.__main__:cli"
