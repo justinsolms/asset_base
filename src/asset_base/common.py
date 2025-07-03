@@ -4,30 +4,21 @@
 
 """ Declare common object infrastructure
 """
-from abc import ABC, abstractclassmethod
+from abc import ABC
 
-import os
 import sys
 import datetime
+import logging
 
 import pandas as pd
 
-from sqlalchemy import Integer, String, Date
-from sqlalchemy import Column
-from sqlalchemy import UniqueConstraint
-
-from sqlalchemy_utils import drop_database, database_exists
-from sqlalchemy.orm import declarative_base
-
-from sqlalchemy.orm import Session
 from sqlalchemy import create_engine
+from sqlalchemy import Integer, String, Date, Column, UniqueConstraint
+from sqlalchemy.orm import declarative_base, Session
+from sqlalchemy_utils import drop_database, database_exists
 
-from .__init__ import get_var_path
+from asset_base import get_cache_path
 
-
-
-# Get module-named logger.
-import logging
 
 logger = logging.getLogger(__name__)
 # Change logging level here.
@@ -37,7 +28,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 Base = declarative_base()
 
 class _Session(ABC):
-    """Set up a database and session (abstract class)."""
+    """Set up and destroy a database and session."""
 
     def __init__(self, url, testing):
         """Initialization."""
@@ -45,28 +36,30 @@ class _Session(ABC):
         self.db_url = url
 
         self.engine = create_engine(self.db_url, echo=False)  # No logging
-        logger.info(f"Created database engine {self.db_url}")
+        logger.debug(f"Created database engine {self.db_url}")
 
         Base.metadata.create_all(self.engine)  # Using asset_base.Base
-        logger.info(f"Created all tables in {self.db_url}.")
+        logger.debug(f"Created all tables in {self.db_url}.")
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.info(f"Opened database session {self.db_url}")
+        logger.debug(f"Opened database session {self.db_url}")
 
     def __del__(self):
         """Destruction."""
-        # Delete database
-        if database_exists(self.db_url):
-            self.session.close()
-            del self.session
-            logger.info(f"Closed database session {self.db_url}.")
-            self.engine.dispose()
-            del self.engine
-            logger.info(f"Disposed of database engine {self.db_url}.")
-            # Only delete database if we are testing - otherwise keep it.
-            if self.testing is True:
-                drop_database(self.db_url)
-                logger.warning(f"Dropped the entire database {self.db_url}.")
+        # Delete database if it exists
+        if not database_exists(self.db_url):
+            return
+        # Properly close the session and dispose of the engine
+        self.session.close()
+        del self.session
+        logger.debug(f"Closed database session {self.db_url}.")
+        self.engine.dispose()
+        del self.engine
+        logger.debug(f"Disposed of database engine {self.db_url}.")
+        # Only delete database if we are testing - otherwise keep it.
+        if self.testing is True:
+            drop_database(self.db_url)
+            logger.warning(f"Dropped the entire database {self.db_url}.")
 
 
 class TestSession(_Session):
@@ -82,20 +75,15 @@ class TestSession(_Session):
 class SQLiteSession(_Session):
     """Set up an `in-memory` test database and session."""
 
-    _VAR_FOLDER = "cache"
     _DB_NAME = "asset_base"
 
     def __init__(self, testing=False):
         # Construct SQLite file name with path expansion for a URL
-        self._db_name = "fundmanage.%s.db" % self._DB_NAME
+        self._db_name = "%s.db" % self._DB_NAME
 
         # Put files in a `cache`` folder under the `var` path scheme.
-        cache_path = get_var_path(self._VAR_FOLDER, testing=testing)
-        if not os.path.exists(cache_path):
-            os.makedirs(cache_path)
-
-        db_file_name = os.path.join(cache_path, self._db_name)
-        db_url = "sqlite:///" + db_file_name
+        db_path = get_cache_path(self._db_name, testing=testing)
+        db_url = "sqlite:///" + db_path
 
         super().__init__(db_url, testing=testing)
 

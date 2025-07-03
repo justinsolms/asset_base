@@ -49,6 +49,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 # Pull in the meta data
 metadata = MetaData()
 
+ASSET_CLASSES = ("money", "bond", "property", "equity", "commodity", "multi")
 
 @functools.total_ordering
 class AssetBase(Common):
@@ -2622,7 +2623,7 @@ class ExchangeTradeFund(ListedEquity):
 
     # HACK: These are are workarounds for not having data for all the underlying
     # securities for our ETFs.
-    _classes = ("money", "bond", "property", "equity", "commodity", "multi")
+    _classes = ASSET_CLASSES
     _asset_class = Column(Enum(*_classes))
     _locality = Column(String)
 

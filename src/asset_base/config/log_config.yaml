@@ -1,0 +1,40 @@
+version: 1
+formatters:
+  simple:
+    format: "%(asctime)s : %(levelname)8s : %(message)s"
+  detail:
+    format: "%(asctime)s : %(levelname)8s : %(module)12s : %(lineno)4d : %(message)s"
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: DEBUG
+    formatter: detail
+    stream: ext://sys.stdout
+  file:
+    class : asset_base.dblogging.FileHandler
+    when: 'midnight'
+    backupCount: 10
+    formatter: detail
+    level: DEBUG
+    # filename: is specified in the asset_base.dblogging.FileHandler class
+  sqllog:
+    class: asset_base.dblogging.SQLLogHandler
+    level: WARNING
+    formatter: simple
+  email:
+    class: logging.handlers.SMTPHandler
+    formatter: detail
+    level: ERROR
+    mailhost: localhost
+    fromaddr: justin@sunstrikecapital.co.za
+    toaddrs:
+      - justin@sunstrikecapital.co.za
+    subject: Rebalance log
+loggers:
+  asset_base:
+    level: INFO
+    handlers: [console, file]
+    propagate: no
+root:
+  level: INFO
+  handlers: [console]

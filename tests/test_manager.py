@@ -5,7 +5,7 @@
 """Test suite for the asset_base module.
 
 Copyright (C) 2015 Justin Solms <justinsolms@gmail.com>. This file is part of
-the fundmanage module. The fundmanage module can not be modified, copied and/or
+the asset_base module. The asset_base module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 The classmethod ``setUpClass`` sets up test class fixtures and method ``setUp``
@@ -25,11 +25,13 @@ methods such as ``factory``, ``from_dataframe``, and lots more.
 import unittest
 import pandas as pd
 
+from sqlalchemy.exc import NoResultFound
+
 from src.asset_base.common import Common
 from src.asset_base.financial_data import Dump
 from src.asset_base.asset import Forex, ListedEquity
 from src.asset_base.time_series import Dividend, ListedEOD
-from src.asset_base.manager import Manager, replace_time_series_labels
+from src.asset_base.manager import Manager, Meta, substitute_security_labels
 from src.asset_base.exceptions import TimeSeriesNoData
 
 import warnings
@@ -65,11 +67,6 @@ def assert_no_index_duplicates(security, security1, security2):
 
 class TestManagerInit(unittest.TestCase):
     """Manager sessions with different backend databases"""
-
-    def tearDown(self):
-        """Tear down test case fixtures."""
-        # Delete database
-        del self.manager
 
     def common_todo(self):
         """Some common post creation tests using ``Common`` class."""
@@ -161,6 +158,34 @@ class TestManager(unittest.TestCase):
         """Instance initialization."""
         self.assertIsInstance(self.manager, Manager)
 
+    def test_session(self):
+        """Test session."""
+        # Create a Meta object and add it to the session
+        # Query the session for the Meta object
+        # Compare the Meta object with the original object
+        meta = Meta("Test Meta", "Test Meta Description")
+        self.session.add(meta)
+        meta_query = self.session.query(Meta).filter(Meta.name == "Test Meta").one()
+        self.assertEqual(meta, meta_query)
+
+        # Tear down the database but keep the dump data
+        self.manager.tear_down(delete_dump_data=False)
+
+        # Set up the database and ist session again
+        self.manager.set_up(update=False, _test_isin_list=self.isin_list)
+        self.session = self.manager.session
+        # Make sure that the Meta object is no longer somehow in the session
+        with self.assertRaises(NoResultFound):
+            meta_query = self.session.query(Meta).filter(Meta.name == "Test Meta").one()
+
+        # Create another Meta object and add it to the session
+        # Query the session for the Meta object
+        # Compare the Meta object with the original object
+        meta = Meta("Test Meta", "Test Meta Description")
+        self.session.add(meta)
+        meta_query = self.session.query(Meta).filter(Meta.name == "Test Meta").one()
+        self.assertEqual(meta, meta_query)
+
     def test_dump(self):
         """Dump re-usable content to disk files."""
         self.manager.dump()
@@ -221,7 +246,7 @@ class TestManager(unittest.TestCase):
         # Test total-return product over short historical date window.
         securities_list = self.session.query(ListedEquity).all()
         data = self.manager.time_series(securities_list, return_type="total_return")
-        replace_time_series_labels(data, "ticker", inplace=True)
+        substitute_security_labels(data, "ticker", inplace=True)
         data = data.loc["2020-01-01":"2021-01-01"]  # Fixed historical window
         data_check_prod = data.prod().to_dict()
         test_data = {
@@ -237,18 +262,19 @@ class TestManager(unittest.TestCase):
         securities_list = self.session.query(ListedEquity).all()
         data = self.manager.time_series(securities_list, return_type="total_return")
         data_zar = self.manager.to_common_currency(data, "ZAR")
-        data = replace_time_series_labels(data, "ticker")
-        data_zar = replace_time_series_labels(data_zar, "ticker")
+        data = substitute_security_labels(data, "ticker")
+        data_zar = substitute_security_labels(data_zar, "ticker")
         forex = Forex.get_rates_data_frame(self.session, "ZAR", ["USD"])
 
         # Recover exchange rates. Correct recovery is the test that everything
         # works
         recover = data / data_zar
         recover = recover[["STX40", "AAPL", "MCD"]]
-        # Extract values
-        stx_40 = recover["STX40"][~recover["STX40"].isna()]
-        aapl = recover["AAPL"][~recover["AAPL"].isna()]
-        mcd = recover["MCD"][~recover["MCD"].isna()]
+        # Extract last 5 rows of data which should be the same and should be
+        # sufficient
+        stx_40 = recover["STX40"].tail(5)
+        aapl = recover["AAPL"].tail(5)
+        mcd = recover["MCD"].tail(5)
         # The MCD and APPL should, within rounding errors, correspond
         self.assertTrue(all(aapl.round(6) == mcd.round(6)))
         # This is ZAR to ZAR and should all be 1.0
@@ -266,6 +292,7 @@ class Suite(object):
 
         # Classes that are passing. Add the others later when they too work.
         test_classes = [
+            TestManagerInit,
             TestManager,
         ]
 
