@@ -253,10 +253,34 @@ class TimeSeriesBase(Base):
         # Get Asset.key_code to Asset.id translation table
         key_code_id_table = asset_class.key_code_id_table(session)
 
-        #  Get a table of time-series instances with attribute columns
-        instances = session.query(cls).all()
+        # Get all asset IDs for this asset class
+        asset_ids = [asset_id for asset_id, in session.query(asset_class.id).all()]
+
+        # Get only time-series instances that belong to assets of the specified
+        # asset_class. We could have used a line `instance_table =
+        # session.query(cls).all()` to get all instances of the class. Note:
+        # SQLAlchemy's polymorphic inheritance automatically filters by
+        # discriminator when querying cls (e.g., ListedEOD automatically gets
+        # WHERE _discriminator='listed_eod'), but we add asset class filtering
+        # as an additional safety measure to ensure data integrity and prevent
+        # any potential issues if time series records somehow point to wrong
+        # asset types.
+        instances = session.query(cls).filter(cls._asset_id.in_(asset_ids)).all()
         if len(instances) == 0:
-            raise Exception(f"No instances of time series class {cls} belonging to {asset_class} were found.")
+            # Return empty DataFrame with proper columns instead of raising exception.
+            # This handles legitimate cases like new asset classes with no data yet,
+            # or time periods where no data exists for the specified asset class.
+            empty_df = pd.DataFrame()
+            # If we have key_code_id_table, we can infer the proper columns
+            if not key_code_id_table.empty:
+                # Get the key_code_name column from the asset class
+                key_code_name = asset_class.key_code_name
+                # Add the key_code column and date columns
+                empty_df[key_code_name] = pd.Series(dtype='object')
+                for name in cls.date_column_names:
+                    empty_df[name] = pd.Series(dtype='datetime64[ns]')
+            return empty_df
+
         record_list = list()
         for instance in instances:
             # Get instance data dictionary and add the `Listed` ISIN number
