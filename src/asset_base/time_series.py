@@ -360,7 +360,13 @@ class TimeSeriesBase(Base):
         dump_dict = dict()
 
         # A table item for  all instances of this class
-        dump_dict[cls._class_name()] = cls.to_data_frame(session, asset_class)
+        data_frame = cls.to_data_frame(session, asset_class)
+
+        # Handle empty DataFrame case gracefully - still dump it but with a log message
+        if data_frame.empty:
+            logger.info(f"No time series data found for {cls._class_name()} with asset class {asset_class.__name__}. Creating empty dump file.")
+
+        dump_dict[cls._class_name()] = data_frame
         # Serialize
         dumper.write(dump_dict)
 
