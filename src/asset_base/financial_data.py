@@ -26,6 +26,8 @@ import os
 # Abstract base class.
 import abc
 
+from typing import Optional
+
 from .eod_historical_data import Exchanges, MultiHistorical
 from .exceptions import _BaseException, TimeSeriesNoData
 from .__init__ import get_data_path, get_var_path
@@ -43,7 +45,10 @@ class DumpReadError(_BaseException):
 class _Feed(object, metaclass=abc.ABCMeta):
     """Generic financial data feed class. """
 
-    _CLASS_DATA_PATH = None
+    @abc.abstractmethod
+    def get_class_data_path(self) -> Optional[str]:
+        """Abstract method to get the class data path."""
+        pass
 
     def __init__(self):
         """Instance initialization."""
@@ -59,6 +64,9 @@ class _Feed(object, metaclass=abc.ABCMeta):
             Return the name of the file to be found at the full path. If none
             is provided then only the folder path is returned.
         """
+        if self._abs_data_path is None:
+            return None
+
         if file_name:
             path = os.path.join(self._abs_data_path, file_name)
         else:
@@ -68,9 +76,10 @@ class _Feed(object, metaclass=abc.ABCMeta):
 
     def makedir(self):
         """Make path if not exist."""
-        # Note that not all subclasses have _CLASS_DATA_PATH set
-        if self._CLASS_DATA_PATH is not None:
-            self._abs_data_path = get_data_path(self._CLASS_DATA_PATH)
+        # Note that not all subclasses have class data path set
+        class_data_path = self.get_class_data_path()
+        if class_data_path is not None:
+            self._abs_data_path = get_data_path(class_data_path)
             # Make directory if not existing
             if not os.path.isdir(self._abs_data_path):
                 logger.debug("Created folder %s", self._abs_data_path)
@@ -91,8 +100,11 @@ class Dump(_Feed):
 
     """
     # TODO: Move the dump_dict to the external path pointed to by the DATA_PATH environment variable.
-    _CLASS_DATA_PATH = "dumps"
     _CLASS_TEST_DATA_PATH = "test_dumps"
+
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "dumps"
 
     def __init__(self, testing=False):
         """Instance initialization.
@@ -107,15 +119,17 @@ class Dump(_Feed):
         """
         # Avoid conflict and overwriting with operational and testing data
         if testing:
-            self._CLASS_DATA_PATH = self._CLASS_TEST_DATA_PATH
+            self._class_data_path = self._CLASS_TEST_DATA_PATH
+        else:
+            self._class_data_path = self.get_class_data_path()
 
         # Do not call superclass __init__ as its messes with the paths. Here we
         # use the `var` path instead of the `data` path.
 
         # Make the absolute var path for writing. Overwrites the
         # `_abs_data_path` of the parent class.
-        if self._CLASS_DATA_PATH is not None:
-            self._abs_data_path = get_var_path(self._CLASS_DATA_PATH)
+        if self._class_data_path is not None:
+            self._abs_data_path = get_var_path(self._class_data_path)
             self.makedir()
 
     def write(self, dump_dict):
@@ -221,7 +235,9 @@ class Static(_Feed):
 
     """
 
-    _CLASS_DATA_PATH = "static"
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "static"
 
     def __init__(self):
         """Instance initialization."""
@@ -320,7 +336,9 @@ class StaticIndices(_Feed):
 
     """
 
-    _CLASS_DATA_PATH = "static_time_series"
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "static_time_series"
 
     def __init__(self):
         """Instance initialization."""
@@ -409,7 +427,9 @@ class StaticIndices(_Feed):
 class MetaData(_Feed):
     """Provide fundamental and meta-data of the working universe securities."""
 
-    _CLASS_DATA_PATH = "static"
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "static"
 
     def __init__(self):
         """Instance initialization."""
@@ -512,7 +532,9 @@ class History(_Feed):
     This class manages
     """
 
-    _CLASS_DATA_PATH = None
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return None
 
     def __init__(self):
         """Instance initialization."""
