@@ -37,7 +37,7 @@ class TestStatic(unittest.TestCase):
     def test___init__(self):
         """Initialization."""
         self.assertIsInstance(self.feed, Static)
-        self.assertEqual(self.feed._CLASS_DATA_PATH, "static")
+        self.assertEqual(self.feed.get_class_data_path(), "static")
 
     def test_get_currency(self):
         """Get currency data from local static file."""
@@ -103,7 +103,7 @@ class TestMetaData(unittest.TestCase):
     def test___init__(self):
         """Initialization."""
         self.assertIsInstance(self.feed, MetaData)
-        self.assertEqual(self.feed._CLASS_DATA_PATH, "static")
+        self.assertEqual(self.feed.get_class_data_path(), "static")
 
     def test_get_etfs(self):
         """Fetch JSE ETF mata-data from a local file."""
@@ -196,7 +196,7 @@ class TestSecuritiesHistory(unittest.TestCase):
     def test___init__(self):
         """Initialization."""
         self.assertIsInstance(self.feed, History)
-        self.assertEqual(self.feed._CLASS_DATA_PATH, None)
+        self.assertEqual(self.feed.get_class_data_path(), None)
 
     def test_get_eod(self):
         """Get historical EOD for a specified list of securities."""
