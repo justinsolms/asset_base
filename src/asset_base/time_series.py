@@ -80,7 +80,7 @@ class TimeSeriesBase(Base):
 
     __table_args__ = (UniqueConstraint("_discriminator", "_asset_id", "date_stamp"),)
 
-    # Foreign key giving ``Asset`` a time series capability
+    # Foreign key giving the ``Asset`` class a time series capability
     _asset_id = Column(Integer, ForeignKey("asset_base.id"), nullable=False)
     base_obj = relationship("AssetBase", back_populates="_series", foreign_keys=[_asset_id])
 
@@ -98,7 +98,7 @@ class TimeSeriesBase(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        name = self._class_name
+        name = self._class_name()
         date = self.date_stamp
         id_code = self.base_obj.identity_code
 
@@ -106,14 +106,13 @@ class TimeSeriesBase(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        name = self._class_name
+        name = self._class_name()
         asset = self.base_obj
         date = self.date_stamp
 
         return f"{name}(asset={asset!r}, date_stamp={date})"
 
     @classmethod
-    @property
     def _class_name(cls):
         return cls.__name__
 
@@ -242,15 +241,11 @@ class TimeSeriesBase(Base):
 
         Returns
         -------
-        data_frame : pandas.DataFrame
+        pandas.DataFrame
             A ``pandas.DataFrame`` with columns of the same name as all this
             class' constructor method arguments, with the exception that instead
             of a column named ``listed``, instead there shall be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
         """
 
         # The goal is to substitute the `key_code_name` column for the
@@ -277,8 +272,8 @@ class TimeSeriesBase(Base):
         data_table = instance_table.merge(key_code_id_table, on="id", how="left")
         data_table.drop(columns="id", inplace=True)
 
-        # The date_stamp must be pandas.TimeStamp. Note that child classes may
-        # redefine the `date_column_names` list.
+        # Convert date_stamp to pandas.Timestamp for all date columns. Note that
+        # child classes may redefine the `date_column_names` list.
         for name in cls.date_column_names:
             data_table[name] = pd.to_datetime(data_table[name])
 
@@ -341,7 +336,7 @@ class TimeSeriesBase(Base):
         dump_dict = dict()
 
         # A table item for  all instances of this class
-        dump_dict[cls._class_name] = cls.to_data_frame(session, asset_class)
+        dump_dict[cls._class_name()] = cls.to_data_frame(session, asset_class)
         # Serialize
         dumper.write(dump_dict)
 
@@ -373,7 +368,7 @@ class TimeSeriesBase(Base):
 
         """
         # Uses dict data structures. See the docs.
-        class_name = cls._class_name
+        class_name = cls._class_name()
         data_frame_dict = dumper.read(name_list=[class_name])
         cls.from_data_frame(session, asset_class, data_frame_dict[class_name])
 
@@ -624,7 +619,7 @@ class ListedEOD(TradeEOD):
         )
         for security in securities_delisted:
             logger.warning(
-                f"Skipped {cls._class_name} data fetch for "
+                f"Skipped {cls._class_name()} data fetch for "
                 f"de-listed security {security.identity_code}."
             )
 
@@ -991,7 +986,7 @@ class Dividend(TimeSeriesBase):
         )
         for security in securities_delisted:
             logger.warning(
-                f"Skipped {cls._class_name} data fetch for "
+                f"Skipped {cls._class_name()} data fetch for "
                 f"de-listed security {security.identity_code}."
             )
 
