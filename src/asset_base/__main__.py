@@ -29,11 +29,10 @@ def init(delete_dump_data):
     """Initialize a fresh database and populate it with required data."""
     with Manager() as abm:
         if delete_dump_data:
-            logger.warning("Deleting dump data.")
-            abm.tear_down(delete_dump_data=True)
+            delete_dump_data = True
         else:
-            logger.info("Retaining dump data.")
-            abm.tear_down(delete_dump_data=False)
+            delete_dump_data = False
+        abm.tear_down(delete_dump_data=delete_dump_data)
         abm.set_up()
 
 cli.add_command(init)

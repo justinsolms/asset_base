@@ -13,21 +13,34 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
-keywords = ["financial", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
+keywords = ["financial", "metadata", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
 dependencies = [
-    "aiohttp",
-    "aiounittest",
-    "click",
-    "numpy",
-    "pandas",
-    "python_stdnum",
-    "PyYAML",
-    "scipy",
+    "ipython",
+    "jupyter",
     "setuptools",
-    "SQLAlchemy",
-    "SQLAlchemy_Utils",
     "esbonio",
+    "mypy",
     "ipdb",
+    "tqdm",
+    "click",
+    "openpyxl",
+    "xlsxwriter",
+    "aiounittest",
+    "aiohttp",
+    "python_stdnum",
+    "numpy",
+    "scipy",
+    "pandas",
+    "matplotlib",
+    "xlrd",
+    "Flask",
+    "fuzzywuzzy",
+    "Jinja2",
+    "Markdown",
+    "PyYAML",
+    "SQLAlchemy",
+    "sqlalchemy_utils",
+    "python-Levenshtein",
 ]
 
 [[project.authors]]
@@ -41,7 +54,11 @@ version = {attr = "asset_base._version.__version__"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-your_package_name = ["data/*", "config/*"]
+your_package_name = [
+    "data/static/*",
+    "data/dumps/*",
+    "config/*"
+]
 
 [tool.setuptools]
 package-dir = {"" = "src"}

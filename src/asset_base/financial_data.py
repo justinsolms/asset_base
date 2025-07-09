@@ -26,9 +26,11 @@ import os
 # Abstract base class.
 import abc
 
+from typing import Optional
+
 from .eod_historical_data import Exchanges, MultiHistorical
 from .exceptions import _BaseException, TimeSeriesNoData
-from .__init__ import get_data_path, get_var_path
+from .__init__ import get_data_path
 
 # Get module-named logger.
 import logging
@@ -41,16 +43,42 @@ class DumpReadError(_BaseException):
 
 
 class _Feed(object, metaclass=abc.ABCMeta):
-    """Generic financial data feed class. """
+    """Financial data feed abstract base class.
 
-    _CLASS_DATA_PATH = None
+    Parameters
+    ----------
+    testing : bool, optional
+        Set to `True` for testing. This controls specifics in a way that
+        avoids testing data clashes with, and possible overwriting of, the
+        operational data.
 
-    def __init__(self):
+    """
+
+    _CLASS_TEST_DATA_PATH = "test_data_path"
+
+    @abc.abstractmethod
+    def get_class_data_path(self) -> Optional[str]:
+        """Abstract method to get the class data path."""
+        pass
+
+    def __init__(self, testing=False):
         """Instance initialization."""
-        # Make the absolute data path for writing.
-        self.makedir()
+        # Avoid conflict and overwriting with operational and testing data
+        if testing:
+            self._class_data_path = self._CLASS_TEST_DATA_PATH
+        else:
+            self._class_data_path = self.get_class_data_path()
 
-    def _path(self, file_name=None):
+        # Do not call superclass __init__ as its messes with the paths. Here we
+        # use the `var` path instead of the `data` path.
+
+        # Make the absolute var path for writing. Overwrites the
+        # `_abs_data_path` of the parent class.
+        if self._class_data_path is not None:
+            self._abs_data_path = get_data_path(self._class_data_path)
+            self.makedir()
+
+    def _path(self, file_name: str = "") -> str:
         """Absolute data path schema with optional file name.
 
         Parameters
@@ -59,6 +87,11 @@ class _Feed(object, metaclass=abc.ABCMeta):
             Return the name of the file to be found at the full path. If none
             is provided then only the folder path is returned.
         """
+        if not hasattr(self, "_abs_data_path"):
+            raise RuntimeError(
+                "The _abs_data_path attribute is not set. "
+                "Call the makedir() method to set it."
+            )
         if file_name:
             path = os.path.join(self._abs_data_path, file_name)
         else:
@@ -68,15 +101,15 @@ class _Feed(object, metaclass=abc.ABCMeta):
 
     def makedir(self):
         """Make path if not exist."""
-        # Note that not all subclasses have _CLASS_DATA_PATH set
-        if self._CLASS_DATA_PATH is not None:
-            self._abs_data_path = get_data_path(self._CLASS_DATA_PATH)
-            # Make directory if not existing
-            if not os.path.isdir(self._abs_data_path):
-                logger.debug("Created folder %s", self._abs_data_path)
-                os.makedirs(self._abs_data_path)
-        else:
-            self._abs_data_path = None
+        # Note that not all subclasses have class data path set
+        class_data_path = self.get_class_data_path()
+        abs_data_path = get_data_path(class_data_path)
+        # Make directory if not existing
+        if not os.path.isdir(abs_data_path):
+            logger.debug("Created folder %s", abs_data_path)
+            os.makedirs(abs_data_path)
+        # The path will now exist
+        self._abs_data_path = abs_data_path
 
 
 class Dump(_Feed):
@@ -90,9 +123,11 @@ class Dump(_Feed):
     was originally designed to work with multiple class dumps at once.
 
     """
-    # TODO: Move the dump_dict to the external path pointed to by the DATA_PATH environment variable.
-    _CLASS_DATA_PATH = "dumps"
-    _CLASS_TEST_DATA_PATH = "test_dumps"
+    _CLASS_TEST_DATA_PATH = "testing_dumps"
+
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "dumps"
 
     def __init__(self, testing=False):
         """Instance initialization.
@@ -101,22 +136,11 @@ class Dump(_Feed):
         ----------
         testing : bool, optional
             Set to `True` for testing. This controls specifics in a way that
-            avoids testing dump data clashes with, and possible overwriting of,
-            the operational dump data.
+            avoids testing data clashes with, and possible overwriting of, the
+            operational data.
 
         """
-        # Avoid conflict and overwriting with operational and testing data
-        if testing:
-            self._CLASS_DATA_PATH = self._CLASS_TEST_DATA_PATH
-
-        # Do not call superclass __init__ as its messes with the paths. Here we
-        # use the `var` path instead of the `data` path.
-
-        # Make the absolute var path for writing. Overwrites the
-        # `_abs_data_path` of the parent class.
-        if self._CLASS_DATA_PATH is not None:
-            self._abs_data_path = get_var_path(self._CLASS_DATA_PATH)
-            self.makedir()
+        super().__init__(testing=testing)
 
     def write(self, dump_dict):
         """Write a dict of ``pandas.DataFrame`` to CSV files.
@@ -132,7 +156,7 @@ class Dump(_Feed):
             file_name = f"{key}.pandas.dataframe.pkl"
             path = self._path(file_name)
             item.to_pickle(path)
-            logger.info("Wrote dump file %s", path)
+            logger.info(f"Dumped class {key} to {path}")
 
     def read(self, name_list):
         """Read a dict of ``pandas.DataFrame`` from CSV files.
@@ -158,37 +182,31 @@ class Dump(_Feed):
 
         return dump_dict
 
-    def delete(self, delete_folder=True):
-        """Delete the dump folder and its contents.
+    def delete(self):
+        """Delete the dump folder contents.
 
-        Parameters
-        ----------
-        delete_folder : bool, optional
-            When set to `True` (default) then the dump folder and its contents
-            are  deleted too.  If set `False` then the folder is kept but its
-            content are deleted.
+        Note
+        ----
+        The dump folder is NOT deleted as this is too destructive and could
+        cause issues with methods that assume a valid folder. The folder is kept
+        but its contents are deleted.
 
         """
         path = self._path()
         if not os.path.exists(path):
-            # Nothing to delete
-            return
-
-        # List all files in folder
-        files = os.listdir(path)
+            # Check that the dump folder exists as it should have been created
+            # at class initialization
+            raise RuntimeError(
+                "The dump folder does not exist. "
+                "The makedir() call from the  __init__ method should have created it."
+            )
 
         # First delete all the folder content files.
-        for file_name in files:
+        file_name_list = os.listdir(path)
+        for file_name in file_name_list:
             path = self._path(file_name)
             os.remove(path)
             logger.debug("Deleted dump file %s", path)
-
-        # If required then delete the now empty folder too.
-        if delete_folder:
-            # Delete containing folder
-            path = self._path()
-            os.rmdir(path)
-            logger.debug("Deleted dump folder %s", path)
 
     def exists(self, dump_class):
         """Verify that a dump file exits for a dumped class.
@@ -221,7 +239,9 @@ class Static(_Feed):
 
     """
 
-    _CLASS_DATA_PATH = "static"
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "static"
 
     def __init__(self):
         """Instance initialization."""
@@ -320,7 +340,9 @@ class StaticIndices(_Feed):
 
     """
 
-    _CLASS_DATA_PATH = "static_time_series"
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "static_time_series"
 
     def __init__(self):
         """Instance initialization."""
@@ -409,7 +431,9 @@ class StaticIndices(_Feed):
 class MetaData(_Feed):
     """Provide fundamental and meta-data of the working universe securities."""
 
-    _CLASS_DATA_PATH = "static"
+    def get_class_data_path(self) -> Optional[str]:
+        """Return the class data path."""
+        return "static"
 
     def __init__(self):
         """Instance initialization."""
@@ -512,7 +536,9 @@ class History(_Feed):
     This class manages
     """
 
-    _CLASS_DATA_PATH = None
+    def get_class_data_path(self) -> str:
+        """Return the class data path."""
+        return ""
 
     def __init__(self):
         """Instance initialization."""
