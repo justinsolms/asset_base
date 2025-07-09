@@ -18,8 +18,6 @@ lib/
 lib64/
 parts/
 sdist/
-var/
-var_test/
 wheels/
 pip-wheel-metadata/
 share/python-wheels/
@@ -142,3 +140,5 @@ dmypy.json
 # MacOS
 .DS_Store
 _version.py
+src/asset_base/_cache/asset_base.db-journal
+src/asset_base/_cache/asset_base.db-journal
