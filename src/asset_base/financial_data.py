@@ -30,7 +30,7 @@ from typing import Optional
 
 from .eod_historical_data import Exchanges, MultiHistorical
 from .exceptions import _BaseException, TimeSeriesNoData
-from .__init__ import get_data_path, get_var_path
+from .__init__ import get_data_path
 
 # Get module-named logger.
 import logging
@@ -75,7 +75,7 @@ class _Feed(object, metaclass=abc.ABCMeta):
         # Make the absolute var path for writing. Overwrites the
         # `_abs_data_path` of the parent class.
         if self._class_data_path is not None:
-            self._abs_data_path = get_var_path(self._class_data_path)
+            self._abs_data_path = get_data_path(self._class_data_path)
             self.makedir()
 
     def _path(self, file_name: str = "") -> str:

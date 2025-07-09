@@ -29,15 +29,12 @@ _CONFIG = "config"
 # Tests path
 _TESTS = "tests"
 
-# Variable data path
-_VAR = "var"
-# Variable data path for tests - should always delete after tests!
-_VAR_TEST = "var_test"
-
-# Log, tmp an cache path under variable data path
-_LOG = "log"
-_TMP = "tmp"
-_CACHE = "cache"
+# Log, tmp an cache path under variable data path with the "_" prefix which is ignored by git
+# and other version control systems.
+_LOG = "_log"
+_TMP = "_tmp"
+_CACHE = "_cache"
+_TEST_CACHE = "_test_cache"
 
 # Authentication certificates path
 _CERTIFICATES = 'certificates'
@@ -152,37 +149,11 @@ def get_tests_path(sub_path=None):
         tests_path = os.path.join(tests_path, sub_path)
     return os.path.abspath(tests_path)
 
-def get_var_path(sub_path=None, testing=False):
-    """Package path schema for variable data such as logs and databases.
-
-    Will put the var folder in the package folder
-
-    Parameters
-    ----------
-    sub_path: str
-        Mandatory branch or child path.
-    testing : bool
-        If `True` then the returned path string contains `/var_test/` instead of
-        the default `/var/`.
-    """
+def get_log_path(sub_path=None):
     # Get the directory of the current file (__init__.py)
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    # Construct the full path to the config folder
-    if testing:
-        var_path = os.path.join(current_dir, '..', '..', _VAR_TEST)
-    else:
-        var_path = os.path.join(current_dir, '..', '..', _VAR)
-    # Create the var directory if it does not exist
-    if not os.path.exists(var_path):
-        os.makedirs(var_path)
-    # Add the sub_path if it is not None
-    if sub_path is not None:
-        var_path = os.path.abspath(os.path.join(var_path, sub_path))
-    return var_path
-
-def get_log_path(sub_path=None, testing=False):
-    var_dir = get_var_path(testing=testing)
-    log_path = os.path.join(var_dir, _LOG)
+    # Construct the full path to the log folder
+    log_path = os.path.join(current_dir, _LOG)
     # Create the log directory if it does not exist
     if not os.path.exists(log_path):
         os.makedirs(log_path)
@@ -191,9 +162,11 @@ def get_log_path(sub_path=None, testing=False):
         log_path = os.path.join(log_path, sub_path)
     return log_path
 
-def get_tmp_path(sub_path=None, testing=False):
-    var_dir = get_var_path(testing=testing)
-    tmp_path = os.path.join(var_dir, _TMP)
+def get_tmp_path(sub_path=None):
+    # Get the directory of the current file (__init__.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Use the test variable to determine the tmp path
+    tmp_path = os.path.join(current_dir, _TMP)
     # Create the tmp directory if it does not exist
     if not os.path.exists(tmp_path):
         os.makedirs(tmp_path)
@@ -203,8 +176,9 @@ def get_tmp_path(sub_path=None, testing=False):
     return tmp_path
 
 def get_cache_path(sub_path=None, testing=False):
-    var_dir = get_var_path(testing=testing)
-    cache_path = os.path.join(var_dir, _CACHE)
+    # Get the directory of the current file (__init__.py)
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    cache_path = os.path.join(current_dir, _CACHE if not testing else _TEST_CACHE)
     # Create the cache directory if it does not exist
     if not os.path.exists(cache_path):
         os.makedirs(cache_path)
