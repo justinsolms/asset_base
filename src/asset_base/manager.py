@@ -75,7 +75,7 @@ from sqlalchemy.orm.exc import NoResultFound
 
 from asset_base import get_config_path
 
-from .exceptions import TimeSeriesNoData
+from .exceptions import NotSetUp, TimeSeriesNoData
 from .financial_data import Dump, History, MetaData, Static
 from .common import Base, SQLiteSession, TestSession
 from .entity import Domicile, Exchange
@@ -315,7 +315,7 @@ class ManagerBase(object):
         # Record creation moment as a string (item, value) pair if it does not
         # already exist.
         try:
-            meta = self.session.query(Meta).filter(Meta.name == "set_up_date").one()
+            meta = self.session.query(Meta).filter_by(name="set_up_date").one()
         except NoResultFound:
             set_up_date = datetime.datetime.now().isoformat()
             self.session.add(Meta("set_up_date", set_up_date))
@@ -381,6 +381,13 @@ class ManagerBase(object):
 
         Uses the ``.financial_data`` module as the data source.
         """
+        # Check if the database has been set up.
+        try:
+            meta = self.session.query(Meta).filter(Meta.name == "set_up_date").one()
+        except NoResultFound:
+            raise NotSetUp(
+                "Database has not been set up. Please call set_up() first."
+            )
 
         # Check for newer securities data and update the database
         fundamentals = MetaData()
@@ -486,7 +493,9 @@ class ManagerBase(object):
             entities = self.session.query(Asset).filter(Asset.id.in_(id))
             return dict([(asset.id, asset) for asset in entities])
         else:
-            raise Exception("Expected a list of asset id(s).")
+            raise ValueError(
+                "Argument `id` must be a list of asset id numbers."
+            )
 
     def time_series(
         self,
@@ -606,7 +615,10 @@ class ManagerBase(object):
         #  there are no non-cash securities from which the date range may be
         #  derived.
         if len(non_cash_list) == 0 and date_index is None:
-            raise Exception("Expected non-cash securities in asset_list.")
+            raise ValueError(
+                "Expected non-cash securities in asset_list or a date_index "
+                "argument to specify the date range for the cash securities."
+            )
 
         data_list = list()
         if len(non_cash_list) > 0:
