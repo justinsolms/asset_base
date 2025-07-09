@@ -61,6 +61,10 @@ class _BaseException(BaseException):
         return {"except_name": self.__class__.__name__, "action": self.action}
 
 
+class NotSetUp(_BaseException):
+    """Raised when the database has not been set up."""
+
+
 class FactoryError(_BaseException):
     """Entity not found in database or could not be created."""
 
