@@ -76,7 +76,7 @@ from sqlalchemy.orm.exc import NoResultFound
 from asset_base import get_config_path
 
 from .exceptions import TimeSeriesNoData
-from .financial_data import Dump, DumpReadError, History, MetaData, Static
+from .financial_data import Dump, History, MetaData, Static
 from .common import Base, SQLiteSession, TestSession
 from .entity import Domicile, Exchange
 from .asset import (
@@ -357,18 +357,20 @@ class ManagerBase(object):
             sure you wish to delete all your reusable data sources. If `False`
             then re-use data is first dumped before the database is torn down.
         """
-        # Dump reusable data. Abort with CRITICAL logging if failed.
         if delete_dump_data:
-            logger.info("Deleted dump files and folder.")
-            self.delete_dumps(delete_folder=True)
+            logger.warning("Deleting reusable dump files.")
+            self.delete_dumps()
+            logger.warning("Successfully deleted dump files.")
         else:
+            # Dump reusable data if any.
             try:
                 self.dump()
             except Exception as ex:
                 logger.critical("Dump asset_base failed. Tear-down aborted!!!")
                 raise ex
             else:
-                logger.info("Successful dump of important asset_base data for re-use.")
+                logger.info(
+                    "Successful dump of  reusable asset_base data which can be used to shorten set-up time")
 
         # Delete database
         # FIXME: The database should be deleted
@@ -439,25 +441,16 @@ class ManagerBase(object):
         for cls in self.classes_to_dump:
             try:
                 cls.reuse(self.session, self.dumper)
-            except DumpReadError:
-                logger.info(f"Unavailable dump data for {cls._class_name}")
+            except FileNotFoundError:
+                logger.info(
+                    f"Dump data not found to reuse for class {cls._class_name}.")
             else:
-                logger.info(f"Reused dumped data for {cls._class_name}")
+                logger.info(
+                    f"Reused dumped data for {cls._class_name}")
 
-    def delete_dumps(self, delete_folder=True):
-        """Delete dumped data folder
-
-        The dump data folder and its contents contain dumped asset_base data
-        which can be reused as a database initialization resource.
-
-        Parameters
-        ----------
-        delete_folder : bool, optional
-            When set to `True` (default) then the dump folder and its contents
-            are  deleted too.  If set `False` then the folder is kept but its
-            content are deleted.
-        """
-        self.dumper.delete(delete_folder=delete_folder)
+    def delete_dumps(self):
+        """Delete dumped data folder."""
+        self.dumper.delete()
 
     def get_meta(self):
         """Get a dictionary of asset_base meta-data.

@@ -17,7 +17,7 @@ import unittest
 import pandas as pd
 
 from src.asset_base.common import TestSession
-from src.asset_base.financial_data import Dump, DumpReadError, Static
+from src.asset_base.financial_data import Dump, Static
 from src.asset_base.financial_data import MetaData
 from src.asset_base.financial_data import History
 from src.asset_base.entity import Currency, Domicile, Exchange
@@ -396,7 +396,7 @@ class TestDump(unittest.TestCase):
     def test_read_fail(self):
         """Fails dump file read."""
         name_list = self.data_dict.keys()
-        with self.assertRaises(DumpReadError):
+        with self.assertRaises(FileNotFoundError):
             self.dumper.read(name_list)
 
     def test_delete(self):
