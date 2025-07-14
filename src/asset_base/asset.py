@@ -1554,6 +1554,10 @@ class Listed(Share):
             The single instance that is in the session.
 
         """
+        # DEBUG:
+        if ticker == 'SYGSW4':
+            import ipdb; ipdb.set_trace()
+
         if isin is not None:
             isin = Listed._check_isin(isin)  # Check ISIN for integrity.
 

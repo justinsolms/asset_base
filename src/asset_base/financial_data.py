@@ -489,7 +489,6 @@ class MetaData(_Feed):
             _test_isin_list = kwargs.pop("_test_isin_list")
             # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
             data = data[data["isin"].isin(_test_isin_list)]
-
         return data
 
     def get_indices(self, feed="EOD", **kwargs):
