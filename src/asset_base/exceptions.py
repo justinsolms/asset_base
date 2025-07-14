@@ -109,7 +109,7 @@ class BadISIN(_BaseException):
 
 
 class ReconcileError(_BaseException):
-    """Raised when parameters and object attributes do not reconcile.
+    """Raised when specific parameters and object attributes do not reconcile.
 
     Parameters
     ----------

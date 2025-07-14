@@ -1484,6 +1484,7 @@ class Listed(Share):
         listed_name=None,
         issuer_domicile_code=None,
         issuer_name=None,
+        status=None,
         create=True,
         **kwargs,
     ):
@@ -1554,10 +1555,6 @@ class Listed(Share):
             The single instance that is in the session.
 
         """
-        # DEBUG:
-        if ticker == 'SYGSW4':
-            import ipdb; ipdb.set_trace()
-
         if isin is not None:
             isin = Listed._check_isin(isin)  # Check ISIN for integrity.
 
@@ -1619,13 +1616,16 @@ class Listed(Share):
             obj = cls(listed_name, issuer, isin, exchange, ticker, **kwargs)
             session.add(obj)
         else:
-            # Reconcile any changes
+            # Reconcile any changes between the retrieved object and the new
+            # parameters
             if listed_name and listed_name != obj.name:
                 obj.name = listed_name
             if mic and mic != obj.exchange.mic:
                 obj.exchange = Exchange.factory(session, mic=mic)
             if ticker and ticker != obj.ticker:
                 obj.ticker = ticker
+            if status and status != obj.status:
+                obj.status = status
             # Disallow issuer change
             if issuer_name and obj.issuer.name != issuer_name:
                 raise ReconcileError(obj, "issuer_name")
