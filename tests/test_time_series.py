@@ -122,7 +122,7 @@ class TestSimpleEOD(TestTimeSeriesBase):
         # Query the superclass Asset which should produce a Cash polymorphic
         # instance
         instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance._class_name, "SimpleEOD")
+        self.assertEqual(instance._class_name(), "SimpleEOD")
         self.assertEqual(instance._discriminator, "simple_eod")
         self.assertEqual(ts_item, instance)
 
@@ -255,7 +255,7 @@ class TestForexEOD(TestTradeEOD):
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance._class_name, "ForexEOD")
+        self.assertEqual(instance._class_name(), "ForexEOD")
         self.assertEqual(instance._discriminator, "forex_eod")
         self.assertEqual(forex_eod, instance)
 
@@ -362,7 +362,7 @@ class TestIndexEOD(TestTradeEOD):
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance._class_name, "IndexEOD")
+        self.assertEqual(instance._class_name(), "IndexEOD")
         self.assertEqual(instance._discriminator, "index_eod")
         self.assertEqual(index_eod, instance)
 
@@ -464,7 +464,7 @@ class TestListedEOD(TestTradeEOD):
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a ListedEOD polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance._class_name, "ListedEOD")
+        self.assertEqual(instance._class_name(), "ListedEOD")
         self.assertEqual(instance._discriminator, "listed_eod")
         self.assertEqual(listed_eod, instance)
 
@@ -653,7 +653,7 @@ class TestDividend(TestTimeSeriesBase):
         # Test polymorphism functionality by query of the superclass
         # TimeSeriesBase which should produce a Dividend polymorphic instance
         instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance._class_name, "Dividend")
+        self.assertEqual(instance._class_name(), "Dividend")
         self.assertEqual(instance._discriminator, "dividend")
         self.assertEqual(dividend, instance)
 

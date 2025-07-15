@@ -208,10 +208,9 @@ class Common(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", id={!r})'.format(self._class_name, self.name, self.id)
+        return '{}(name="{}", id={!r})'.format(self.__class__.__name__, self.name, self.id)
 
     @classmethod
-    @property
     def _class_name(cls):
         return cls.__name__
 
