@@ -32,7 +32,7 @@ handlers:
     subject: Rebalance log
 loggers:
   asset_base:
-    level: INFO
+    level: DEBUG
     handlers: [console, file]
     propagate: no
 root:
