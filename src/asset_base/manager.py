@@ -249,31 +249,39 @@ class ManagerBase(object):
             avoids testing data clashes with operational data. This only affects
             the 'sqlite' `dialect` argument option.
         """
+        self._dialect = dialect
         self.testing = testing
 
-        self._dialect = dialect
-
-        # Create a new database and engine if not existing
-        if not hasattr(self, "session"):
-            self._make_session()
+        self._make_session()
 
         # Data dumper - dumps to dump folder - indicate testing or not.
         self.dumper = Dump(testing=self.testing)
 
     def __del__(self):
         """Destruction."""
-        # Sometimes __del__ is called when `session_obj` when self has no
-        # `session_obj`
         self.close()
 
-    def close(self):
-        """Close the database session."""
-        # Sometimes __del__ is called when `session_obj` when self has no
-        # `session_obj`
-        if hasattr(self, "session_obj"):
+    def delete(self):
+        """Delete the entire database."""
+        self.close(drop=True)
+
+        # If the database exists then delete it.
+    def close(self, drop=False):
+        """Close the database session and dispose of the engine.
+
+        Parameters
+        ----------
+        drop : bool, optional
+            If `True` then the database is dropped and deleted. If `False` then
+            the database is not deleted but the session and engine are closed.
+
+        """
+        if hasattr(self, "session_obj") and self.session_obj is not None:
+            self.session_obj.close(drop=drop)
             del self.session_obj
         if hasattr(self, "session"):
-            del self.session  # See _make_session
+            # Also delete the _make_session convenience attribute
+            del self.session  # See _make_session convenience attribute
 
     def _make_session(self):
         """Make database sessions in either sqlite, mysql or memory."""
@@ -281,6 +289,8 @@ class ManagerBase(object):
             self.session_obj = TestSession()
         elif self._dialect == "sqlite":
             self.session_obj = SQLiteSession(testing=self.testing)
+
+        # A convenience attribute to the SQLAlchemy session object.
         self.session = self.session_obj.session
 
     def commit(self):
@@ -373,8 +383,7 @@ class ManagerBase(object):
                     "Successful dump of  reusable asset_base data which can be used to shorten set-up time")
 
         # Delete database
-        # FIXME: The database should be deleted
-        self.close()
+        self.close(drop=True)
 
     def update(self, _test_isin_list=None, _test_forex_list=None):
         """Update all non-static data.
@@ -450,10 +459,10 @@ class ManagerBase(object):
                 cls.reuse(self.session, self.dumper)
             except FileNotFoundError:
                 logger.info(
-                    f"Dump data not found to reuse for class {cls._class_name}.")
+                    f"Dump data not found to reuse for class {cls._class_name()}.")
             else:
                 logger.info(
-                    f"Reused dumped data for {cls._class_name}")
+                    f"Reused dumped data for {cls._class_name()}")
 
     def delete_dumps(self):
         """Delete dumped data folder."""

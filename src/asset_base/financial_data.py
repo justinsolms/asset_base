@@ -222,7 +222,7 @@ class Dump(_Feed):
             The class for which the dump files existence must be verified. The
             class must have a valid ``dump`` method.
         """
-        file_name = f"{dump_class._class_name}.pandas.dataframe.pkl"
+        file_name = f"{dump_class._class_name()}.pandas.dataframe.pkl"
         path = self._path(file_name)
 
         return os.path.exists(path)

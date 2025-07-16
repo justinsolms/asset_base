@@ -142,3 +142,5 @@ dmypy.json
 _version.py
 src/asset_base/_cache/asset_base.db-journal
 src/asset_base/_cache/asset_base.db-journal
+
+dist/

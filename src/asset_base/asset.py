@@ -1350,7 +1350,7 @@ class Listed(Share):
     # TODO: Automate from class magic attributes.
     _name_appendix = "Listed"
 
-    def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
+    def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
         # Currency is the exchange listing currency, i.e., the exchange's
         # domicile currency which overwrites the parent class Share issuer's
@@ -1371,6 +1371,7 @@ class Listed(Share):
         # Instrument identification and listing
         self.exchange = exchange
         self.ticker = ticker
+        self.status = status
 
         # Check to see if the isin number provided is valid. This checks the
         # length and check digit.
@@ -1382,12 +1383,6 @@ class Listed(Share):
             self.isin = isin
         else:
             raise ValueError("Unexpected domicile. Does not match ISIN country code.")
-
-        # Listing status
-        if "status" in kwargs:
-            self.status = kwargs.pop("status")
-        else:
-            self.status = "listed"
 
     @property
     def domicile(self):
@@ -1487,6 +1482,7 @@ class Listed(Share):
         listed_name=None,
         issuer_domicile_code=None,
         issuer_name=None,
+        status=None,
         create=True,
         **kwargs,
     ):
@@ -1615,16 +1611,19 @@ class Listed(Share):
                     action="Create Failed",
                 )
             # Now we have all required arguments to create
-            obj = cls(listed_name, issuer, isin, exchange, ticker, **kwargs)
+            obj = cls(listed_name, issuer, isin, exchange, ticker, status, **kwargs)
             session.add(obj)
         else:
-            # Reconcile any changes
+            # Reconcile any changes between the retrieved object and the new
+            # parameters
             if listed_name and listed_name != obj.name:
                 obj.name = listed_name
             if mic and mic != obj.exchange.mic:
                 obj.exchange = Exchange.factory(session, mic=mic)
             if ticker and ticker != obj.ticker:
                 obj.ticker = ticker
+            if status and status != obj.status:
+                obj.status = status
             # Disallow issuer change
             if issuer_name and obj.issuer.name != issuer_name:
                 raise ReconcileError(obj, "issuer_name")
@@ -1843,9 +1842,9 @@ class ListedEquity(Listed):
     # FIXME: The __repr__ string is printing Currency.__str__ instead of
     # Currency.__repr__
 
-    def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
+    def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
-        super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
+        super().__init__(name, issuer, isin, exchange, ticker, status, **kwargs)
 
         # Select industry classification scheme, initialise and add it.
         if "industry_class" in kwargs:
@@ -2575,20 +2574,8 @@ class ExchangeTradeFund(ListedEquity):
         The exchange the asset is listed upon.
     ticker : str
         The ticker assigned to the asset by the exchange listing process.
-    date_stamp : datetime.date
-        Date stamp of the data.
-    listing_date : datetime.date
-        Date the instrument was listed on.
-    next_declare_date : datetime.date
-        Date of declaration of next dividend
-    year_end_month : int
-        Month number of financial year end.
-    shares_in_issue : int
-        Number of shares in issue.
-    share_split : float
-        number of shares slit into.
     status : str
-        Flag of listing status. C - current, S - Suspended.
+        Flag of listing status ('listed', 'delisted').
     industry_class : str
         The class' mnemonic for the industry classification scheme. The valid
         values are:
@@ -2636,9 +2623,9 @@ class ExchangeTradeFund(ListedEquity):
     #  A short class name for use in naming
     _name_appendix = "ETF"
 
-    def __init__(self, name, issuer, isin, exchange, ticker, **kwargs):
+    def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
-        super().__init__(name, issuer, isin, exchange, ticker, **kwargs)
+        super().__init__(name, issuer, isin, exchange, ticker, status, **kwargs)
 
         # Optional parameters.
         if "index" in kwargs:

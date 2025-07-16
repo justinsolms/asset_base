@@ -130,16 +130,15 @@ class Currency(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return "{} is {} ({})".format(self._class_name, self.name, self.ticker)
+        return "{} is {} ({})".format(self.__class__.__name__, self.name, self.ticker)
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(ticker="{}", name="{}")'.format(
-            self._class_name, self.ticker, self.name
+            self.__class__.__name__, self.ticker, self.name
         )
 
     @classmethod
-    @property
     def _class_name(cls):
         return cls.__name__
 
@@ -359,17 +358,16 @@ class Domicile(Base):
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return "{} is {} ({})".format(
-            self._class_name, self.country_name, self.country_code
+            self.__class__.__name__, self.country_name, self.country_code
         )
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(country_code="{}", country_code="{}", currency={!r})'.format(
-            self._class_name, self.country_code, self.country_name, self.currency
+            self.__class__.__name__, self.country_code, self.country_name, self.currency
         )
 
     @classmethod
-    @property
     def _class_name(cls):
         return cls.__name__
 
@@ -601,13 +599,13 @@ class Entity(Common):
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return "{} is an {} in {}".format(
-            self.name, self._class_name, self.domicile.country_name
+            self.name, self.__class__.__name__, self.domicile.country_name
         )
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", domicile={!r})'.format(
-            self._class_name, self.name, self.domicile
+            self.__class__.__name__, self.name, self.domicile
         )
 
     @property
@@ -875,13 +873,13 @@ class Exchange(Institution):
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return "{} ({}) is an {} in {}".format(
-            self.name, self.mic, self._class_name, self.domicile.country_name
+            self.name, self.mic, self.__class__.__name__, self.domicile.country_name
         )
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", domicile={!r}, mic="{}")'.format(
-            self._class_name, self.name, self.domicile, self.mic
+            self.__class__.__name__, self.name, self.domicile, self.mic
         )
 
     @property
