@@ -53,6 +53,25 @@ def update():
                 "The database has not been set up. Please run the 'init' "
                 "command first.")
 
+@click.command()
+def delete():
+    """Delete (drop) the entire database and all its contents."""
+    # Prompt the user for confirmation before deleting the database.
+    click.confirm(
+        "Are you sure you want to delete the database? This action cannot be "
+        "undone.", abort=True)
+
+    # If the user confirms, proceed with deleting the database.
+    with Manager() as abm:
+        try:
+            abm.close(drop=True)
+        except NotSetUp as ex:
+            logger.error(
+                "The database has not been set up. Please run the 'init' "
+                "command first.")
+        else:
+            logger.info("Database successfully deleted.")
+
 
 @click.command()
 def dump():
@@ -71,6 +90,7 @@ def dump():
 
 cli.add_command(init)
 cli.add_command(update)
+cli.add_command(delete)
 cli.add_command(dump)
 
 if __name__ == "__main__":

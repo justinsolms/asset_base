@@ -28,38 +28,110 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 Base = declarative_base()
 
 class _Session(ABC):
-    """Set up and destroy a database and session."""
+    """Set up and destroy a database and session.
+
+    Parameters
+    ----------
+    url : str
+        The database URL to connect to. This can be a SQLite file URL or any
+        other SQLAlchemy supported database URL.
+    testing : bool
+        If True, the database will be dropped upon destruction. This is useful
+        for testing purposes to ensure a clean state for each test run. If False,
+        the database will not be dropped, allowing it to persist across runs.
+
+    """
 
     def __init__(self, url, testing):
         """Initialization."""
         self.testing = testing
         self.db_url = url
 
+        # Create the SQLAlchemy ORM engine.
+        # Set echo=False to disable logging of SQL statements.
+        # Set echo=True to enable logging of SQL statements.
         self.engine = create_engine(self.db_url, echo=False)  # No logging
         logger.debug(f"Created database engine {self.db_url}")
 
-        Base.metadata.create_all(self.engine)  # Using asset_base.Base
+        # Create all the database tables using the declarative_base defined
+        # above.
+        # FIXME: Handle edge cases where the database already exists.
+        Base.metadata.create_all(self.engine)
         logger.debug(f"Created all tables in {self.db_url}.")
 
+        # Create a new session for the database. Set autoflush=True to flush
+        # changes to the database before each query. Set autocommit=False to
+        # disable autocommit mode. This means that changes are not committed to
+        # the database until explicitly called with session.commit(). This is
+        # useful for ensuring that all changes are made in a single transaction,
+        # which can be rolled back if needed. If autoflush is set to False, you
+        # need to call session.flush() before querying the database to ensure
+        # that all changes are flushed to the database. The "autocommit" keyword
+        # is present for backwards compatibility but must remain at its default
+        # value of False.
         self.session = Session(self.engine, autoflush=True, autocommit=False)
         logger.debug(f"Opened database session {self.db_url}")
 
     def __del__(self):
-        """Destruction."""
-        # Delete database if it exists
+        """Destruction.
+
+        This method is called when the object is about to be destroyed. This
+        will ensure that the database session and engine are properly closed and
+        disposed of.
+
+
+        If the `testing` flag is set to True (See class testing parameter), the
+        database will be dropped to ensure a clean state for the next test run.
+        If False, the database will not be dropped, allowing it to persist
+        across runs.
+        """
+        if self.testing:
+            logger.debug(f"Deleting database {self.db_url} because we are testing.")
+            self.close(drop=True)
+        else:
+            self.close(drop=False)
+
+    def close(self, drop=False):
+        """Close the database session and dispose of the engine.
+
+        Parameters
+        ----------
+        drop : bool, optional
+            If True, the database will be dropped. This is useful for testing
+            purposes to ensure a clean state for the next test run. If False,
+            the database will not be dropped, allowing it to persist across runs.
+
+        """
+        # Delete database session and engine only if the database exists. This
+        # guard is important as the database may not exist when __del__ is
+        # called, due to previous calls to close() or when testing.
         if not database_exists(self.db_url):
+            logger.debug(f"Database {self.db_url} does not exist. Nothing to delete.")
             return
-        # Properly close the session and dispose of the engine
-        self.session.close()
-        del self.session
-        logger.debug(f"Closed database session {self.db_url}.")
-        self.engine.dispose()
-        del self.engine
-        logger.debug(f"Disposed of database engine {self.db_url}.")
-        # Only delete database if we are testing - otherwise keep it.
-        if self.testing is True:
+
+        # If the session exists, close it and dispose of the engine.
+        if hasattr(self, 'session') and self.session is not None:
+            # Close the session to release any resources it holds. This is
+            # important to ensure that the session is properly cleaned up and
+            # does not hold onto any database connections or resources. This is
+            # especially important in a testing environment where the database
+            # may be dropped and recreated frequently. Closing the session will
+            # also ensure that any pending changes are flushed to the database
+            # before the session is closed. This is important to ensure that any
+            # changes made to the database are properly saved before the session
+            # is closed.
+            self.session.close()
+            del self.session  # Delete the session attribute
+            logger.debug(f"Closed session for {self.db_url}.")
+            # Dispose of the engine to release any resources it holds.
+            self.engine.dispose()
+            del self.engine  # Delete the engine attribute
+            logger.debug(f"Disposed of engine for {self.db_url}.")
+
+        if drop is True:
+            # If we are not testing, just close the session and engine.
             drop_database(self.db_url)
-            logger.warning(f"Dropped the entire database {self.db_url}.")
+            logger.debug(f"Dropped database for {self.db_url}.")
 
 
 class TestSession(_Session):
@@ -86,6 +158,8 @@ class SQLiteSession(_Session):
         db_url = "sqlite:///" + db_path
 
         super().__init__(db_url, testing=testing)
+
+
 
 
 class Common(Base):
@@ -134,10 +208,9 @@ class Common(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", id={!r})'.format(self._class_name, self.name, self.id)
+        return '{}(name="{}", id={!r})'.format(self.__class__.__name__, self.name, self.id)
 
     @classmethod
-    @property
     def _class_name(cls):
         return cls.__name__
 
