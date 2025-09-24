@@ -241,8 +241,12 @@ class Common(Base):
         Returns
         -------
         pandas.DataFrame
-            The key code column name shall be the class' ``KEY_CODE_LABEL``
-            attribute.
+            One row per instance in the database with two columns:
+            - The first column shall be named ``id`` and contain the instance's
+              ``Entity.id`` number.
+            - The second column shall be named after the class's
+              ``KEY_CODE_LABEL`` attribute and contain the instance's
+              ``key_code`` property value.
         """
         instances_list = session.query(cls).all()
         return pd.DataFrame(

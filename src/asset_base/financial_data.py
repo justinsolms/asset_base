@@ -631,6 +631,17 @@ class History(_Feed):
             The data feed module to use:
                 'EOD' - eod_historical_data
 
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            securities and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'isin', 'adjusted_close', 'close', 'high', 'low',
+                'open', 'volume'. The 'isin' column is the ISIN code of the
+                security. and is key to identifying the security the time series
+                belongs to.
+            The DataFrame is empty if no data was found.
+
         """
         # Generate (or default) date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
@@ -706,6 +717,17 @@ class History(_Feed):
         feed : str
             The data feed module to use:
                 'EOD' - eod_historical_data
+
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            securities and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'isin', 'declaration_date', 'payment_date',
+                'period', 'record_date', 'unadjusted_value', 'adjusted_value'.
+                The 'isin' column is the ISIN code of the security and is key to
+                identifying the security the time series belongs to.
+            The DataFrame is empty if no data was found.
 
         """
         # Generate date list with date ranges for each asset.
@@ -792,6 +814,16 @@ class History(_Feed):
             The data feed module to use:
                 'EOD' - eod_historical_data
 
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            securities and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'isin', 'numerator', 'denominator'. The 'isin'
+                column is the ISIN code of the security and is key to identifying
+                the security the time series belongs to.
+            The DataFrame is empty if no data was found.
+
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
@@ -875,6 +907,16 @@ class History(_Feed):
             The data feed module to use:
                 'EOD' - eod_historical_data
 
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            forex and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'ticker', 'adjusted_close', 'close', 'high', 'low',
+                'open', 'volume'. The 'ticker' column is the forex ticker code
+                and is key to identifying the forex the time series belongs to.
+            The DataFrame is empty if no data was found.
+
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
@@ -935,6 +977,16 @@ class History(_Feed):
         feed : str
             The data feed module to use:
                 'EOD' - eod_historical_data
+
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            indices and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'ticker', 'adjusted_close', 'close', 'high', 'low',
+                'open', 'volume'. The 'ticker' column is the index ticker code
+                and is key to identifying the index the time series belongs to.
+            The DataFrame is empty if no data was found.
 
         """
         # Generate date list with date ranges for each asset.

@@ -403,7 +403,7 @@ class ManagerBase(object):
         # Check for newer securities data and update the database
         fundamentals = MetaData()
         history = History()
-        # NOTE: Future security classes place their update_all() methods here.
+        # TODO: Future security classes place their update_all() methods here.
         # NOTE: ListedEquity.update_all() here
         ExchangeTradeFund.update_all(
             self.session,
@@ -411,7 +411,8 @@ class ManagerBase(object):
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
             get_splits_method=history.get_splits,
-            _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
+            # Hidden args for testing only!
+            _test_isin_list=_test_isin_list,
         )
 
         # Forex update - based on existing currencies and built in list

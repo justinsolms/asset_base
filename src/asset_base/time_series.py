@@ -142,17 +142,21 @@ class TimeSeriesBase(Base):
         data_frame : pandas.DataFrame
             A ``pandas.DataFrame`` with columns with names identical to the
             ``TimeSeriesBase`` child class' constructor' method arguments, with
-            the exception that the there is no would-be column named `base_obj`.
-            Instead there must be a column with the name given by the
-            `<asset_class>.KEY_CODE_LABEL` class attribute. For example, if the
-            `asset_class` is ``asset.Listed``, then the `KEY_CODE_LABEL` and
-            therefore column name would be `isin` with listed security ISIN
-            numbers as rows. If for example the `asset_class` is ``asset.Cash``,
-            then the `KEY_CODE_LABEL` and therefore column name would be
-            `asset_currency`. This column must be populated with the
-            `<asset_class>.key_code` respective class attribute value. This text
-            string based approach is more convenient for formatting data
-            identity when fetched from financial data API services.
+            the exception that there must be no would-be column named
+            `base_obj`. Instead there must be a column with the name given by
+            the `asset_class.KEY_CODE_LABEL` class attribute. This
+            `asset_class.KEY_CODE_LABEL` is a string giving the name of the
+            column that contains values that allow for the identification of the
+            `asset_class` instance that the time-series data row belongs to. For
+            example, if the `asset_class` is ``asset.Listed``, then the
+            `KEY_CODE_LABEL` and therefore column name would be `isin` with
+            listed security ISIN numbers as rows. If for example the
+            `asset_class` is ``asset.Cash``, then the `KEY_CODE_LABEL` and
+            therefore column name would be `asset_currency`. This column must be
+            populated with the `<asset_class>.key_code` respective class
+            attribute value. This text string based approach is more convenient
+            for formatting data identity when fetched from financial data API
+            services.
         """
 
         # Check for zero rows of data
@@ -168,7 +172,9 @@ class TimeSeriesBase(Base):
 
         data_table = data_frame
 
-        # Enforce uniqueness by date_stamp and KEY_CODE_LABEL
+        # Warn of non-uniqueness by date_stamp and KEY_CODE_LABEL then drop
+        # duplicates if any found (keeping the first duplicate instance in every
+        # case)
         if data_table.duplicated(subset=["date_stamp", asset_class.KEY_CODE_LABEL]).any():
             logger.warning(
                 f"Duplicate rows found in {cls._class_name()} data for "
@@ -653,6 +659,7 @@ class ListedEOD(TradeEOD):
 
         # Get asset class from the asset relationship. This is to avoid an import from
         # `.asset` which would cause a circular import.
+        # FIXME: Why can;t we just use `cls` in the update_all methods and dispense with the asset_class parameter?
         asset_class = cls.listed.property.mapper.class_
 
         # For all de-listed securities skip data fetch and warn
