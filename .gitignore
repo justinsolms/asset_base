@@ -144,3 +144,4 @@ src/asset_base/_cache/asset_base.db-journal
 src/asset_base/_cache/asset_base.db-journal
 
 dist/
+out/asset_base/asset_base.svg

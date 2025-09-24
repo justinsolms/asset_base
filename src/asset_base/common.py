@@ -15,7 +15,7 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy import Integer, String, Date, Column, UniqueConstraint
 from sqlalchemy.orm import declarative_base, Session
-from sqlalchemy_utils import drop_database, database_exists
+from sqlalchemy_utils import drop_database, database_exists, create_database  # type: ignore
 
 from asset_base import get_cache_path
 
@@ -55,9 +55,15 @@ class _Session(ABC):
 
         # Create all the database tables using the declarative_base defined
         # above.
-        # FIXME: Handle edge cases where the database already exists.
+        if not database_exists(self.db_url):
+            logger.debug(f"Database {self.db_url} does not exist. Creating...")
+            create_database(self.db_url)
+            logger.debug(f"Created database {self.db_url}.")
+        else:
+            logger.debug(f"Database {self.db_url} already exists.")
+
         Base.metadata.create_all(self.engine)
-        logger.debug(f"Created all tables in {self.db_url}.")
+        logger.debug(f"Ensuring all tables exist in {self.db_url}.")
 
         # Create a new session for the database. Set autoflush=True to flush
         # changes to the database before each query. Set autocommit=False to

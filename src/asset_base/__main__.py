@@ -30,8 +30,8 @@ def cli():
 @click.option(
     "-d", "--delete-dump-data", is_flag=True,
     help="Delete reusable dump data (not recommended).")
-def init(delete_dump_data):
-    """Tear down old database, dumping reusable data, initialize a new one, and
+def setup(delete_dump_data):
+    """Tear down old database, dumping reusable data, set up a new one, and
     populate it with data. Reuse dumped data to expedite population of the new
     database."""
     with Manager() as abm:
@@ -88,7 +88,7 @@ def dump():
             logger.info("Database reusable data dumped successfully for use in "
                         "a new database setup.")
 
-cli.add_command(init)
+cli.add_command(setup)
 cli.add_command(update)
 cli.add_command(delete)
 cli.add_command(dump)
