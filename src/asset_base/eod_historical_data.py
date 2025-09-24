@@ -60,6 +60,9 @@ dividend_columns = [
     "unadjustedValue",
     "currency",
 ]
+split_columns = [
+    "split"
+]
 
 
 class APISessionManager:
@@ -263,6 +266,38 @@ class Historical(APISessionManager):
             to_date=to_date,
         )
         table = table[dividend_columns]
+
+        return table
+
+    async def get_splits(self, exchange, ticker, from_date=None, to_date=None):
+        """Get daily, EOD historical splits over a date range.
+
+        Parameters
+        ----------
+        exchange : str
+            Short exchange code for the listed security.
+        ticker : str
+            Exchange security ticker code
+        from_date : datetime.date, optional
+            Inclusive start date of historical data. If not provided then the
+            date is set to 1900-01-01.
+        to_date : datetime.date, optional
+            Inclusive end date of historical data. If not provide then the date
+            is set to today.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The daily, EOD historical time-series.
+        """
+        table = await self._get(
+            self._historical_splits,
+            exchange,
+            ticker,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        table = table[split_columns]
 
         return table
 
@@ -775,7 +810,7 @@ class MultiHistorical(object):
             table = pd.DataFrame()
         else:
             # The security and date info is in the index
-            table = table[["split"]]
+            table = table[split_columns]
 
         return table
 
