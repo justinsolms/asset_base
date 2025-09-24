@@ -7,6 +7,8 @@
 
 # TODO: Decide upon key_code and identity_code formats
 
+from typing import ClassVar
+
 import sys
 import functools
 import numpy as np
@@ -21,9 +23,9 @@ from sqlalchemy import Float, Integer, String, Enum, Boolean
 from sqlalchemy import MetaData, Column, ForeignKey
 
 from sqlalchemy.orm import relationship
-from sqlalchemy.exc import NoResultFound
+from sqlalchemy.orm.exc import NoResultFound
 
-from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData
+from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData, SplitSeriesNoData
 from .exceptions import ReconcileError
 from .exceptions import BadISIN
 from .financial_data import Dump
@@ -35,6 +37,7 @@ from .time_series import (
     ForexEOD,
     IndexEOD,
     ListedEOD,
+    Split,
     TimeSeriesBase,
 )
 
@@ -1817,14 +1820,19 @@ class ListedEquity(Listed):
     """ Primary key."""
 
     # Historical Dividend TimeSeriesBase collection
-    # TODO: Rename to dividends
     _dividend_series = relationship(
-        "Dividend", order_by=TimeSeriesBase.date_stamp, back_populates="listed_equity"
+        "Dividend",
+        order_by="Dividend.date_stamp",
+        back_populates="listed_equity",
+        uselist=True,
     )
 
     # Historical Split TimeSeriesBase collection
     _split_series = relationship(
-        "Split", order_by=TimeSeriesBase.date_stamp, back_populates="listed_equity"
+        "Split",
+        order_by="Split.date_stamp",
+        back_populates="listed_equity",
+        uselist=True,
     )
 
     # Industry classification
@@ -1930,6 +1938,7 @@ class ListedEquity(Listed):
         get_meta_method,
         get_eod_method=None,
         get_dividends_method=None,
+        get_splits_method=None,
         **kwargs,
     ):
         """Update/create all the objects in the asset_base session.
@@ -1964,6 +1973,12 @@ class ListedEquity(Listed):
             data form which the ``Dividend`` instances shall be created.
             If this argument is omitted then the ``Dividend`` will not be
             created.
+        get_splits_method : financial_data module class method, optional
+            The method that returns a ``pandas.DataFrame`` with the data items
+            in columns named according to the ``Split`` ``factory`` method. This is
+            for the securities time series split end of day data form which the
+            ``Split`` instances shall be created. If this argument is omitted
+            then the ``Split`` will not be created.
 
         No object shall be destroyed, only updated, or missing object created.
 
@@ -1975,9 +1990,13 @@ class ListedEquity(Listed):
         # Get securities
         super().update_all(session, get_meta_method, get_eod_method, **kwargs)
 
-        # Get Dividend trade data.
+        # Get Dividend data.
         if get_dividends_method is not None:
             Dividend.update_all(session, get_dividends_method)
+
+        # Get Split data.
+        if get_splits_method is not None:
+            Split.update_all(session, get_splits_method)
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -2060,22 +2079,6 @@ class ListedEquity(Listed):
 
         return series
 
-    def _get_last_dividend(self):
-        """Return the dividend last date for the listed asset.
-
-        Raises
-        ------
-        DividendSeriesNoData
-            If no time series exists.
-        """
-        # Note that _dividend_series is ordered by Dividend.last_date
-        try:
-            last_dividend = self._dividend_series[-1]
-        except IndexError:
-            raise DividendSeriesNoData(f"Expected dividend data for {self}")
-
-        return last_dividend
-
     def get_last_dividend(self):
         """Return the dividend last date for the listed asset.
 
@@ -2090,7 +2093,13 @@ class ListedEquity(Listed):
         DividendSeriesNoData
             If no time series exists.
         """
-        return self._get_last_dividend().to_dict()
+        # Note that _dividend_series is ordered by Dividend.last_date
+        try:
+            last_dividend = list(self._dividend_series)[-1]
+        except IndexError:
+            raise DividendSeriesNoData(f"Expected dividend data for {self}")
+
+        return last_dividend.to_dict()
 
     def get_last_dividend_date(self):
         """Return the dividend last date for the listed asset.
@@ -2102,8 +2111,72 @@ class ListedEquity(Listed):
             time series. Returns `None` if no data series exists.
         """
         try:
-            last_date = self._get_last_dividend().date_stamp
-        except DividendSeriesNoData:
+            last_dividend = self._dividend_series[-1]
+            last_date = last_dividend.date_stamp
+        except IndexError:
+            last_date = None
+
+        return last_date
+
+    def get_split_series(self):
+        """Return the splits data series for the security.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A split ``pandas.DataFrame`` with columns identical to the keys
+            from the ``time_series.Split.to_dict()`` polymorph class method.
+
+        Raises
+        ------
+        SplitSeriesNoData
+            If no time series exists.
+        """
+        split_dict_list = [s.to_dict() for s in self._split_series]
+        if len(split_dict_list) == 0:
+            raise SplitSeriesNoData(f"Expected split data for {self}")
+        series = pd.DataFrame(split_dict_list)
+        series["date_stamp"] = pd.to_datetime(series["date_stamp"])
+        series.set_index("date_stamp", inplace=True)
+        series.sort_index(inplace=True)  # Assure ascending
+        series.name = self
+
+        return series
+
+    def get_last_split(self):
+        """Return the split last date for the listed asset.
+
+        Returns
+        -------
+        dict
+            A Split price data dictionary with keys from the
+            ``time_series.Split.to_dict()`` method.
+        Raises
+        ------
+        SplitSeriesNoData
+            If no time series exists.
+        """
+        # Note that _split_series is ordered by Split.last_date
+        try:
+            last_split = list(self._split_series)[-1]
+        except IndexError:
+            raise SplitSeriesNoData(f"Expected split data for {self}")
+
+        return last_split.to_dict()
+
+    def get_last_split_date(self):
+        """Return the split last date for the listed asset.
+
+        Returns
+        -------
+        datetime.date or None
+            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
+            time series. Returns `None` if no data series exists.
+        """
+        try:
+            last_split = self._split_series[-1]
+            last_date = last_split.date_stamp
+        except IndexError:
             last_date = None
 
         return last_date

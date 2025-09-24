@@ -507,7 +507,7 @@ class MetaData(_Feed):
             logger.debug("Got Indices meta data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to form here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -557,7 +557,7 @@ class History(_Feed):
             If provided then a list of `len(obj_list) * [from_date]` is
             returned. If a ``from_date`` argument is not provided then the time
             series of each ``Asset`` in the ``obj_list`` is inspected and the
-            ``from_date`` generated according to the latest available data date
+            ``from_date`` generated according to the last available data date
             of the ``Asset``'s time series.
         from_date : datetime.date
             If provided then a list of `len(obj_list) * [to_date]` is returned.
@@ -569,7 +569,13 @@ class History(_Feed):
         Returns
         -------
         from_date_list
-            The list of `from_dates` the length of ``obj_list``.
+            The list of `from_dates` the length of ``obj_list``. Each date is the
+            last available date of the relevant time series of the corresponding
+            ``Asset`` instance in ``obj_list`` if the ``from_date`` argument
+            is not provided. If the ``from_date`` argument is provided then the
+            list is `len(obj_list) * [from_date]`. If there is no data for an
+            ``Asset`` instance then the corresponding entry in the list is
+            `None`.
         to_date_list
             The list of `to_dates` the length of ``obj_list``.
 
@@ -581,14 +587,17 @@ class History(_Feed):
             from_date_list = list()
             for asset in obj_list:
                 try:
-                    if series in ["eod", "forex", "index"]:
-                        from_date = asset.get_last_eod_date()
-                    elif series in ["dividend"]:
-                        from_date = asset.get_last_dividend_date()
-                    else:
-                        raise ValueError(
+                    match series:
+                        case "eod" | "forex" | "index":
+                            from_date = asset.get_last_eod_date()
+                        case "dividend":
+                            from_date = asset.get_last_dividend_date()
+                        case "split":
+                            from_date = asset.get_last_split_date()
+                        case _:
+                            raise ValueError(
                             f"Unexpected value {series} for `series` argument."
-                        )
+                            )
                 except TimeSeriesNoData:
                     from_date = None
                 from_date_list.append(from_date)
@@ -650,7 +659,7 @@ class History(_Feed):
             logger.debug("Got EOD data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to form here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -733,7 +742,7 @@ class History(_Feed):
             logger.debug("Got dividend data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to from here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -809,7 +818,7 @@ class History(_Feed):
             logger.debug("Got splits data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to from here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -835,6 +844,12 @@ class History(_Feed):
             # Condition date
             for column in date_columns_list:
                 data[column] = pd.to_datetime(data[column])
+            # Extract split numerator and denominator from string
+            # representation "n:d" to two integer columns
+            split_columns = data["split"].str.split("/", expand=True)
+            data["numerator"] = pd.to_numeric(split_columns[0], downcast="integer")
+            data["denominator"] = pd.to_numeric(split_columns[1], downcast="integer")
+            data.drop(columns=["split"], inplace=True)
         else:
             raise Exception("Feed {} not implemented.".format(feed))
 
@@ -886,7 +901,7 @@ class History(_Feed):
             logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to from here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -947,7 +962,7 @@ class History(_Feed):
             logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to from here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)

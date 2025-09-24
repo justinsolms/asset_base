@@ -166,7 +166,7 @@ class TestMetaData(unittest.TestCase):
         pd.testing.assert_frame_equal(test_df, df)
 
 
-class TestSecuritiesHistory(unittest.TestCase):
+class TestHistory(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test class fixtures."""
@@ -444,7 +444,7 @@ class Suite(object):
         test_classes = [
             TestStatic,
             TestMetaData,
-            TestSecuritiesHistory,
+            TestHistory,
             TestDump,
         ]
 

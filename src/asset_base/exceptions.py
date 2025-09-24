@@ -85,6 +85,10 @@ class DividendSeriesNoData(TimeSeriesNoData):
     """Dividends data returns empty."""
 
 
+class SplitSeriesNoData(TimeSeriesNoData):
+    """Dividends data returns empty."""
+
+
 class BadISIN(_BaseException):
     """A Listed ISIN number exception.
 

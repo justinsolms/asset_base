@@ -1,4 +1,5 @@
 from io import StringIO
+import io
 import unittest
 import datetime
 import pandas as pd
@@ -1034,8 +1035,10 @@ class TestListedEquity(TestListed):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = ListedEquity
-        # Securities EOD-data
+        # Securities dividends data
         cls.get_dividends_method = History().get_dividends
+        # Securities splits data
+        cls.get_splits_method = History().get_splits
         # ICB Classification
         cls.industry_class = "icb"
         cls.industry_name = "Exchange Traded Funds"
@@ -1064,51 +1067,37 @@ class TestListedEquity(TestListed):
             "unadjusted_value",
             "adjusted_value",
         ]
-        # FIXME: Why is ZAC the currency, check the dividends history!!
-        cls.div_test_df = pd.DataFrame(
-            [  # Last 3 dividends
-                [
-                    "2020-10-21",
-                    "STX40",
-                    "XJSE",
-                    "ZAE000027108",
-                    "ZAC",
-                    None,
-                    None,
-                    None,
-                    None,
-                    0.091925,
-                    0.091925,
-                ],
-                [
-                    "2020-11-06",
-                    "AAPL",
-                    "XNYS",
-                    "US0378331005",
-                    "USD",
-                    "2020-10-29",
-                    "2020-11-12",
-                    "Quarterly",
-                    "2020-11-09",
-                    0.2050,
-                    0.2050,
-                ],
-                [
-                    "2020-11-30",
-                    "MCD",
-                    "XNYS",
-                    "US5801351017",
-                    "USD",
-                    "2020-10-08",
-                    "2020-12-15",
-                    "Quarterly",
-                    "2020-12-01",
-                    1.2900,
-                    1.2900,
-                ],
-            ],
-            columns=cls.div_columns,
+
+        # Test dividend values
+        div_test_str = (
+            "date_stamp,currency,declaration_date,payment_date,period,record_date,unadjusted_value,adjusted_value\n"
+            "2020-10-21,ZAC,,,,,0.091925,0.091925\n"
+            "2020-11-06,USD,2020-10-29,2020-11-12,Quarterly,2020-11-09,0.205,0.205\n"
+            "2020-11-30,USD,2020-10-08,2020-12-15,Quarterly,2020-12-01,1.29,1.29\n"
         )
+        div_test_io = io.StringIO(div_test_str)
+        cls.div_test_df = pd.read_csv(div_test_io)
+
+        # Test split values
+        split_test_str = (
+            "date_stamp,numerator,denominator\n"
+            "1971-06-14,3,2\n"
+            "1972-06-06,2,1\n"
+            "1982-10-07,3,2\n"
+            "1984-09-25,3,2\n"
+            "1986-06-26,3,2\n"
+            "1987-06-16,2,1\n"
+            "1987-06-23,3,2\n"
+            "1989-06-19,2,1\n"
+            "1994-06-27,2,1\n"
+            "1999-03-08,2,1\n"
+            "2000-06-21,2,1\n"
+            "2005-02-28,2,1\n"
+            "2014-06-09,7,1\n"
+            "2020-08-31,4,1\n"
+            )
+        split_test_io = io.StringIO(split_test_str)
+        cls.split_test_df = pd.read_csv(split_test_io)
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -1507,24 +1496,52 @@ class TestListedEquity(TestListed):
             _test_isin_list=[self.isin, self.isin1, self.isin2],
         )
         # Method to be tested
-        df = ListedEquity.factory(self.session, self.isin).get_dividend_series()
+        df0 = ListedEquity.factory(self.session, self.isin).get_dividend_series()
         df1 = ListedEquity.factory(self.session, self.isin1).get_dividend_series()
         df2 = ListedEquity.factory(self.session, self.isin2).get_dividend_series()
-        df = pd.concat([df, df1, df2], axis="index")
-        # Test over test-date-range
-        test_df = self.div_test_df.copy()
+        df = pd.concat([df0, df1, df2], axis="index")
         df.sort_index(inplace=True)
+        # Test over test-date-range
         df = df.loc[self.from_date : self.to_date]
         df = df.iloc[-3:]  # Test data is for last three
-        df.reset_index(inplace=True)
+        df.reset_index(inplace=True, )
+        # Get and format test_df
+        test_df = self.div_test_df.copy()
+        test_df.reset_index(inplace=True, drop=True)
         test_df = test_df[df.columns]
         # Make dates all strings for simple testing.
         date_to_str(df)  # Convert Timestamps
         # Test
-        # Reset indices for test
-        test_df.reset_index(drop=True, inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        # Compare
+        pd.testing.assert_frame_equal(test_df, df)
+
+    def test_get_split_series(self):
+        """Return the EOD split data series for the security."""
+        # Insert only selected subset of securities meta-data. Update all data
+        # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
+        # securities by using the _test_isin_list keyword argument.
+        ListedEquity.update_all(  # Method to be tested
+            self.session,
+            self.get_meta_method,
+            get_eod_method=self.get_eod_method,
+            get_dividends_method=self.get_dividends_method,
+            get_splits_method=self.get_splits_method,
+            _test_isin_list=[self.isin, self.isin1, self.isin2],
+        )
+        # Method to be tested - There are no splits in the isin2 test data
+        df0 = ListedEquity.factory(self.session, self.isin).get_split_series()
+        df1 = ListedEquity.factory(self.session, self.isin1).get_split_series()
+        df = pd.concat([df0, df1], axis="index")
+        df.sort_index(inplace=True)
+        # Test over test-date-range
+        df = df.loc[ : self.to_date]
+        df.reset_index(inplace=True, )
+        # Get and format test_df
+        test_df = self.split_test_df.copy()
+        test_df.reset_index(inplace=True, drop=True)
+        test_df = test_df[df.columns]
+        # Make dates all strings for simple testing.
+        date_to_str(df)  # Convert Timestamps
+        # Test
         pd.testing.assert_frame_equal(test_df, df)
 
     def test_time_series(self):

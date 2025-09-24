@@ -1020,8 +1020,7 @@ class Dividend(TimeSeriesBase):
                 f"de-listed security {security.identity_code}."
             )
 
-        # Get all actively listed Listed instances so we can fetch their
-        # EOD trade data
+        # Get all actively listed Listed instances so we can fetch their data
         securities_list = (
             session.query(asset_class).filter(asset_class.status == "listed").all()
         )
@@ -1099,3 +1098,50 @@ class Split(TimeSeriesBase):
             "numerator": self.numerator,
             "denominator": self.denominator,
         }
+
+    @classmethod
+    def update_all(cls, session, get_method):
+        """Update/create the eod trade data of all the Listed instances.
+
+        Warning
+        -------
+        The Listed.time_series_last_date attribute (or child class attribute) is
+        not updated by this method as it is the responsibility of the ``Listed``
+        class and its child classes to manage that attribute.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all this class' constructor method arguments.
+
+        No object shall be destroyed, only updated, or missing object created.
+
+        """
+        # TODO: Find a way to get the financial_data module to look for delisted
+        # data. Then skipping de-listed securities below can be avoided
+
+        # Get asset class from the asset relationship. This is to avoid an import from
+        # `.asset` which would cause a circular import.
+        asset_class = cls.listed_equity.property.mapper.class_
+
+        # Skip data fetch and warn for all de-listed securities
+        securities_delisted = (
+            session.query(asset_class).filter(asset_class.status == "delisted").all()
+        )
+        for security in securities_delisted:
+            logger.warning(
+                f"Skipped {cls._class_name()} data fetch for "
+                f"de-listed security {security.identity_code}."
+            )
+
+        # Get all actively listed Listed instances so we can fetch their data
+        securities_list = (
+            session.query(asset_class).filter(asset_class.status == "listed").all()
+        )
+
+        super().update_all(session, asset_class, get_method, securities_list)
+
+
