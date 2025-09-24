@@ -196,7 +196,8 @@ class TestSecuritiesHistory(unittest.TestCase):
     def test___init__(self):
         """Initialization."""
         self.assertIsInstance(self.feed, History)
-        self.assertEqual(self.feed.get_class_data_path(), None)
+        self.assertEqual(self.feed.get_class_data_path(), "")
+
 
     def test_get_eod(self):
         """Get historical EOD for a specified list of securities."""
@@ -275,6 +276,33 @@ class TestSecuritiesHistory(unittest.TestCase):
         # Test
         pd.testing.assert_frame_equal(test_df, df)
 
+    def test_get_splits(self):
+        """Get historical splits for a specified list of securities."""
+        # Listed securities test instances
+        Listed.from_data_frame(self.session, self.securities_dataframe)
+        # Securities test instances list
+        securities_list = self.session.query(Listed).all()
+        # Date range
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
+        # Test data - Only AAPL has pne split during the test period
+        test_csv = (
+            "date_stamp,isin,split\n"
+            "2020-08-31,US0378331005,4.000000/1.000000\n"
+        )
+        test_io = StringIO(test_csv)   # Convert String into StringIO
+        test_df = pd.read_csv(test_io)
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        # Call
+        df = self.feed.get_splits(securities_list, from_date, to_date)
+        # Sort rows by ticker and columns by name
+        test_df = test_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        df = df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        # Reset indices for test
+        test_df.reset_index(drop=True, inplace=True)
+        df.reset_index(drop=True, inplace=True)
+        # Test
+        pd.testing.assert_frame_equal(test_df, df)
 
     def test_get_forex(self):
         """Get historical EOD for a specified list of securities."""

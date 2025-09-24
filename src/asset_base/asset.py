@@ -1816,10 +1816,15 @@ class ListedEquity(Listed):
     id = Column(Integer, ForeignKey("listed.id"), primary_key=True)
     """ Primary key."""
 
-    # Historical Dividend end-of-day (EOD) time-series collection
+    # Historical Dividend TimeSeriesBase collection
     # TODO: Rename to dividends
     _dividend_series = relationship(
         "Dividend", order_by=TimeSeriesBase.date_stamp, back_populates="listed_equity"
+    )
+
+    # Historical Split TimeSeriesBase collection
+    _split_series = relationship(
+        "Split", order_by=TimeSeriesBase.date_stamp, back_populates="listed_equity"
     )
 
     # Industry classification

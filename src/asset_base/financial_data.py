@@ -538,7 +538,7 @@ class History(_Feed):
 
     def get_class_data_path(self) -> str:
         """Return the class data path."""
-        return ""
+        return ""  # Undefined at tis class level
 
     def __init__(self):
         """Instance initialization."""
@@ -798,6 +798,8 @@ class History(_Feed):
             feed = MultiHistorical()
             column_dict = {
                 "date": "date_stamp",
+                "ticker": "ticker",
+                "exchange": "mic",
                 "split": "split",
             }
             date_columns_list = [
