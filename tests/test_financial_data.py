@@ -160,8 +160,8 @@ class TestMetaData(unittest.TestCase):
         df = self.feed.get_indices()
         df = df[df.ticker.isin(test_df.ticker)]
         # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values('ticker').sort_index(axis='columns').reset_index(drop=True)
-        df = df.sort_values('ticker').sort_index(axis='columns').reset_index(drop=True)
+        test_df = test_df.sort_values(by='ticker').sort_index(axis='columns').reset_index(drop=True)
+        df = df.sort_values(by='ticker').sort_index(axis='columns').reset_index(drop=True)
         # Test
         pd.testing.assert_frame_equal(test_df, df)
 
@@ -221,10 +221,10 @@ class TestSecuritiesHistory(unittest.TestCase):
         df = self.feed.get_eod(securities_list, date, date)
         # Do not test for 'adjusted_close' as it changes
         test_df.drop(columns="adjusted_close", inplace=True)
-        df.drop(columns="adjusted_close", inplace=True)
+        df.drop(columns=["adjusted_close"], inplace=True)
         # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values('isin').sort_index(axis='columns')
-        df = df.sort_values('isin').sort_index(axis='columns')
+        test_df = test_df.sort_values(by='isin').sort_index(axis='columns')
+        df = df.sort_values(by='isin').sort_index(axis='columns')
         # Reset indices for test
         test_df.reset_index(drop=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
@@ -296,8 +296,8 @@ class TestSecuritiesHistory(unittest.TestCase):
         # Call
         df = self.feed.get_splits(securities_list, from_date, to_date)
         # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
-        df = df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        test_df = test_df.sort_values(by=['isin', 'date_stamp']).sort_index(axis='columns')
+        df = df.sort_values(by=['isin', 'date_stamp']).sort_index(axis='columns')
         # Reset indices for test
         test_df.reset_index(drop=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
@@ -329,10 +329,10 @@ class TestSecuritiesHistory(unittest.TestCase):
         df = self.feed.get_forex(forex_list, date, date)
         # Do not test for `adjusted_close` as it changes
         test_df.drop(columns="adjusted_close", inplace=True)
-        df.drop(columns="adjusted_close", inplace=True)
+        df.drop(columns=["adjusted_close"], inplace=True)
         # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values('ticker').sort_index(axis='columns')
-        df = df.sort_values('ticker').sort_index(axis='columns')
+        test_df = test_df.sort_values(by='ticker').sort_index(axis='columns')
+        df = df.sort_values(by='ticker').sort_index(axis='columns')
         # Reset indices for test
         test_df.reset_index(drop=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
@@ -367,8 +367,8 @@ class TestSecuritiesHistory(unittest.TestCase):
         test_df.drop(columns="adjusted_close", inplace=True)
         df.drop(columns="adjusted_close", inplace=True)
         # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values('ticker').sort_index(axis='columns')
-        df = df.sort_values('ticker').sort_index(axis='columns')
+        df = df.sort_values(by='ticker').sort_index(axis='columns')
+        test_df = test_df.sort_values(by='ticker').sort_index(axis='columns')
         # Reset indices for test
         test_df.reset_index(drop=True, inplace=True)
         df.reset_index(drop=True, inplace=True)
@@ -396,11 +396,11 @@ class TestDump(unittest.TestCase):
     def setUp(self):
         """Set up test case fixtures."""
         self.dumper = Dump()
-        self.dumper.delete(delete_folder=False)  # Delete contents only
+        self.dumper.delete()
 
     def tearDown(self):
         """Tear down test case fixtures."""
-        self.dumper.delete(delete_folder=True)  # Delete test dump folder
+        self.dumper.delete()
 
     def test___init__(self):
         """Initialization."""

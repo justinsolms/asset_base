@@ -21,7 +21,7 @@ from sqlalchemy import Float, Integer, String, Enum, Boolean
 from sqlalchemy import MetaData, Column, ForeignKey
 
 from sqlalchemy.orm import relationship
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.exc import NoResultFound
 
 from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData
 from .exceptions import ReconcileError
@@ -2395,6 +2395,7 @@ class Index(AssetBase):
     tables of key codes."""
 
     # EOD historical time-series collection ranked by date_stamp
+    # FIXME: Do not assign to declared property method _eod_series
     _eod_series = relationship(
         IndexEOD, order_by=IndexEOD.date_stamp, back_populates="index"
     )

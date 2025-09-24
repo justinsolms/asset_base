@@ -492,7 +492,7 @@ class MetaData(_Feed):
 
         return data
 
-    def get_indices(self, feed="EOD", **kwargs):
+    def get_indices(self, feed="EOD", **kwargs) -> pd.DataFrame:
         """Fetch indices mete data from the feeds."""
 
         if feed == "EOD":
@@ -603,7 +603,7 @@ class History(_Feed):
 
         return from_date_list, to_date_list
 
-    def get_eod(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+    def get_eod(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
@@ -679,7 +679,7 @@ class History(_Feed):
 
         return data
 
-    def get_dividends(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+    def get_dividends(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical dividends for a list of securities.
 
         This method fetches the data from the specified feed.
@@ -764,7 +764,7 @@ class History(_Feed):
 
         return data
 
-    def get_splits(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+    def get_splits(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical splits for a list of securities.
 
         This method fetches the data from the specified feed.
@@ -840,7 +840,7 @@ class History(_Feed):
 
         return data
 
-    def get_forex(self, forex_list, from_date=None, to_date=None, feed="EOD"):
+    def get_forex(self, forex_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
@@ -901,7 +901,7 @@ class History(_Feed):
 
         return data
 
-    def get_indices(self, index_list, from_date=None, to_date=None, feed="EOD"):
+    def get_indices(self, index_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of indices.
 
         This method fetches the data from the specified feed.
