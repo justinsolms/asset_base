@@ -1694,14 +1694,13 @@ class Listed(Share):
         .asset_base.AssetBase.dump
 
         """
-        # A table item for  all instances of this class
+        # Dump all listed security meta-data
         dump_dict = dict()
-        dump_dict[cls._class_name] = cls.to_data_frame(session)
+        dump_dict[cls._class_name()] = cls.to_data_frame(session)
         # Serialize
         dumper.write(dump_dict)
 
-        # For all class instances in the database get a table for their
-        # time-series
+        # Dump all security end-of-day time-series data
         ListedEOD.dump(session, dumper, Listed)
 
     @classmethod
@@ -2017,12 +2016,12 @@ class ListedEquity(Listed):
         .asset_base.AssetBase.dump
 
         """
-        # Parent class dumper
+        # Parent dumper
         super().dump(session, dumper)
 
-        # For all class instances in the database get a table for their
-        # time-series
+        # Dump all security dividend and split time-series data
         Dividend.dump(session, dumper, ListedEquity)
+        Split.dump(session, dumper, ListedEquity)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
