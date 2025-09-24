@@ -347,14 +347,15 @@ class ManagerBase(object):
         if reuse:
             self.reuse()
 
+        # First commit. The update method call below will commit again
+        self.commit()
+
         # Update all from API feeds
+        # TODO: Remove this. Updating must be a separate call tio update() - note the knockon changes to all tests.
         if update is True:
             self.update(
                 _test_isin_list=_test_isin_list, _test_forex_list=_test_forex_list
             )
-
-        # Try to commit all results
-        self.commit()
 
     def tear_down(self, delete_dump_data=False):
         """Tear down the environment for operation of the module.
@@ -420,6 +421,9 @@ class ManagerBase(object):
         )
 
         # TODO: Include Index.update_all
+
+        # Lastly commit all changes to the database
+        self.commit()
 
     def dump(self):
         """Dump re-usable content to disk files.
