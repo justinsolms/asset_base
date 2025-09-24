@@ -1726,14 +1726,15 @@ class Listed(Share):
         .dump
 
         """
-        class_name = cls._class_name
-        # A table item for  all instances of this class
-        # Uses dict data structures. See the docs.
+        # Re-use all listed security meta-data
+        class_name = cls._class_name()
         data_frame_dict = dumper.read(name_list=[class_name])
         cls.from_data_frame(session, data_frame_dict[class_name])
+        logger.warning(
+            "Reused %s data - Data may be stale. Consider a hard "
+            "reinitialisation if security mete-data has changed.", class_name)
 
-        # For all class instances in the database get a table for their
-        # time-series
+        # Re-use all security end-of-day time-series data
         ListedEOD.reuse(session, dumper, Listed)
 
     @staticmethod
@@ -1750,9 +1751,10 @@ class Listed(Share):
         return isin
 
 
+# TODO: Make a ListedEquityBase parent with ListedEquity next to ExchangeTradeFund child classes. The idea is to use only the leaves orf a hierarchical tree
 class ListedEquity(Listed):
-    # TODO:160 Document behaviour. Esp. reg. name and isin changes.
-    # TODO:260 Calculate time-series based on holdings. Specify depth to look
+    # TODO: Document behaviour. Esp. reg. name and isin changes.
+    # TODO: Calculate time-series based on holdings. Specify depth to look
     """Exchange listed ordinary shares in an issuing company.
 
     Ordinary shares are also known as equity shares and they are the most
@@ -2049,9 +2051,9 @@ class ListedEquity(Listed):
         # Parent class re-user
         super().reuse(session, dumper)
 
-        # For all class instances in the database get a table for their
-        # time-series
+        # Re-use all security dividend and split time-series data
         Dividend.reuse(session, dumper, ListedEquity)
+        Split.reuse(session, dumper, ListedEquity)
 
     def get_dividend_series(self):
         """Return the dividends data series for the security.

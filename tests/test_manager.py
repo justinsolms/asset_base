@@ -139,11 +139,12 @@ class TestManager(unittest.TestCase):
         self.session = self.manager.session
         # For a fresh test delete any previously dumped data. Do not delete the
         # folder which was set up as a required test fixture.
-        self.manager.dumper.delete(delete_folder=False)
+        self.manager.dumper.delete()
         # Set-up the database with selected test securities
+        # FIXME: How to make this faster setting up only test securities?
         self.manager.set_up(
             _test_isin_list=self.isin_list,
-            _test_forex_list=self.foreign_currencies_list,
+            # _test_forex_list=self.foreign_currencies_list,
         )
         # This is also a test of Manager.set_up() and Manager.tear_down()
 

@@ -28,18 +28,23 @@ def cli():
 
 @click.command()
 @click.option(
-    "-d", "--delete-dump-data", is_flag=True,
-    help="Delete reusable dump data (not recommended).")
-def setup(delete_dump_data):
-    """Tear down old database, dumping reusable data, set up a new one, and
+    "--hard", is_flag=True,
+    help="Hard initialization, delete reusable dump data. Not recommended unless data is stale.")
+def setup(hard):
+    """Tear down old database, dumping reusable data, initialize a new one, and
     populate it with data. Reuse dumped data to expedite population of the new
-    database."""
+    database.
+
+    WARNING: Dump data may be stale especially security meta-data. Use
+    the --hard option to delete dump data and force a full fresh population of
+    the new database. This is not recommended unless absolutely necessary as it
+    is time-consuming."""
     with Manager() as abm:
-        if delete_dump_data:
-            delete_dump_data = True
+        if hard:
+            hard = True
         else:
-            delete_dump_data = False
-        abm.tear_down(delete_dump_data=delete_dump_data)
+            hard = False
+        abm.tear_down(delete_dump_data=hard)
         abm.set_up()
 
 @click.command()

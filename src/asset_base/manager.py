@@ -236,6 +236,7 @@ class ManagerBase(object):
 
     # These must only be `Asset` polymorphs.
     classes_to_dump = [ListedEquity]
+    # TODO: Make a ListedEquityBase parent with ListedEquity next to ExchangeTradeFund child classes. The idea is to use only the leaves orf a hierarchical tree
 
     def __init__(self, dialect="sqlite", testing=False):
         """Instance initialization.
