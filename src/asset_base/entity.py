@@ -856,7 +856,7 @@ class Exchange(Institution):
     mic = Column(String(4), nullable=False)
     eod_code = Column(String(6), nullable=True)
 
-    key_code_name = "mic"
+    KEY_CODE_LABEL = "mic"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""

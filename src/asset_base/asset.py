@@ -528,7 +528,7 @@ class Cash(Asset):
 
     id = Column(Integer, ForeignKey("asset.id"), primary_key=True)
 
-    key_code_name = "asset_currency"
+    KEY_CODE_LABEL = "asset_currency"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -799,7 +799,7 @@ class Forex(Cash):
 
     id = Column(Integer, ForeignKey("cash.id"), primary_key=True)
 
-    key_code_name = "ticker"
+    KEY_CODE_LABEL = "ticker"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -1341,7 +1341,7 @@ class Listed(Share):
     # National Securities Identifying Number
     isin = Column(String(12), nullable=False)
 
-    key_code_name = "isin"
+    KEY_CODE_LABEL = "isin"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -2463,7 +2463,7 @@ class Index(AssetBase):
 
     id = Column(Integer, ForeignKey("asset_base.id"), primary_key=True)
 
-    key_code_name = "ticker"
+    KEY_CODE_LABEL = "ticker"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""

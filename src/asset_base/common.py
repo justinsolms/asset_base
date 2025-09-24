@@ -189,7 +189,7 @@ class Common(Base):
     name = Column(String(256), nullable=False)
     """str: Entity name."""
 
-    key_code_name = "key_code"
+    KEY_CODE_LABEL = "key_code"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -241,13 +241,13 @@ class Common(Base):
         Returns
         -------
         pandas.DataFrame
-            The key code column name shall be the class' ``key_code_name``
+            The key code column name shall be the class' ``KEY_CODE_LABEL``
             attribute.
         """
         instances_list = session.query(cls).all()
         return pd.DataFrame(
             [(item.id, item.key_code) for item in instances_list],
-            columns=["id", cls.key_code_name],
+            columns=["id", cls.KEY_CODE_LABEL],
         )
 
     @classmethod

@@ -128,8 +128,8 @@ class TimeSeriesBase(Base):
     def from_data_frame(cls, session, asset_class: Asset, data_frame):
         """Create multiple class instances in the session from a dataframe.
 
-        This method updates all of a specified time series aggregated by the
-        ``Listed``  or it's child classes.
+        This method uses the SqlAlchemy session ``add_all`` method to add or
+        updates all the ``asset.Asset`` child class' time series.
 
         Parameters
         ----------
@@ -140,11 +140,19 @@ class TimeSeriesBase(Base):
             confused with the market asset class of security such as cash,
             bonds, equities commodities, etc.).
         data_frame : pandas.DataFrame
-            A ``pandas.DataFrame`` with columns of the same name as this
-            class' constructor method arguments, with the exception that instead
-            of a column named ``asset``,
-            column with the ISIN number of the ``Listed`` instance.
-
+            A ``pandas.DataFrame`` with columns with names identical to the
+            ``TimeSeriesBase`` child class' constructor' method arguments, with
+            the exception that the there is no would-be column named `base_obj`.
+            Instead there must be a column with the name given by the
+            `<asset_class>.KEY_CODE_LABEL` class attribute. For example, if the
+            `asset_class` is ``asset.Listed``, then the `KEY_CODE_LABEL` and
+            therefore column name would be `isin` with listed security ISIN
+            numbers as rows. If for example the `asset_class` is ``asset.Cash``,
+            then the `KEY_CODE_LABEL` and therefore column name would be
+            `asset_currency`. This column must be populated with the
+            `<asset_class>.key_code` respective class attribute value. This text
+            string based approach is more convenient for formatting data
+            identity when fetched from financial data API services.
         """
 
         # Check for zero rows of data
@@ -152,16 +160,21 @@ class TimeSeriesBase(Base):
             # No data so return
             return
 
-        # The goal is to substitute the `key_code_name` column with the
+        # The goal is to substitute the `KEY_CODE_LABEL` column with the
         # `Asset.id`.
-        key_code_name = asset_class.key_code_name
+        asset_class.KEY_CODE_LABEL = asset_class.KEY_CODE_LABEL
         # Get Asset.key_code to Asset.id translation table
         key_code_id_table = asset_class.key_code_id_table(session)
 
         data_table = data_frame
 
-        # Guarantee uniqueness in a copy of the data
-        data_frame.drop_duplicates(["date_stamp", key_code_name], inplace=True)
+        # Enforce uniqueness by date_stamp and KEY_CODE_LABEL
+        if data_table.duplicated(subset=["date_stamp", asset_class.KEY_CODE_LABEL]).any():
+            logger.warning(
+                f"Duplicate rows found in {cls._class_name()} data for "
+                f"date_stamp and {asset_class.KEY_CODE_LABEL}. Duplicates will be removed."
+            )
+        data_frame.drop_duplicates(["date_stamp", asset_class.KEY_CODE_LABEL], inplace=True)
 
         # Guarantee date ranking of the data
         data_table.sort_values(by="date_stamp")
@@ -174,8 +187,8 @@ class TimeSeriesBase(Base):
         # Join to create a new extended instance_table with the security column.
         # Only for time series instances (left join).
         # FIXME: Warn or raise if left and right are not congruent
-        data_table = data_table.merge(key_code_id_table, on=key_code_name, how="left")
-        data_table.drop(columns=key_code_name, inplace=True)
+        data_table = data_table.merge(key_code_id_table, on=asset_class.KEY_CODE_LABEL, how="left")
+        data_table.drop(columns=asset_class.KEY_CODE_LABEL, inplace=True)
 
         instances_list = list()
         data_table.set_index(["id", "date_stamp"], inplace=True, drop=True)
@@ -248,7 +261,7 @@ class TimeSeriesBase(Base):
             column with the ISIN number of the ``Listed`` instance.
         """
 
-        # The goal is to substitute the `key_code_name` column for the
+        # The goal is to substitute the `KEY_CODE_LABEL` column for the
         # `Asset.id`.
         # Get Asset.key_code to Asset.id translation table
         key_code_id_table = asset_class.key_code_id_table(session)
@@ -273,10 +286,9 @@ class TimeSeriesBase(Base):
             empty_df = pd.DataFrame()
             # If we have key_code_id_table, we can infer the proper columns
             if not key_code_id_table.empty:
-                # Get the key_code_name column from the asset class
-                key_code_name = asset_class.key_code_name
-                # Add the key_code column and date columns
-                empty_df[key_code_name] = pd.Series(dtype='object')
+                # Get the KEY_CODE_LABEL column from the asset class and add the
+                # key_code column and date columns
+                empty_df[asset_class.KEY_CODE_LABEL] = pd.Series(dtype='object')
                 for name in cls.date_column_names:
                     empty_df[name] = pd.Series(dtype='datetime64[ns]')
             return empty_df
