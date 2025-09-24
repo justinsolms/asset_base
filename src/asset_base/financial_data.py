@@ -764,6 +764,80 @@ class History(_Feed):
 
         return data
 
+    def get_splits(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+        """Get historical splits for a list of securities.
+
+        This method fetches the data from the specified feed.
+
+        asset_list : list of .asset_base.Listed or child classes A list of
+            securities that are listed and traded.
+        from_date : datetime.date, optional
+            Inclusive start date of historical data. If not provided then the
+            date is set to the ``asset.ListedEquity.get_last_dividend_date()``
+            date for each asset in the ``asset_list`` argument.
+        to_date : datetime.date, optional
+            Inclusive end date of historical data. If not provide then the date
+            is set to today.
+        feed : str
+            The data feed module to use:
+                'EOD' - eod_historical_data
+
+        """
+        # Generate date list with date ranges for each asset.
+        from_date_list, to_date_list = self.date_preprocessor(
+            asset_list, from_date, to_date, series="split"
+        )
+
+        # Assemble symbol list
+        symbol_list = list()
+        for sec, from_date, to_date in zip(asset_list, from_date_list, to_date_list):
+            symbol_list.append((sec.ticker, sec.exchange.eod_code, from_date, to_date))
+
+        # Pick feed
+        if feed == "EOD":
+            feed = MultiHistorical()
+            column_dict = {
+                "date": "date_stamp",
+                "split": "split",
+            }
+            date_columns_list = [
+                "date_stamp",
+            ]
+            data = feed.get_splits(symbol_list)
+            logger.debug("Got splits data.")
+            # If no data then just return a simple empty pandas DataFrame.
+            if data.empty:
+                return pd.DataFrame
+            #  Reset the index as we need to from here on treat the index as
+            # column data. The security and date info is in the index
+            data.reset_index(inplace=True)
+            # Extract by columns name and rename to a standard. This is also
+            # then a check for expected columns.
+            data = data[list(column_dict.keys())]
+            data.rename(columns=column_dict, inplace=True)
+            # Replace EODHistoricalData.com's exchange codes (the mic column)
+            # with exchange MICs
+            eod_to_mic_dict = dict(
+                [(s.exchange.eod_code, s.exchange.mic) for s in asset_list]
+            )
+            data.replace({"mic": eod_to_mic_dict}, inplace=True)
+            # Augment the ticker-mic with the matching ISIN code using a mapping
+            # dictionary
+            mic_ticker_to_isin_dict = dict(
+                [((s.exchange.mic, s.ticker), s.isin) for s in asset_list]
+            )
+            data["_key"] = data[["mic", "ticker"]].to_records(index=False).tolist()
+            data["isin"] = data["_key"].map(mic_ticker_to_isin_dict)
+            # These columns are expected by asset_base
+            data.drop(columns=["_key", "mic", "ticker"], inplace=True)
+            # Condition date
+            for column in date_columns_list:
+                data[column] = pd.to_datetime(data[column])
+        else:
+            raise Exception("Feed {} not implemented.".format(feed))
+
+        return data
+
     def get_forex(self, forex_list, from_date=None, to_date=None, feed="EOD"):
         """Get historical EOD for a specified list of securities.
 

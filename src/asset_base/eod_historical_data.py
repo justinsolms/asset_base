@@ -149,6 +149,7 @@ class Historical(APISessionManager):
     _historical_forex = "/api/eod"
     _historical_index = "/api/eod"
     _historical_dividends = "/api/div"
+    _historical_splits = "/api/splits"
 
     async def _get(self, path, exchange, ticker, from_date=None, to_date=None):
         """Generic getter, daily, EOD historical data table over a date range.
@@ -745,6 +746,36 @@ class MultiHistorical(object):
         else:
             # The security and date info is in the index
             table = table[dividend_columns]
+
+        return table
+
+    def get_splits(self, symbol_list):
+        """Get historical splits for a list of securities.
+
+        This method uses only the EOD (class Historical) due to incorrect Bulk
+        API call behaviour such as not returning the ``value`` filed and not
+        restricting to only the specified tickers or symbols.
+
+        symbol_list : list of tuples
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown
+
+        """
+        # Use EOD API
+        table = asyncio.run(
+            self._get_eod(Historical._historical_splits, symbol_list)
+        )
+
+        if table.empty:
+            # Produce an empty DataFrame that will pass empty tests downstream
+            table = pd.DataFrame()
+        else:
+            # The security and date info is in the index
+            table = table[["split"]]
 
         return table
 
