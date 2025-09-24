@@ -47,14 +47,8 @@ dependencies = [
 name = "Justin Solms"
 email = "justinsolms@gmail.com"
 
-[tool.setuptools.dynamic]
-version = {attr = "asset_base._version.__version__"}
-
-[tool.setuptools.packages.find]
-where = ["src"]
-
 [tool.setuptools.package-data]
-your_package_name = [
+asset_base = [
     "data/static/*",
     "data/dumps/*",
     "config/*"
@@ -64,11 +58,14 @@ your_package_name = [
 package-dir = {"" = "src"}
 include-package-data = true
 
+[tool.setuptools.packages.find]
+where = ["src"]
+
 [tool.setuptools_scm]
+write_to = "src/asset_base/_version.py"
+fallback_version = "0.0.0"
 version_scheme = "guess-next-dev"
 local_scheme = "dirty-tag"
-write_to = "src/asset_base/_version.py"
-# tag_regex = '^v?(?P<version>\d+(\.\d+){1,2})$'  # This regex allows tags with and without 'v' prefix
 
 [project.scripts]
 asset-base = "asset_base.__main__:cli"
