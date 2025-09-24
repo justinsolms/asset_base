@@ -3,6 +3,7 @@ import io
 import unittest
 import datetime
 import pandas as pd
+import test
 
 from src.asset_base.common import TestSession
 from src.asset_base.financial_data import Dump, MetaData
@@ -513,15 +514,14 @@ class TestListed(TestShare):
         ]
         cls.test_columns = ["close", "high", "low", "open", "volume"]
         # Exclude adjusted_close as it varies
-        # NOTE: These values may change as EOD historical data gets corrected
-        cls.test_values = pd.DataFrame(
-            [  # Last date data
-                [132.69, 134.74, 131.72, 134.08, 99116586.0],
-                [214.58, 214.93, 210.78, 211.25, 2610900.0],
-                [54.60, 55.11, 54.03, 54.92, 112700.0],
-            ],
-            columns=cls.test_columns,
-        )
+        test_eods_str = (
+            "close,high,low,open,volume\n"
+            "132.69,134.74,131.72,134.08,99116600\n"
+            "214.58,214.93,210.78,211.25,2610900\n"
+            "54.6,55.11,54.03,54.92,112700\n"
+            )
+        test_eod_io = io.StringIO(test_eods_str)
+        cls.test_eods = pd.read_csv(test_eod_io)
 
         # Do not create Issuer instance here as it should be created during
         # testing only as later the Listed.factory method will create the issuer
@@ -875,7 +875,7 @@ class TestListed(TestShare):
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
-        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+        pd.testing.assert_frame_equal(self.test_eods, df, check_dtype=False)
         # Test security time series last date
         securities_list = self.session.query(ListedEquity).all()
         self.assertTrue(
@@ -923,7 +923,7 @@ class TestListed(TestShare):
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
-        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+        pd.testing.assert_frame_equal(self.test_eods, df, check_dtype=False)
         # Test security time series last date
         # Securities asset_base instances list
         securities_list = self.session.query(ListedEquity).all()
@@ -970,7 +970,7 @@ class TestListed(TestShare):
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
-        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+        pd.testing.assert_frame_equal(self.test_eods, df, check_dtype=False)
 
     def test_get_last_eod(self):
         """Return the EOD last date, data dict, for the asset.
@@ -1052,8 +1052,8 @@ class TestListedEquity(TestListed):
 
         # Additional Test data for dividends form the TestDividend test class.
         # Remember the Trade EOD test data is inherited form the parent class.
-        cls.div_from_date = "2020-01-01"
-        cls.div_to_date = "2020-12-31"
+        cls.div_from_date = cls.from_date  # Keep line in case future change
+        cls.div_to_date = cls.to_date  # Keep line in case future change
         cls.div_columns = [
             "date_stamp",
             "ticker",
@@ -1067,7 +1067,6 @@ class TestListedEquity(TestListed):
             "unadjusted_value",
             "adjusted_value",
         ]
-
         # Test dividend values
         div_test_str = (
             "date_stamp,currency,declaration_date,payment_date,period,record_date,unadjusted_value,adjusted_value\n"
@@ -1081,20 +1080,20 @@ class TestListedEquity(TestListed):
         # Test split values
         split_test_str = (
             "date_stamp,numerator,denominator\n"
-            "1971-06-14,3,2\n"
-            "1972-06-06,2,1\n"
-            "1982-10-07,3,2\n"
-            "1984-09-25,3,2\n"
-            "1986-06-26,3,2\n"
-            "1987-06-16,2,1\n"
-            "1987-06-23,3,2\n"
-            "1989-06-19,2,1\n"
-            "1994-06-27,2,1\n"
-            "1999-03-08,2,1\n"
-            "2000-06-21,2,1\n"
-            "2005-02-28,2,1\n"
-            "2014-06-09,7,1\n"
-            "2020-08-31,4,1\n"
+            "1971-06-14,3.0,2.0\n"
+            "1972-06-06,2.0,1.0\n"
+            "1982-10-07,3.0,2.0\n"
+            "1984-09-25,3.0,2.0\n"
+            "1986-06-26,3.0,2.0\n"
+            "1987-06-16,2.0,1.0\n"
+            "1987-06-23,3.0,2.0\n"
+            "1989-06-19,2.0,1.0\n"
+            "1994-06-27,2.0,1.0\n"
+            "1999-03-08,2.0,1.0\n"
+            "2000-06-21,2.0,1.0\n"
+            "2005-02-28,2.0,1.0\n"
+            "2014-06-09,7.0,1.0\n"
+            "2020-08-31,4.0,1.0\n"
             )
         split_test_io = io.StringIO(split_test_str)
         cls.split_test_df = pd.read_csv(split_test_io)
@@ -1306,8 +1305,8 @@ class TestListedEquity(TestListed):
         # Compare
         pd.testing.assert_frame_equal(test_df, df)
 
-    def test_update_all(self):
-        """Update all Listed instances from a getter method."""
+    def test_update_meta(self):
+        """Update all Listed instances from a security metadata getter method."""
         # Insert all securities meta-data (for all securities)
         ListedEquity.update_all(self.session, self.get_meta_method)
         # Test one ListedEquity instance
@@ -1400,7 +1399,7 @@ class TestListedEquity(TestListed):
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
-        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+        pd.testing.assert_frame_equal(self.test_eods, df, check_dtype=False)
 
         df = pd.DataFrame(
             [self.to_dividend_dict(item) for item in self.session.query(Dividend).all()]
@@ -1430,8 +1429,8 @@ class TestListedEquity(TestListed):
             .sort_index(axis=1),
         )
 
-    def test_update_all_trade_eod_and_dividends(self):
-        """Update all Listed, ListedEOD, Dividend objs from getter methods."""
+    def test_update_all(self):
+        """Update all Listed, ListedEOD, Dividend, Splits."""
         # Insert only selected subset of securities meta-data. Update all data
         # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.
@@ -1440,6 +1439,7 @@ class TestListedEquity(TestListed):
             self.get_meta_method,
             get_eod_method=self.get_eod_method,
             get_dividends_method=self.get_dividends_method,
+            get_splits_method=self.get_splits_method,
             _test_isin_list=[self.isin, self.isin1, self.isin2],
         )
 
@@ -1457,52 +1457,16 @@ class TestListedEquity(TestListed):
         # Exclude adjusted_close as it changes
         df = df[self.test_columns]  # Column select and rank for testing
         df.reset_index(drop=True, inplace=True)
-        pd.testing.assert_frame_equal(self.test_values, df, check_dtype=False)
+        pd.testing.assert_frame_equal(self.test_eods, df, check_dtype=False)
 
-        df = pd.DataFrame(
-            [self.to_dividend_dict(item) for item in self.session.query(Dividend).all()]
-        )
-        df.sort_values(by="date_stamp", inplace=True)
-        # Test over test-date-range
-        df["date_stamp"] = pd.to_datetime(df["date_stamp"])
-        df.set_index("date_stamp", inplace=True)
-        df = df.loc[self.div_from_date : self.div_to_date]
-        df.reset_index(inplace=True)
-        # Test
-        self.assertEqual(len(df), 12)
-        df.reset_index(inplace=True, drop=True)
-        self.assertEqual(set(df.columns), set(self.div_columns))
-        # Test against last 3 dividends
-        df = df.iloc[-3:].reset_index(drop=True)  # Make index 0, 1, 2
-        date_to_str(df)  # Convert Timestamps
-        df.replace({pd.NaT: None}, inplace=True)  # Replace pandas NaT with None
-        self.assertTrue(
-            df.sort_index(axis="columns").equals(
-                self.div_test_df.sort_index(axis="columns")
-            ),
-            "Dividend test data mismatch",
-        )
-
-    def test_get_dividend_series(self):
-        """Return the EOD trade data series for the security."""
-        # Insert only selected subset of securities meta-data. Update all data
-        # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
-        # securities by using the _test_isin_list keyword argument.
-        ListedEquity.update_all(  # Method to be tested
-            self.session,
-            self.get_meta_method,
-            get_eod_method=self.get_eod_method,
-            get_dividends_method=self.get_dividends_method,
-            _test_isin_list=[self.isin, self.isin1, self.isin2],
-        )
-        # Method to be tested
+        # Test dividends
         df0 = ListedEquity.factory(self.session, self.isin).get_dividend_series()
         df1 = ListedEquity.factory(self.session, self.isin1).get_dividend_series()
         df2 = ListedEquity.factory(self.session, self.isin2).get_dividend_series()
         df = pd.concat([df0, df1, df2], axis="index")
         df.sort_index(inplace=True)
         # Test over test-date-range
-        df = df.loc[self.from_date : self.to_date]
+        df = df.loc[self.div_from_date : self.div_to_date]
         df = df.iloc[-3:]  # Test data is for last three
         df.reset_index(inplace=True, )
         # Get and format test_df
@@ -1514,20 +1478,7 @@ class TestListedEquity(TestListed):
         # Test
         pd.testing.assert_frame_equal(test_df, df)
 
-    def test_get_split_series(self):
-        """Return the EOD split data series for the security."""
-        # Insert only selected subset of securities meta-data. Update all data
-        # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
-        # securities by using the _test_isin_list keyword argument.
-        ListedEquity.update_all(  # Method to be tested
-            self.session,
-            self.get_meta_method,
-            get_eod_method=self.get_eod_method,
-            get_dividends_method=self.get_dividends_method,
-            get_splits_method=self.get_splits_method,
-            _test_isin_list=[self.isin, self.isin1, self.isin2],
-        )
-        # Method to be tested - There are no splits in the isin2 test data
+        # Test splits
         df0 = ListedEquity.factory(self.session, self.isin).get_split_series()
         df1 = ListedEquity.factory(self.session, self.isin1).get_split_series()
         df = pd.concat([df0, df1], axis="index")

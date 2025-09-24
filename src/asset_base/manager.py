@@ -409,6 +409,7 @@ class ManagerBase(object):
             get_meta_method=fundamentals.get_etfs,
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
+            get_splits_method=history.get_splits,
             _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
         )
 
