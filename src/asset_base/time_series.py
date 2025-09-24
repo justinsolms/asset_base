@@ -45,11 +45,11 @@ metadata = MetaData()
 
 
 class TimeSeriesBase(Base):
-    """ "Common time-series capabilities.
+    """ Common time-series relationships and capabilities.
 
     Note
     ----
-    This is an abstract base class.
+    This is a base class not to be instantiated directly.
 
     Note
     ----
@@ -1027,3 +1027,75 @@ class Dividend(TimeSeriesBase):
         )
 
         super().update_all(session, asset_class, get_method, securities_list)
+
+
+class Split(TimeSeriesBase):
+    """A single listed security's date-stamped split data.
+
+    Parameters
+    ----------
+    base_obj : .asset.Base (or polymorph child class)
+        The instance the time series data belongs to. In this case
+        ``.asset.ListedEquity``.
+    date_stamp : datetime.date
+        The end-of-day (EOD) data date stamp.
+    numerator : int
+        The numerator of the split ratio, e.g., 2 for a 2-for-1 split.
+    denominator : int
+        The denominator of the split ratio, e.g., 1 for a 2-for-
+
+    """
+
+    __tablename__ = "split"
+    __mapper_args__ = {
+        "polymorphic_identity": __tablename__,
+    }
+
+    id = Column(Integer, ForeignKey("time_series_base.id"), primary_key=True)
+    """ Primary key."""
+    # NOTE: Inherited
+    # backrefs to the polymorphic ListedEquity
+
+    # Foreign key giving ``ListedEquity`` a Split series capability. Note:
+    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
+    # for the relationships with ``.asset.Asset._series`` and
+    # ``.asset.ListedEquity._split_series`` to work and avoids the
+    # "SAWarning: relationship" warning for the relationship below.
+    _listed_equity_id = Column(Integer, ForeignKey("listed_equity.id"), nullable=False)
+    listed_equity = relationship(
+        "ListedEquity",
+        back_populates="_split_series",
+        foreign_keys=[_listed_equity_id],
+    )
+
+    numerator = Column(Integer, nullable=False)
+    """int: The numerator of the split ratio, e.g., 2 for a 2-for-1 split."""
+    denominator = Column(Integer, nullable=False)
+    """int: The denominator of the split ratio, e.g., 1 for a 2-for-1 split."""
+
+    def __init__(self, base_obj, date_stamp, numerator, denominator):
+        """Instance initialization."""
+        super().__init__(base_obj, date_stamp)
+        self.listed_equity = base_obj
+        self.numerator = numerator
+        self.denominator = denominator
+
+    @classmethod
+    def _get_last_date(cls, security):
+        """Get the time series last date maintained by the security."""
+        return security.get_last_split_date()
+
+    def to_dict(self):
+        """Convert all class split attributes to a dictionary.
+
+        Returns
+        -------
+        dict
+            date_stamp : datetime.date
+            ratio : float (split ratio)
+        """
+        return {
+            "date_stamp": self.date_stamp,
+            "numerator": self.numerator,
+            "denominator": self.denominator,
+        }
