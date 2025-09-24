@@ -19,6 +19,7 @@ dictionaries for ease of maintenance.
 
 """
 import datetime
+from re import split
 
 import pandas as pd
 import os
@@ -845,10 +846,11 @@ class History(_Feed):
             for column in date_columns_list:
                 data[column] = pd.to_datetime(data[column])
             # Extract split numerator and denominator from string
-            # representation "n:d" to two integer columns
+            # representation "n:d" to two integer columns then drop the
+            # original string column
             split_columns = data["split"].str.split("/", expand=True)
-            data["numerator"] = pd.to_numeric(split_columns[0], downcast="integer")
-            data["denominator"] = pd.to_numeric(split_columns[1], downcast="integer")
+            data["numerator"] = split_columns[0].astype(float)
+            data["denominator"] = split_columns[1].astype(float)
             data.drop(columns=["split"], inplace=True)
         else:
             raise Exception("Feed {} not implemented.".format(feed))

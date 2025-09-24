@@ -1038,9 +1038,9 @@ class Split(TimeSeriesBase):
         ``.asset.ListedEquity``.
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
-    numerator : int
+    numerator : float
         The numerator of the split ratio, e.g., 2 for a 2-for-1 split.
-    denominator : int
+    denominator : float
         The denominator of the split ratio, e.g., 1 for a 2-for-
 
     """
@@ -1067,10 +1067,10 @@ class Split(TimeSeriesBase):
         foreign_keys=[_listed_equity_id],
     )
 
-    numerator = Column(Integer, nullable=False)
-    """int: The numerator of the split ratio, e.g., 2 for a 2-for-1 split."""
-    denominator = Column(Integer, nullable=False)
-    """int: The denominator of the split ratio, e.g., 1 for a 2-for-1 split."""
+    numerator = Column(Float, nullable=False)
+    """float: The numerator of the split ratio, e.g., 2 for a 2-for-1 split."""
+    denominator = Column(Float, nullable=False)
+    """float: The denominator of the split ratio, e.g., 1 for a 2-for-1 split."""
 
     def __init__(self, base_obj, date_stamp, numerator, denominator):
         """Instance initialization."""

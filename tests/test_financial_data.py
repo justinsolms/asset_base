@@ -287,9 +287,7 @@ class TestHistory(unittest.TestCase):
         to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d")
         # Test data - Only AAPL has pne split during the test period
         test_csv = (
-            "date_stamp,isin,split\n"
-            "2020-08-31,US0378331005,4.000000/1.000000\n"
-        )
+            "date_stamp,isin,numerator,denominator\n2020-08-31,US0378331005,4.0,1.0\n")
         test_io = StringIO(test_csv)   # Convert String into StringIO
         test_df = pd.read_csv(test_io)
         test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
