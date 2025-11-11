@@ -28,7 +28,7 @@ dependencies = [
     "aiounittest",
     "aiohttp",
     "python_stdnum",
-    "numpy",
+    "numpy<2.0.0",  # HACK: Temporarily pin numpy to avoid compatibility issues when numpy >= 2.0.0
     "scipy",
     "pandas",
     "matplotlib",
