@@ -6,11 +6,11 @@ build-backend = "setuptools.build_meta"
 name = "asset_base"
 dynamic = ["version"]
 description = "A package for obtaining, managing and provision of financial securities meta-data and time-series data."
+license = "GPL-3.0-or-later"
 readme = "README.md"
 requires-python = "==3.12.4"
 classifiers = [
     "Programming Language :: Python :: 3",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
 keywords = ["financial", "metadata", "data", "database", "asset", "share", "listed", "equity", "ETF", "cash", "forex", "icb", "currency", "eodhistoricaldata", "eod", "trade", "dividend"]
