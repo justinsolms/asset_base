@@ -10,7 +10,11 @@ The asset_base module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
+# Immediately suppress numexpr < warning level logs so the autocomplete string
+# outputs work form the command line interface.
 import logging
+logging.getLogger("numexpr").setLevel(logging.WARNING)
+
 import logging.config
 import sys
 import yaml
