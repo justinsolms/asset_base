@@ -314,6 +314,9 @@ class Asset(AssetBase):
     Exchange Traded Funds which are invest-able indexes listed on an exchange.
     (See the child class ``ListedEquity`` and it's child classes.)
 
+    TODO: Speak about ownership of an Asset by an Entity and how this helps
+    create a directed, acyclic graph of Entity/Asset holdings.
+
     Note
     ----
     This class should not be directly instantiated.

@@ -11,14 +11,14 @@ from asset_base.exceptions import NotSetUp
 import click
 from asset_base.manager import Manager
 
-import pkg_resources
+from importlib.metadata import version
 
 # Get module-named logger.
 logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.version_option(pkg_resources.get_distribution("asset-base").version, '-v', '--version', message='version==%(version)s')
+@click.version_option(version("asset-base"), '-v', '--version', message='version==%(version)s')
 def cli():
     """
     Tool for managing the financial database and updating it with fresh data
