@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 @click.group()
-@click.version_option(pkg_resources.get_distribution("fundmanage").version, '-v', '--version', message='version==%(version)s')
+@click.version_option(pkg_resources.get_distribution("asset-base").version, '-v', '--version', message='version==%(version)s')
 def cli():
     """
     Tool for managing the financial database and updating it with fresh data
