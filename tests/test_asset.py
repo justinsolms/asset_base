@@ -143,7 +143,7 @@ class TestCash(TestAsset):
         # instance
         self.session.add(cash)
         instance = self.session.query(Asset).one()  # There are two, see above!
-        self.assertEqual(instance._class_name, "Cash")
+        self.assertEqual(instance.class_name, "Cash")
         self.assertEqual(instance._discriminator, "cash")
 
     def test___str__(self):
@@ -1187,9 +1187,9 @@ class TestListedEquity(TestListed):
         # which should produce a ListedEquity polymorphic instance
         instances = self.session.query(Asset).all()  # There are two, see above!
         instance1, instance2 = instances
-        self.assertEqual(instance1._class_name, "ListedEquity")
+        self.assertEqual(instance1.class_name, "ListedEquity")
         self.assertEqual(instance1._discriminator, "listed_equity")
-        self.assertEqual(instance2._class_name, "ListedEquity")
+        self.assertEqual(instance2.class_name, "ListedEquity")
         self.assertEqual(instance2._discriminator, "listed_equity")
 
     def test_factory(self):
@@ -1341,11 +1341,8 @@ class TestListedEquity(TestListed):
 
     def test_dump(self):
         """Dump and reuse class instances and their time series data to disk."""
-        # Dumper
-        dumper = Dump(testing=True)
-        # For testing delete old any test dump folder and re-create it empty
-        dumper.delete(delete_folder=True)  # Delete dump folder and contents
-        dumper.makedir()
+        # Dumper - it creates the dump path if it does not exist
+        dumper = Dump()
         # Insert only selected subset of securities meta-data. Update all data
         # instances: ListedEquity, ListedEOD & Dividend. Force a limited set of 3
         # securities by using the _test_isin_list keyword argument.

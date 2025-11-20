@@ -166,8 +166,6 @@ class SQLiteSession(_Session):
         super().__init__(db_url, testing=testing)
 
 
-
-
 class Common(Base):
     """Common object."""
 
@@ -216,9 +214,10 @@ class Common(Base):
         """Return the official string output."""
         return '{}(name="{}", id={!r})'.format(self.__class__.__name__, self.name, self.id)
 
-    @classmethod
-    def _class_name(cls):
-        return cls.__name__
+    @property
+    def class_name(self):
+        """Single word class name (not the full module path)."""
+        return self.__class__.__name__
 
     @property
     def key_code(self):

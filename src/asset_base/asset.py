@@ -6,7 +6,6 @@
 """
 
 # TODO: Decide upon key_code and identity_code formats
-
 from typing import ClassVar
 
 import sys
@@ -120,7 +119,7 @@ class AssetBase(Common):
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", currency={!r})'.format(
-            self._class_name, self.name, self.currency
+            self.class_name, self.name, self.currency
         )
 
     def __lt__(self, other):
@@ -131,7 +130,7 @@ class AssetBase(Common):
     def long_name(self):
         """str: Return the long name string."""
         return "{} is an {} priced in {}.".format(
-            self.name, self._class_name, self.currency_ticker
+            self.name, self.class_name, self.currency_ticker
         )
 
     @property
@@ -365,7 +364,7 @@ class Asset(AssetBase):
             msg = super().__repr__()
         else:
             msg = '{}(name="{}", currency={!r}, owner={!r})'.format(
-                self._class_name, self.name, self.currency, self.owner
+                self.class_name, self.name, self.currency, self.owner
             )
 
         return msg
@@ -550,7 +549,7 @@ class Cash(Asset):
 
     def __repr__(self):
         """Return the official string output."""
-        msg = "{}(currency={!r})".format(self._class_name, self.currency)
+        msg = "{}(currency={!r})".format(self.class_name, self.currency)
 
         return msg
 
@@ -573,7 +572,7 @@ class Cash(Asset):
     def long_name(self):
         """str: Return the long name string."""
         msg = "{} is an {} priced in {}.".format(
-            self.name, self._class_name, self.currency_ticker
+            self.name, self.class_name, self.currency_ticker
         )
 
         return msg
@@ -873,7 +872,7 @@ class Forex(Cash):
     def __repr__(self):
         """Return the official string output."""
         return "{}(base_currency={!r}, price_currency={!r})".format(
-            self._class_name, self.base_currency.ticker, self.currency.ticker
+            self.class_name, self.base_currency.ticker, self.currency.ticker
         )
 
     @property
@@ -1192,7 +1191,7 @@ class Share(Asset):
         """str: Return the long name string."""
         return "{} is a {} issued by {} in {}.".format(
             self.name,
-            self._class_name,
+            self.class_name,
             self.issuer.name,
             self.issuer.domicile.country_name,
         )
@@ -1696,7 +1695,7 @@ class Listed(Share):
         """
         # Dump all listed security meta-data
         dump_dict = dict()
-        dump_dict[cls._class_name()] = cls.to_data_frame(session)
+        dump_dict[cls.class_name] = cls.to_data_frame(session)
         # Serialize
         dumper.write(dump_dict)
 
@@ -1727,7 +1726,7 @@ class Listed(Share):
 
         """
         # Re-use all listed security meta-data
-        class_name = cls._class_name()
+        class_name = cls.class_name
         data_frame_dict = dumper.read(name_list=[class_name])
         cls.from_data_frame(session, data_frame_dict[class_name])
         logger.warning(
@@ -2504,7 +2503,7 @@ class Index(AssetBase):
     def __repr__(self):
         """Return the official string output."""
         msg = '{}(name="{}", ticker="{}", currency={!r})'.format(
-            self._class_name, self.name, self.ticker, self.currency
+            self.class_name, self.name, self.ticker, self.currency
         )
 
         return msg
@@ -2523,7 +2522,7 @@ class Index(AssetBase):
     def long_name(self):
         """str: Return the long name string."""
         msg = "{} is an {} priced in {}.".format(
-            self.name, self._class_name, self.currency_ticker
+            self.name, self.class_name, self.currency_ticker
         )
 
         return msg

@@ -209,7 +209,7 @@ class Dump(_Feed):
             os.remove(path)
             logger.debug("Deleted dump file %s", path)
 
-    def exists(self, dump_class):
+    def exists(self, class_to_dump):
         """Verify that a dump file exits for a dumped class.
 
         Warning
@@ -219,11 +219,10 @@ class Dump(_Feed):
 
         Parameters
         ----------
-        dump_class : .asset.Asset or child class
-            The class for which the dump files existence must be verified. The
-            class must have a valid ``dump`` method.
+        class_to_dump : .asset.Asset or child class
+            The class for which the dump files existence must be verified.
         """
-        file_name = f"{dump_class._class_name()}.pandas.dataframe.pkl"
+        file_name = f"{class_to_dump.class_name}.pandas.dataframe.pkl"
         path = self._path(file_name)
 
         return os.path.exists(path)

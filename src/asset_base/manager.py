@@ -462,14 +462,16 @@ class ManagerBase(object):
         .dump
         """
         for cls in self.classes_to_dump:
+            # Use uninstantiated class name for logging
+            class_name = cls.class_name
             try:
                 cls.reuse(self.session, self.dumper)
             except FileNotFoundError:
                 logger.info(
-                    f"Dump data not found to reuse for class {cls._class_name()}.")
+                    f"Dump data not found to reuse for class {class_name}.")
             else:
                 logger.info(
-                    f"Reused dumped data for {cls._class_name()}")
+                    f"Reused dumped data for {class_name}")
 
     def delete_dumps(self):
         """Delete dumped data folder."""

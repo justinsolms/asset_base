@@ -98,7 +98,7 @@ class TimeSeriesBase(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        name = self._class_name()
+        name = self.class_name
         date = self.date_stamp
         id_code = self.base_obj.identity_code
 
@@ -106,15 +106,15 @@ class TimeSeriesBase(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        name = self._class_name()
+        name = self.class_name
         asset = self.base_obj
         date = self.date_stamp
 
         return f"{name}(asset={asset!r}, date_stamp={date})"
 
-    @classmethod
-    def _class_name(cls):
-        return cls.__name__
+    @property
+    def class_name(cls):
+        return cls.__class__.__name__
 
     @classmethod
     def _get_last_date(cls, security):
@@ -177,7 +177,7 @@ class TimeSeriesBase(Base):
         # case)
         if data_table.duplicated(subset=["date_stamp", asset_class.KEY_CODE_LABEL]).any():
             logger.warning(
-                f"Duplicate rows found in {cls._class_name()} data for "
+                f"Duplicate rows found in {cls.class_name} data for "
                 f"date_stamp and {asset_class.KEY_CODE_LABEL}. Duplicates will be removed."
             )
         data_frame.drop_duplicates(["date_stamp", asset_class.KEY_CODE_LABEL], inplace=True)
@@ -382,9 +382,9 @@ class TimeSeriesBase(Base):
 
         # Handle empty DataFrame case gracefully - still dump it but with a log message
         if data_frame.empty:
-            logger.info(f"No time series data found for {cls._class_name()} with asset class {asset_class.__name__}. Creating empty dump file.")
+            logger.info(f"No time series data found for {cls.class_name} with asset class {asset_class.__name__}. Creating empty dump file.")
 
-        dump_dict[cls._class_name()] = data_frame
+        dump_dict[cls.class_name] = data_frame
         # Serialize
         dumper.write(dump_dict)
 
@@ -416,7 +416,7 @@ class TimeSeriesBase(Base):
 
         """
         # Uses dict data structures. See the docs.
-        class_name = cls._class_name()
+        class_name = cls.class_name
         data_frame_dict = dumper.read(name_list=[class_name])
         cls.from_data_frame(session, asset_class, data_frame_dict[class_name])
 
@@ -668,7 +668,7 @@ class ListedEOD(TradeEOD):
         )
         for security in securities_delisted:
             logger.warning(
-                f"Skipped {cls._class_name()} data fetch for "
+                f"Skipped {cls.class_name} data fetch for "
                 f"de-listed security {security.identity_code}."
             )
 
@@ -1035,7 +1035,7 @@ class Dividend(TimeSeriesBase):
         )
         for security in securities_delisted:
             logger.warning(
-                f"Skipped {cls._class_name()} data fetch for "
+                f"Skipped {cls.class_name} data fetch for "
                 f"de-listed security {security.identity_code}."
             )
 
@@ -1152,7 +1152,7 @@ class Split(TimeSeriesBase):
         )
         for security in securities_delisted:
             logger.warning(
-                f"Skipped {cls._class_name()} data fetch for "
+                f"Skipped {cls.class_name} data fetch for "
                 f"de-listed security {security.identity_code}."
             )
 
