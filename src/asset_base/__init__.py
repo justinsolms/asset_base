@@ -10,12 +10,16 @@ The asset_base module can not be modified, copied and/or
 distributed without the express permission of Justin Solms.
 
 """
+# Immediately suppress numexpr < warning level logs so the autocomplete string
+# outputs work form the command line interface.
 import logging
+logging.getLogger("numexpr").setLevel(logging.WARNING)
+
 import logging.config
 import sys
 import yaml
 import os
-import pkg_resources
+from importlib.metadata import version, PackageNotFoundError, metadata
 
 # External MyDrive data path environment variable name
 _DATA_PATH = "DATA_PATH"
@@ -189,14 +193,14 @@ def get_cache_path(sub_path=None, testing=False):
 
 def get_package_version(package_name):
     try:
-        return pkg_resources.get_distribution(package_name).version
-    except pkg_resources.DistributionNotFound:
+        return version(package_name)
+    except PackageNotFoundError:
         return "Package not found"
 
 def get_project_name(package_name):
     try:
-        return pkg_resources.get_distribution(package_name).project_name
-    except pkg_resources.DistributionNotFound:
+        return metadata(package_name)['Name']
+    except PackageNotFoundError:
         return "Package not found"
 
 # Lines to prevent __init__.py from being executed more than once

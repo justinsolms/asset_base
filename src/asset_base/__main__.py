@@ -4,21 +4,21 @@ The CLI provides the following commands:
 - init: Initialize a fresh database and populate it with required data.
 
 """
-# Immediately suppress numexpr < warning level logs so the autocomplete string
-# outputs work form the command line interface.
-from ast import Not
 import logging
 
 from asset_base.exceptions import NotSetUp
-logging.getLogger("numexpr").setLevel(logging.WARNING)
 
 import click
 from asset_base.manager import Manager
 
+from importlib.metadata import version
+
 # Get module-named logger.
 logger = logging.getLogger(__name__)
 
+
 @click.group()
+@click.version_option(version("asset-base"), '-v', '--version', message='version==%(version)s')
 def cli():
     """
     Tool for managing the financial database and updating it with fresh data
