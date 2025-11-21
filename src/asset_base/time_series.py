@@ -17,6 +17,7 @@ tables is stored as indicated by ``asset.Base.quote_units`` bool attribute
 from __future__ import annotations
 
 import sys
+import numpy as np
 import pandas as pd
 
 from sqlalchemy import Float, Integer, String, Date
@@ -126,7 +127,7 @@ class TimeSeriesBase(Base):
 
     @classmethod
     def from_data_frame(cls, session, asset_class: Asset, data_frame):
-        """Create multiple class instances in the session from a dataframe.
+        """Insert instances into the database from ``pandas.DataFrame`` rows.
 
         This method uses the SqlAlchemy session ``add_all`` method to add or
         updates all the ``asset.Asset`` child class' time series.
@@ -185,9 +186,11 @@ class TimeSeriesBase(Base):
         # Guarantee date ranking of the data
         data_table.sort_values(by="date_stamp")
 
-        # Replace pesky pd.NaT with None. Else SqlAlchemy DateTime columns
-        # throw (exceptions.TypeError) %d format: a number is required, not
-        # float
+        # Replace pesky pd.NaT with None. Else with the SQLite backend
+        # SqlAlchemy DateTime columns throw `(builtins.ValueError) cannot
+        # convert float NaN to integer` SQLite, which doesn't have a native
+        # DateTime type, cannot convert a float NaN to an integer when trying to
+        # store the datetime value.
         data_table.replace({pd.NaT: None}, inplace=True)
 
         # Join to create a new extended instance_table with the security column.
@@ -251,7 +254,7 @@ class TimeSeriesBase(Base):
 
     @classmethod
     def to_data_frame(cls, session, asset_class):
-        """Convert all instances to a single data table.
+        """Return a ``pandas.DataFrame`` with a row for each class instance.
 
         Parameters
         ----------
@@ -267,9 +270,9 @@ class TimeSeriesBase(Base):
             column with the ISIN number of the ``Listed`` instance.
         """
 
-        # The goal is to substitute the `KEY_CODE_LABEL` column for the
-        # `Asset.id`.
-        # Get Asset.key_code to Asset.id translation table
+        # Generate a table translating key_code to asset_class.id. The key_code
+        # column label shall be the asset_class.KEY_CODE_LABEL class
+        # attribute value.
         key_code_id_table = asset_class.key_code_id_table(session)
 
         # Get all asset IDs for this asset class
@@ -308,6 +311,11 @@ class TimeSeriesBase(Base):
             instance_dict["id"] = instance._asset_id
             record_list.append(instance_dict)
         instance_table = pd.DataFrame(record_list)
+
+        # SQLAlchemy with the SQLite backend can only store `None` for DateTime
+        # columns. So we must convert any `None` back to `np.nan` for proper
+        # pandas DataFrame representation.
+        data_table.replace({None: np.nan}, inplace=True)
 
         # Join in the `id` column. Only for time series instances (left
         # join).

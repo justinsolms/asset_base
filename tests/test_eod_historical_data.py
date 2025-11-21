@@ -228,7 +228,7 @@ class TestHistorical(aiounittest.AsyncTestCase):
         to_date = datetime.datetime.strptime("2020-11-06", "%Y-%m-%d")
         # Get
         async with Historical() as historical:
-            df = await historical.get_dividends("US", "AAPL", from_date, to_date)
+            df = await historical.get_dividends("JSE", "STX40", from_date, to_date)
         assert_date_index(self, df)
         assert_dividend_columns(self, df)
 

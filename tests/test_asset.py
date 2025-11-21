@@ -575,7 +575,7 @@ class TestListed(TestShare):
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
+        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker, self.status)
         self.assertEqual(self.test_str, listed.__str__())
 
     def test_key_code(self):
@@ -583,7 +583,7 @@ class TestListed(TestShare):
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
+        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker, self.status)
         self.assertEqual(listed.key_code, self.isin)
 
     def test_identity_code(self):
@@ -591,7 +591,7 @@ class TestListed(TestShare):
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
+        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker, self.status)
         self.assertEqual(listed.identity_code, f"{self.isin}.{self.ticker}")
 
     def test_get_locality(self):
@@ -650,7 +650,8 @@ class TestListed(TestShare):
 
     def test_factory_change(self):
         """Changes to existing instances."""
-        # Add. Issuer should be automatically created.
+        # Add a Listed instance to the database. The Issuer should be
+        # automatically created.
         listed = Listed.factory(
             self.session,
             self.isin,
@@ -659,6 +660,7 @@ class TestListed(TestShare):
             self.name,
             self.issuer_domicile_code,
             self.issuer_name,
+            self.status,
         )
         # Changes name
         listed1 = Listed.factory(self.session, self.isin, listed_name="new_name")
@@ -666,15 +668,15 @@ class TestListed(TestShare):
         self.assertEqual(listed1.name, "new_name")
         # Change Exchange
         listed4 = Listed.factory(self.session, self.isin, mic="XLON")
-        self.assertEqual(listed4.name, "new_name")
+        self.assertEqual(listed4.exchange.mic, "XLON")
         # Change ticker
         listed5 = Listed.factory(self.session, self.isin, ticker="ABC")
         self.assertEqual(listed5.ticker, "ABC")
         # Change status
         listed6 = Listed.factory(self.session, self.isin, status="delisted")
-        self.assertEqual(listed6.status, "listed")
+        self.assertEqual(listed6.status, "delisted")
 
-    def test_factory_fail_change(self):
+    def test_factory_change_fail(self):
         """Fail with issuer change attempt."""
         # Add. Issuer should be automatically created.
         Listed.factory(
@@ -685,6 +687,7 @@ class TestListed(TestShare):
             self.name,
             self.issuer_domicile_code,
             self.issuer_name,
+            self.status,
         )
         # New issuer
         with self.assertRaises(ReconcileError):
@@ -695,7 +698,7 @@ class TestListed(TestShare):
         # Check there are no new issuers as a result of the above
         self.assertEqual(len(self.session.query(Issuer).all()), 1)
 
-    def test_factory_fail_wrong_args(self):
+    def test_factory_wrong_args_fail(self):
         """Fail with incorrect arguments."""
         # Add. Issuer should be automatically created.
         Listed.factory(
@@ -706,6 +709,7 @@ class TestListed(TestShare):
             listed_name=self.name,
             issuer_domicile_code=self.issuer_domicile_code,
             issuer_name=self.issuer_name,
+            status=self.status,
         )
         # Test retrieval on ISIN fails Issuer requirement
         with self.assertRaises(FactoryError):
@@ -1013,7 +1017,7 @@ class TestListed(TestShare):
         issuer = Issuer.factory(
             self.session, self.issuer_name, self.issuer_domicile_code
         )
-        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker)
+        listed = Listed(self.name, issuer, self.isin, self.exchange, self.ticker, self.status)
         # Assert a chosen isin to be identical to test data
         test_isin = "US0378331005"
         self.assertEqual(self.isin, test_isin)
@@ -1069,10 +1073,10 @@ class TestListedEquity(TestListed):
         ]
         # Test dividend values
         div_test_str = (
-            "date_stamp,currency,declaration_date,payment_date,period,record_date,unadjusted_value,adjusted_value\n"
-            "2020-10-21,ZAC,,,,,0.091925,0.091925\n"
-            "2020-11-06,USD,2020-10-29,2020-11-12,Quarterly,2020-11-09,0.205,0.205\n"
-            "2020-11-30,USD,2020-10-08,2020-12-15,Quarterly,2020-12-01,1.29,1.29\n"
+            "date_stamp,currency,declaration_date,payment_date,period,record_date,unadjusted_value,adjusted_value,isin,ticker,mic\n"
+            "2020-10-21,ZAC,,,,,0.091925,0.091925,ZAE000027108,STX40,XJSE\n"
+            "2020-11-06,USD,2020-10-29,2020-11-12,Quarterly,2020-11-09,0.205,0.205,US0378331005,AAPL,XNYS\n"
+            "2020-11-30,USD,2020-10-08,2020-12-15,Quarterly,2020-12-01,1.29,1.29,US5801351017,MCD,XNYS\n"
         )
         div_test_io = io.StringIO(div_test_str)
         cls.div_test_df = pd.read_csv(div_test_io)
@@ -1458,6 +1462,7 @@ class TestListedEquity(TestListed):
 
         # Test dividends
         df0 = ListedEquity.factory(self.session, self.isin).get_dividend_series()
+        # FIXME: /home/justin/Documents/Develop/asset_base/tests/test_asset.py:1463: FutureWarning: The behavior of DataFrame concatenation with empty or all-NA entries is deprecated. In a future version, this will no longer exclude empty or all-NA columns when determining the result dtypes. To retain the old behavior, exclude the relevant entries before the concat operation. df = pd.concat([df0, df1, df2], axis="index")
         df1 = ListedEquity.factory(self.session, self.isin1).get_dividend_series()
         df2 = ListedEquity.factory(self.session, self.isin2).get_dividend_series()
         df = pd.concat([df0, df1, df2], axis="index")
@@ -1473,6 +1478,8 @@ class TestListedEquity(TestListed):
         # Make dates all strings for simple testing.
         date_to_str(df)  # Convert Timestamps
         # Test
+        # FIXME: /home/justin/Documents/Develop/asset_base/tests/test_asset.py:1476: FutureWarning: Mismatched null-like values nan and None found. In a future version, pandas equality-testing functions (e.g. assert_frame_equal) will consider these not-matching and raise. pd.testing.assert_frame_equal(test_df, df)
+        import ipdb; ipdb.set_trace()
         pd.testing.assert_frame_equal(test_df, df)
 
         # Test splits

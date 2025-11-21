@@ -137,10 +137,14 @@ class APISessionManager:
                     logger.debug("Timeout (retry-%s): %s", retry, url)
                     continue  # retry loop
             else:
-                # Success - break out of retry loop
+                # Success
                 logger.debug("Success: %s", response.url)
+                # In the json variable which is a list of dicts, convert any
+                # None to NaN for pandas
+                json = [{k: (v if v is not None else float('nan')) for k, v in row.items()} for row in json]
+                # Convert to DataFrame
                 table = pd.DataFrame(json)
-                break  # out of retry loop
+                break  # Success - break out of retry loop
 
         return table
 
@@ -781,6 +785,11 @@ class MultiHistorical(object):
         else:
             # The security and date info is in the index
             table = table[dividend_columns]
+
+        # Some DataFrames values are sometimes None - convert only these to
+        # float NaNs
+
+
 
         return table
 
