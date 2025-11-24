@@ -2,7 +2,6 @@
 
 top to bottom direction
 
-'skinparam handwritten true
 
 ' Class definitions
 
@@ -46,7 +45,7 @@ package "Entities" {
     }
 
     ' Common inheritance
-    Common <|-- Entity
+    Common.Common <|-- Entity
 
     ' Domicile and Currency
     Currency "1" --* "*" Domicile : < denominates
@@ -61,7 +60,7 @@ package "Entities" {
 
 package "Assets" {
 
-    abstract    Base {
+    abstract    AssetBase {
         +currency : Currency
         -_series : TimeSeriesBase
     }
@@ -102,14 +101,14 @@ package "Assets" {
     }
 
     ' Common inheritance
-    Common <|-- Base
+    Common.Common <|-- AssetBase
 
     ' Assets
-    Base <|-- Asset
+    AssetBase <|-- Asset
+    AssetBase <|-- Index
     Asset <|-- Share
     Asset <|-- Cash
     Cash <|-- Forex
-    Base <|-- Index
     Share <|-- Listed
     Listed <|-- ListedEquity
     ListedEquity <|-- ETF
@@ -131,7 +130,7 @@ package "Time Series" {
 
     class TimeSeriesBase {
         +date_stamp : date
-        +base_obj : Base
+        +base_obj : AssetBase
     }
 
     class Dividend {
@@ -175,7 +174,7 @@ package "Time Series" {
 }
 
 ' Pricing
-Currency "1" --* "1" Base : < priced in currency
+Currency "1" --* "1" AssetBase : < priced in currency
 
 ' Entities to Assets relationships
 Entity "1" *-- "*" Asset : > owns
@@ -186,7 +185,7 @@ Exchange "1" -l-* "*" Listed : > lists
 ETF "*" *-r- "1" Index : > replicates
 
 ' Asset to Time Series relationships
-Base "1" *-- "*" TimeSeriesBase
+AssetBase "1" *-- "*" TimeSeriesBase
 Listed "1" *-- "*" ListedEOD
 Forex "1" *-- "*" ForexEOD
 Index "1" *-- "*" IndexEOD

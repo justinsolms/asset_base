@@ -167,7 +167,14 @@ class SQLiteSession(_Session):
 
 
 class Common(Base):
-    """Common object."""
+    """Common object.
+
+    This is the common base class Assets and Entities. As they and their child
+    classes inherit from this class, they will share the common ``id`` and
+    ``name`` attributes forcing uniqueness of id and name across both Assets and
+    Entities.
+
+    """
 
     __tablename__ = "common"
 
