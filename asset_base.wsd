@@ -1,7 +1,7 @@
 @startuml asset_base
 
+' left to right direction
 top to bottom direction
-
 
 ' Class definitions
 
@@ -15,18 +15,6 @@ package "Common" {
 }
 
 package "Entities" {
-
-    class       Domicile {
-        +country_code : ISO 3166-1
-        +country_name : ISO 3166-1
-        +currency : Currency
-        +entity_list : Entity[0..*]
-    }
-
-    class       Currency {
-        +ticker : ISO 4217 3-letter
-        +name : Official name
-    }
 
     abstract    Entity {
         +domicile : Domicile
@@ -42,6 +30,18 @@ package "Entities" {
     class       Exchange {
         +mic : ISO 10383
         +listing_list : Listed[0..*]
+    }
+
+    class       Domicile {
+        +country_code : ISO 3166-1
+        +country_name : ISO 3166-1
+        +currency : Currency
+        +entity_list : Entity[0..*]
+    }
+
+    class       Currency {
+        +ticker : ISO 4217 3-letter
+        +name : Official name
     }
 
     ' Common inheritance
@@ -69,18 +69,6 @@ package "Assets" {
         +owner : Entity
     }
 
-    class       Cash {
-    }
-
-    class       Forex {
-        +currency2 : Currency
-        -_eod_series : ForexEOD
-    }
-
-    class Index {
-        -_eod_series : IndexEOD
-    }
-
     abstract    Share {
         +issuer : Issuer
     }
@@ -100,6 +88,18 @@ package "Assets" {
         +index : Index
     }
 
+    class       Cash {
+    }
+
+    class       Forex {
+        +currency2 : Currency
+        -_eod_series : ForexEOD
+    }
+
+    class Index {
+        -_eod_series : IndexEOD
+    }
+
     ' Common inheritance
     Common.Common <|-- AssetBase
 
@@ -115,26 +115,11 @@ package "Assets" {
 
 }
 
-package "Accounts" {
-
-    class CashAccount
-
-    class SettlementAccount
-
-    Assets.Cash <|-- CashAccount
-    Assets.Cash <|-- SettlementAccount
-
-}
-
 package "Time Series" {
 
     class TimeSeriesBase {
         +date_stamp : date
         +base_obj : AssetBase
-    }
-
-    class Dividend {
-        +listed_equity : ListedEquity
     }
 
     class SimpleEOD {
@@ -151,6 +136,10 @@ package "Time Series" {
 
     }
 
+    class ListedEOD {
+        +listed : Listed
+    }
+
     class ForexEOD {
         +forex : Forex
     }
@@ -159,8 +148,8 @@ package "Time Series" {
         +index : Index
     }
 
-    class ListedEOD {
-        +listed : Listed
+    class Dividend {
+        +listed_equity : ListedEquity
     }
 
     ' Time Series
@@ -170,6 +159,17 @@ package "Time Series" {
     TradeEOD <|-- ForexEOD
     TradeEOD <|-- IndexEOD
     TimeSeriesBase <|-- Dividend
+
+}
+
+package "Accounts" {
+
+    class CashAccount
+
+    class SettlementAccount
+
+    Assets.Cash <|-- CashAccount
+    Assets.Cash <|-- SettlementAccount
 
 }
 
