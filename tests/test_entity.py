@@ -390,7 +390,7 @@ class TestEntity(unittest.TestCase):
         assert True  # FIXME: We don't test this yet.
 
     def test_key_code_id_table(self):
-        """A table of all instance's ``Entity.id`` against ``key_code``."""
+        """A table of all instance's ``Common.id`` against ``key_code``."""
         Entity.factory(self.session, self.name, self.country_code)
         instances_list = self.session.query(Entity).all()
         test_df = pd.DataFrame(

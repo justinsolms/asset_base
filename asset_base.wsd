@@ -77,7 +77,6 @@ package "Assets" {
         +ticker : str
         +isin : ISIN number
         +exchange : Exchange
-        -_eod_series : ListedEOD
     }
 
     class       ListedEquity {
@@ -93,11 +92,9 @@ package "Assets" {
 
     class       Forex {
         +currency2 : Currency
-        -_eod_series : ForexEOD
     }
 
     class Index {
-        -_eod_series : IndexEOD
     }
 
     ' Common inheritance
@@ -137,19 +134,23 @@ package "Time Series" {
     }
 
     class ListedEOD {
-        +listed : Listed
     }
 
     class ForexEOD {
-        +forex : Forex
     }
 
     class IndexEOD {
-        +index : Index
     }
 
     class Dividend {
         +listed_equity : ListedEquity
+        +currency : str
+        +declaration_date : datetime.date
+        +payment_date L datetime.date
+        +period : str
+        +record_date : datetime.date
+        +unadjusted_value : float
+        +adjusted_value : float
     }
 
     ' Time Series
@@ -182,13 +183,9 @@ Issuer "1" -l-* "*" Share : > issues
 Exchange "1" -l-* "*" Listed : > lists
 
 ' Asset to Asset relationships
-ETF "*" *-r- "1" Index : > replicates
+ETF "*" *-r- "1" Assets.Index : > replicates
 
 ' Asset to Time Series relationships
-AssetBase "1" *-- "*" TimeSeriesBase
-Listed "1" *-- "*" ListedEOD
-Forex "1" *-- "*" ForexEOD
-Index "1" *-- "*" IndexEOD
-ListedEquity "1" *-- "*" Dividend
+AssetBase "1" *-- "*" TimeSeriesBase : > acquires
 
 @enduml

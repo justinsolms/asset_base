@@ -84,10 +84,13 @@ class AssetBase(Common):
     # units in case of this attribute being in cents.
     quote_units = Column(Enum("units", "cents"), nullable=False)
 
-    # All historical time-series collection ranked by date_stamp
+    # All historical generic time-series collection ranked by date_stamp
     _series = relationship(
-        TimeSeriesBase, order_by=TimeSeriesBase.date_stamp, back_populates="base_obj"
-    )
+        TimeSeriesBase,
+        order_by=TimeSeriesBase.date_stamp,
+        back_populates="base_obj",
+        uselist=True,
+        )
     """list: EOD historical time-series collection ranked by date_stamp
 
     A list of ``time_series.TimeSeriesBase`` instances.
@@ -134,27 +137,6 @@ class AssetBase(Common):
         )
 
     @property
-    def _eod_series(self):
-        """Alias for ``_series`` column attribute.
-
-        Note
-        ----
-        This MUST be overloaded by an actual ``_eod_series``
-        ``sqlalchemy.Column`` column attribute in child polymorphs for their
-        proper time-series functionality. Here this alias is merely a
-        convenience so we can put the methods ``get_eod``, ``get_last_eod`` and
-        ``get_last_eod_date`` in this class. They all use ``_eod_series``. Must
-        return a list of polymorphs of ``time_series.TimeSeriesBase`` instances.
-
-        See also
-        --------
-        _series
-
-        TODO: consider just refactoring _series as _eod_series and test.
-        """
-        return self._series
-
-    @property
     def key_code(self):
         """A key string unique to the class instance."""
         return self.currency.ticker + "." + self.name
@@ -186,7 +168,8 @@ class AssetBase(Common):
         EODSeriesNoData
             If no time series exists.
         """
-        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
+        # FIXME: Ge this _series to work
+        trade_eod_dict_list = [s.to_dict() for s in self._series]
         if len(trade_eod_dict_list) == 0:
             raise EODSeriesNoData(f"Expected EOD data for {self}.")
         data_frame = pd.DataFrame(trade_eod_dict_list)
@@ -206,7 +189,8 @@ class AssetBase(Common):
             If no time series exists.
         """
         try:
-            last_eod = self._eod_series[-1]
+            # FIXME: Ge this _series to work
+            last_eod = self._series[-1]
         except IndexError:
             raise EODSeriesNoData(f"Expected EOD data for {self}.")
 
@@ -1326,15 +1310,6 @@ class Listed(Share):
     _exchange_id = Column(Integer, ForeignKey("exchange.id"), nullable=False)
     exchange = relationship("Exchange", backref="securities_list")
 
-    # EOD historical time-series collection ranked by date_stamp
-    _eod_series = relationship(
-        ListedEOD, order_by=ListedEOD.date_stamp, back_populates="listed"
-    )
-    """list: EOD historical time-series collection ranked by date_stamp
-
-    A list of ``time_series.ListedEOD`` instances.
-    """
-
     # Ticker on the listing exchange.
     ticker = Column(String(12), nullable=False)
     # National Securities Identifying Number
@@ -1818,22 +1793,6 @@ class ListedEquity(Listed):
 
     id = Column(Integer, ForeignKey("listed.id"), primary_key=True)
     """ Primary key."""
-
-    # Historical Dividend TimeSeriesBase collection
-    _dividend_series = relationship(
-        "Dividend",
-        order_by="Dividend.date_stamp",
-        back_populates="listed_equity",
-        uselist=True,
-    )
-
-    # Historical Split TimeSeriesBase collection
-    _split_series = relationship(
-        "Split",
-        order_by="Split.date_stamp",
-        back_populates="listed_equity",
-        uselist=True,
-    )
 
     # Industry classification
     industry_class = Column(String(16), nullable=True)

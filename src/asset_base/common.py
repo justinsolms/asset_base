@@ -197,7 +197,7 @@ class Common(Base):
     KEY_CODE_LABEL = "key_code"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
-    tables of key codes."""
+    tables of key codes when joining."""
 
     # Entity dates.
     date_create = Column(Date, nullable=False)
@@ -238,10 +238,10 @@ class Common(Base):
 
     @classmethod
     def key_code_id_table(cls, session):
-        """A table of all instance's ``Entity.id`` against ``key_code``.
+        """A table of all instance's ``Common.id`` against ``key_code``.
 
         This table is useful for translating any other party's unique entity
-        code keys to ``Entity.id`` numbers, especially if the other party names
+        code keys to ``Common.id`` numbers, especially if the other party names
         their column the same as the ``entity_code_name`` attribute
 
         Returns
@@ -249,7 +249,7 @@ class Common(Base):
         pandas.DataFrame
             One row per instance in the database with two columns:
             - The first column shall be named ``id`` and contain the instance's
-              ``Entity.id`` number.
+              ``Common.id`` number.
             - The second column shall be named after the class's
               ``KEY_CODE_LABEL`` attribute and contain the instance's
               ``key_code`` property value.

@@ -261,7 +261,6 @@ class TestForexEOD(TestTradeEOD):
 
         # Test Forex._eod_series <-> ForexEOD.forex relationship
         self.assertEqual(forex._series[0], forex_eod)
-        self.assertEqual(forex._eod_series[0], forex_eod)
         self.assertEqual(forex_eod.forex, forex)
 
         # Test that ListedEquity._eod_series lists purely ListedEOD instances
@@ -282,18 +281,12 @@ class TestForexEOD(TestTradeEOD):
         self.session.add(listed_eod)
         # (again) Test Forex._eod_series <-> ForexEOD.forex relationship
         self.assertEqual(forex._series[0], forex_eod)
-        self.assertEqual(forex._eod_series[0], forex_eod)
         self.assertEqual(forex_eod.forex, forex)
         # Test Listed._eod_series <-> ListedEOD.listed relationship
-        self.assertEqual(len(listed._eod_series), 1)
-        self.assertEqual(listed._eod_series[0], listed_eod)
-        self.assertEqual(listed_eod.listed, listed)
         # There should now be two time TimeSeriesBase instances
         self.assertEqual(len(forex._series), 1)
         self.assertEqual(len(listed._series), 1)
         # Test equivalence of the TimeSeriesBase._series parent attribute
-        self.assertEqual(forex._series, forex._eod_series)
-        self.assertEqual(listed._series, listed._eod_series)
 
 
 class TestIndexEOD(TestTradeEOD):
@@ -368,7 +361,6 @@ class TestIndexEOD(TestTradeEOD):
 
         # Test Forex._eod_series <-> IndexEOD.index relationship
         self.assertEqual(index._series[0], index_eod)
-        self.assertEqual(index._eod_series[0], index_eod)
         self.assertEqual(index_eod.index, index)
 
         # Test that `ListedEquity._eod_series` lists purely `ListedEOD`
@@ -389,18 +381,13 @@ class TestIndexEOD(TestTradeEOD):
         self.session.add(listed_eod)
         # (again) Test Forex._eod_series <-> IndexEOD.index relationship
         self.assertEqual(index._series[0], index_eod)
-        self.assertEqual(index._eod_series[0], index_eod)
         self.assertEqual(index_eod.index, index)
         # Test Listed._eod_series <-> ListedEOD.listed relationship
-        self.assertEqual(len(listed._eod_series), 1)
-        self.assertEqual(listed._eod_series[0], listed_eod)
         self.assertEqual(listed_eod.listed, listed)
         # There should now be two time TimeSeriesBase instances
         self.assertEqual(len(index._series), 1)
         self.assertEqual(len(listed._series), 1)
         # Test equivalence of the TimeSeriesBase._series parent attribute
-        self.assertEqual(index._series, index._eod_series)
-        self.assertEqual(listed._series, listed._eod_series)
 
 
 class TestListedEOD(TestTradeEOD):

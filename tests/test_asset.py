@@ -887,7 +887,7 @@ class TestListed(TestShare):
         )
 
     def test_key_code_id_table(self):
-        """A table of all instance's ``Entity.id`` against ``key_code``."""
+        """A table of all instance's ``Common.id`` against ``key_code``."""
         # Insert all securities meta-data (for all securities)
         Listed.update_all(self.session, self.get_meta_method)
         instances_list = self.session.query(Listed).all()

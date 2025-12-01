@@ -81,9 +81,13 @@ class TimeSeriesBase(Base):
 
     __table_args__ = (UniqueConstraint("_discriminator", "_asset_id", "date_stamp"),)
 
-    # Foreign key giving the ``Asset`` class a time series capability
+    # Foreign key giving the ``Asset`` class a generic time series capability
     _asset_id = Column(Integer, ForeignKey("asset_base.id"), nullable=False)
-    base_obj = relationship("AssetBase", back_populates="_series", foreign_keys=[_asset_id])
+    base_obj = relationship(
+        "AssetBase",
+        back_populates="_series",
+        foreign_keys=[_asset_id]
+        )
 
     date_stamp = Column(Date, nullable=False)
     # TODO: Consider making this part of the primary keys
@@ -165,12 +169,6 @@ class TimeSeriesBase(Base):
             # No data so return
             return
 
-        # The goal is to substitute the `KEY_CODE_LABEL` column with the
-        # `Asset.id`.
-        asset_class.KEY_CODE_LABEL = asset_class.KEY_CODE_LABEL
-        # Get Asset.key_code to Asset.id translation table
-        key_code_id_table = asset_class.key_code_id_table(session)
-
         data_table = data_frame
 
         # Warn of non-uniqueness by date_stamp and KEY_CODE_LABEL then drop
@@ -193,6 +191,8 @@ class TimeSeriesBase(Base):
         # store the datetime value.
         data_table.replace({pd.NaT: None}, inplace=True)
 
+        # Get Asset.key_code to Asset.id translation table
+        key_code_id_table = asset_class.key_code_id_table(session)
         # Join to create a new extended instance_table with the security column.
         # Only for time series instances (left join).
         # FIXME: Warn or raise if left and right are not congruent
@@ -622,16 +622,6 @@ class ListedEOD(TradeEOD):
     id = Column(Integer, ForeignKey("trade_eod.id"), primary_key=True)
     """ Primary key."""
 
-    # Foreign key giving ``Listed`` a EOD series capability. Note:
-    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
-    # for the relationships with ``.asset.Share._series`` and
-    # ``.asset.Listed._eod_series`` to work and avoids the
-    # "SAWarning: relationship" warning for the relationship below.
-    _listed_id = Column(Integer, ForeignKey("listed.id"), nullable=False)
-    listed = relationship(
-        "Listed", back_populates="_eod_series", foreign_keys=[_listed_id]
-    )
-
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -639,7 +629,6 @@ class ListedEOD(TradeEOD):
         super().__init__(
             base_obj, date_stamp, open, close, high, low, adjusted_close, volume
         )
-        self.listed = base_obj
 
     @classmethod
     def update_all(cls, session, get_method):
@@ -669,16 +658,6 @@ class ListedEOD(TradeEOD):
         # `.asset` which would cause a circular import.
         # FIXME: Why can;t we just use `cls` in the update_all methods and dispense with the asset_class parameter?
         asset_class = cls.listed.property.mapper.class_
-
-        # For all de-listed securities skip data fetch and warn
-        securities_delisted = (
-            session.query(asset_class).filter(asset_class.status == "delisted").all()
-        )
-        for security in securities_delisted:
-            logger.warning(
-                f"Skipped {cls.class_name} data fetch for "
-                f"de-listed security {security.identity_code}."
-            )
 
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
@@ -723,16 +702,6 @@ class IndexEOD(TradeEOD):
     id = Column(Integer, ForeignKey("trade_eod.id"), primary_key=True)
     """ Primary key."""
 
-    # Foreign key giving ``Index`` a EOD series capability. Note:
-    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
-    # for the relationships with ``.asset.Share._series`` and
-    # ``.asset.Listed._eod_series`` to work and avoids the
-    # "SAWarning: relationship" warning for the relationship below.
-    _index_id = Column(Integer, ForeignKey("index.id"), nullable=False)
-    index = relationship(
-        "Index", back_populates="_eod_series", foreign_keys=[_index_id]
-    )
-
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -740,7 +709,6 @@ class IndexEOD(TradeEOD):
         super().__init__(
             base_obj, date_stamp, open, close, high, low, adjusted_close, volume
         )
-        self.index = base_obj
 
     @classmethod
     def update_all(cls, session, get_method):
@@ -812,16 +780,6 @@ class ForexEOD(TradeEOD):
     id = Column(Integer, ForeignKey("trade_eod.id"), primary_key=True)
     """ Primary key."""
 
-    # Foreign key giving ``Forex`` a EOD series capability. Note:
-    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
-    # for the relationships with ``.asset.Share._series`` and
-    # ``.asset.Forex._eod_series`` to work and avoids the
-    # "SAWarning: relationship" warning for the relationship below.
-    _forex_id = Column(Integer, ForeignKey("forex.id"), nullable=False)
-    forex = relationship(
-        "Forex", back_populates="_eod_series", foreign_keys=[_forex_id]
-    )
-
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -829,7 +787,6 @@ class ForexEOD(TradeEOD):
         super().__init__(
             base_obj, date_stamp, open, close, high, low, adjusted_close, volume
         )
-        self.forex = base_obj
 
     @classmethod
     def update_all(cls, session, get_method):
@@ -897,20 +854,6 @@ class Dividend(TimeSeriesBase):
 
     id = Column(Integer, ForeignKey("time_series_base.id"), primary_key=True)
     """ Primary key."""
-    # NOTE: Inherited
-    # backrefs to the polymorphic ListedEquity
-
-    # Foreign key giving ``ListedEquity`` a Dividend series capability. Note:
-    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
-    # for the relationships with ``.asset.Asset._series`` and
-    # ``.asset.ListedEquity._dividend_series`` to work and avoids the
-    # "SAWarning: relationship" warning for the relationship below.
-    _listed_equity_id = Column(Integer, ForeignKey("listed_equity.id"), nullable=False)
-    listed_equity = relationship(
-        "ListedEquity",
-        back_populates="_dividend_series",
-        foreign_keys=[_listed_equity_id],
-    )
 
     # FIXME: Cannot have NULL here but some dividends are triggering tis
     currency = Column(String, nullable=True)
@@ -953,11 +896,9 @@ class Dividend(TimeSeriesBase):
         record_date,
         unadjusted_value,
         adjusted_value,
-        **kwargs,
     ):
         """Instance initialization."""
         super().__init__(base_obj, date_stamp)
-        self.listed_equity = base_obj
         self.currency = currency
         self.declaration_date = declaration_date
         self.payment_date = payment_date
@@ -1079,20 +1020,6 @@ class Split(TimeSeriesBase):
 
     id = Column(Integer, ForeignKey("time_series_base.id"), primary_key=True)
     """ Primary key."""
-    # NOTE: Inherited
-    # backrefs to the polymorphic ListedEquity
-
-    # Foreign key giving ``ListedEquity`` a Split series capability. Note:
-    # This doubles up on parent ``TimeSeriesBase._asset_id`` but is necessary
-    # for the relationships with ``.asset.Asset._series`` and
-    # ``.asset.ListedEquity._split_series`` to work and avoids the
-    # "SAWarning: relationship" warning for the relationship below.
-    _listed_equity_id = Column(Integer, ForeignKey("listed_equity.id"), nullable=False)
-    listed_equity = relationship(
-        "ListedEquity",
-        back_populates="_split_series",
-        foreign_keys=[_listed_equity_id],
-    )
 
     numerator = Column(Float, nullable=False)
     """float: The numerator of the split ratio, e.g., 2 for a 2-for-1 split."""
@@ -1102,7 +1029,6 @@ class Split(TimeSeriesBase):
     def __init__(self, base_obj, date_stamp, numerator, denominator):
         """Instance initialization."""
         super().__init__(base_obj, date_stamp)
-        self.listed_equity = base_obj
         self.numerator = numerator
         self.denominator = denominator
 
