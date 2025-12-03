@@ -80,10 +80,6 @@ class AssetBase(Common):
     _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=False)
     currency = relationship(Currency)
 
-    # Price quote in cents or units. Strictly convert all prices to currency
-    # units in case of this attribute being in cents.
-    quote_units = Column(Enum("units", "cents"), nullable=False)
-
     # All historical generic time-series collection ranked by date_stamp
     _series = relationship(
         TimeSeriesBase,
@@ -109,11 +105,6 @@ class AssetBase(Common):
         super().__init__(name, **kwargs)
 
         self.currency = currency
-
-        if "quote_units" in kwargs:
-            self.quote_units = kwargs.pop("quote_units")
-        else:
-            self.quote_units = "units"
 
     def __str__(self):
         """Return the informal string output. Currently ``identity_code``."""
@@ -269,7 +260,10 @@ class Asset(AssetBase):
         Entity full name.
     currency : .entity.Currency
         Currency of asset pricing.
-    owner : .entity.Entity
+    quote_units : {'units', 'cents'}, optional
+        Price quotations are either in currency units (default) or currency
+        cents.
+    owner : .entity.Entity, optional
         Share owner entity.
 
     Warning
@@ -327,6 +321,10 @@ class Asset(AssetBase):
     _owner_id = Column(Integer, ForeignKey("entity.id"), nullable=True)
     owner = relationship("Entity", backref="asset_list", foreign_keys=[_owner_id])
 
+    # Price quote in cents or units. Strictly convert all prices to currency
+    # units in case of this attribute being in cents.
+    quote_units = Column(Enum("units", "cents"), nullable=False)
+
     # TODO: This (or child) is were we would add asset fundamental data relationships
     # TODO: This (or child) is were we would add asset book relationships
 
@@ -337,6 +335,11 @@ class Asset(AssetBase):
     def __init__(self, name, currency, **kwargs):
         """Instance initialization."""
         super().__init__(name, currency, **kwargs)
+
+        if "quote_units" in kwargs:
+            self.quote_units = kwargs.pop("quote_units")
+        else:
+            self.quote_units = "units"
 
         # Asset owner
         if "owner" in kwargs:
@@ -486,15 +489,9 @@ class Cash(Asset):
     currency : .asset.Currency
         The currency of the cash asset
 
-    Note
-    ----
-    The currency is constrained to that of the the domicile. Therefore the
-    currency ticker and name are that of the currency of the domicile.
-
-    Note
-    ----
-    Cash may not hold other assets and this class' holding capability has been
-    disabled.
+    Currency is named after the currency itself and its ticker is that of the
+    currency. Currency although it is an ``Asset`` has no ownership as it is not
+    owned by an entity. Quote units are always in 'units'.
 
     See also
     --------
@@ -521,15 +518,12 @@ class Cash(Asset):
     #  A short class name for use in naming
     _name_appendix = "Cash"
 
-    def __init__(self, currency, **kwargs):
+    def __init__(self, currency):
         """Instance initialization."""
-
-        # Force ownership of currencies
-        assert "owner" not in kwargs, "Missing `owner` argument."
 
         # The name is constrained to that of the currency.
         name = currency.name
-        super().__init__(name, currency, **kwargs)
+        super().__init__(name, currency, quote_units="units")
 
     def __repr__(self):
         """Return the official string output."""
@@ -651,11 +645,6 @@ class Cash(Asset):
         the session are used to build a ``Cash`` instance for each
         ``Currency`` instance.
 
-        Warning
-        -------
-        Please run ``Currency.update_all`` before running this current method to
-        avoid an Exception.
-
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -665,9 +654,7 @@ class Cash(Asset):
         # A cash instance for every currency
         currency_list = session.query(Currency).all()
         if len(currency_list) == 0:
-            raise Exception(
-                "No Currency instances found. " "Please run `Currency.update_all`."
-            )
+            raise Exception("No Currency instances found. ")
         for currency in currency_list:
             Cash.factory(session, currency.ticker)
 
@@ -787,14 +774,6 @@ class Forex(Cash):
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
-    _eod_series = relationship(
-        ForexEOD, order_by=ForexEOD.date_stamp, back_populates="forex"
-    )
-    """list: EOD historical time-series collection ranked by date_stamp
-
-    A list of ``time_series.ForexEOD`` instances.
-    """
-
     _asset_class = "forex"
 
     #  A short class name for use in naming
@@ -834,13 +813,13 @@ class Forex(Cash):
         "ZAR",
     ]
 
-    def __init__(self, base_currency, price_currency, **kwargs):
+    def __init__(self, base_currency, price_currency):
         """Instance initialization."""
         # FIXME: For this version assert the ``base_currency`` to be the ``root_currency_ticker`` and state clearly in the documentation
 
         # The name is constrained to that of the currency.
         # Note that we set the pricing currency of the cash asset here.
-        super().__init__(price_currency, **kwargs)
+        super().__init__(price_currency)
         self.name = f"{base_currency.ticker}{price_currency.ticker}"
 
         self.currency = price_currency
@@ -960,11 +939,6 @@ class Forex(Cash):
         the session are used to build a ``Cash`` instance for each
         ``Currency`` instance.
 
-        Warning
-        -------
-        Please run ``Currency.update_all`` before running this current method to
-        avoid an Exception.
-
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -993,9 +967,7 @@ class Forex(Cash):
             .all()
         )
         if len(foreign_currencies) == 0:
-            raise Exception(
-                "No Currency instances found. " "Please run `Currency.update_all`."
-            )
+            raise Exception("No Currency instances found.")
         if len(foreign_currencies_list) != len(foreign_currencies):
             raise FactoryError("Not all foreign currencies were found.")
         for price_currency in foreign_currencies:
@@ -1089,12 +1061,18 @@ class Share(Asset):
         Entity full name.
     issuer: .Issuer
         The issuing institution that issues the asset for exchange.
-    FIXME: Args like these are NOT optional
+    currency : .entity.Currency, optional
+        Currency of asset pricing. If omitted then the currency is that of the
+        issuer domicile which is the usual case.
     quote_units : {'units', 'cents'}, optional
         Price quotations are either in currency units (default) or currency
         cents.
     shares_in_issue : int, optional
         Number of shares in issue.
+    distributions : bool, optional
+        Does the share pay distributions or not. Default is `False`.
+    owner : .entity.Entity, optional
+        Share owner entity.
 
     Attributes
     ----------
@@ -1132,11 +1110,13 @@ class Share(Asset):
     #  A short class name for use in naming
     _name_appendix = "Share"
 
-    def __init__(self, name, issuer, currency=None, **kwargs):
+    def __init__(self, name, issuer, **kwargs):
         """Instance initialization."""
         # If the currency is not provided then the currency is the issuer's
         # domicile's currency
-        if currency is None:
+        if "currency" in kwargs:
+            currency = kwargs.pop("currency")
+        else:
             currency = issuer.domicile.currency
 
         super().__init__(name, currency, **kwargs)
@@ -1154,6 +1134,12 @@ class Share(Asset):
             # Not sure why the default isn't being set to False as specified in
             # the column attribute definition, so we do it here anyway
             self.distributions = False
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '{}(name="{}", issuer={!r})'.format(
+            self.__class__.__name__, self.name, self.issuer
+        )
 
     @property
     def domicile(self):
@@ -1275,6 +1261,10 @@ class Listed(Share):
         cents.
     shares_in_issue : int, optional
         Number of shares in issue.
+    distributions : bool, optional
+        Does the share pay distributions or not. Default is `False`.
+    owner : .entity.Entity, optional
+        Share owner entity.
 
 
     Attributes
@@ -1330,11 +1320,15 @@ class Listed(Share):
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
         # Currency is the exchange listing currency, i.e., the exchange's
-        # domicile currency which overwrites the parent class Share issuer's
-        # domicile's currency
+        # domicile currency. This overrides the `Share` parent class defaulting
+        # to forcing of the instance currency to be tha of the issuer's
+        # domicile currency
+        if "currency" in kwargs:
+            raise ValueError(
+                "The `currency` argument is not allowed here and is forced to that of the exchange.")
         currency = exchange.domicile.currency
 
-        super().__init__(name, issuer, currency, **kwargs)
+        super().__init__(name, issuer, currency=currency, **kwargs)
 
         # Do no remove this code!!. Some methods that use this class (such as
         # factory methods) are able to place arguments with a None value, this
@@ -1360,6 +1354,12 @@ class Listed(Share):
             self.isin = isin
         else:
             raise ValueError("Unexpected domicile. Does not match ISIN country code.")
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
+            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
+        )
 
     @property
     def domicile(self):
@@ -1613,15 +1613,11 @@ class Listed(Share):
         return obj
 
     @classmethod
-    def update_all(cls, session, get_meta_method, get_eod_method=None, **kwargs):
+    def update_all(cls, session, get_meta_method, get_eod_method=None):
         """Update/create all the objects in the asset_base session.
 
-        Note
-        ----
-        ``ListedEOD`` may mean a polymorph or child class such as ``ListedEOD``.
-
-        This method updates its class collection of ``ListedEOD`` instances from
-        the ``financial_data`` module.
+        This method also updates its class collection of ``ListedEOD``
+        instances.
 
         Parameters
         ----------
@@ -1643,7 +1639,7 @@ class Listed(Share):
 
         """
         # Get securities
-        super().update_all(session, get_meta_method, **kwargs)
+        super().update_all(session, get_meta_method)
 
         # Get EOD trade data.
         if get_eod_method is not None:
@@ -1840,6 +1836,12 @@ class ListedEquity(Listed):
                     )
                 )
 
+    def __repr__(self):
+        """Return the official string output."""
+        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
+            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
+        )
+
     @property
     def industry_class_instance(self):
         # TODO: Future integration
@@ -1891,15 +1893,9 @@ class ListedEquity(Listed):
         return dictionary
 
     @classmethod
-    def update_all(
-        cls,
-        session,
-        get_meta_method,
-        get_eod_method=None,
-        get_dividends_method=None,
-        get_splits_method=None,
-        **kwargs,
-    ):
+    def update_all(cls, session,
+        get_meta_method, get_eod_method=None,
+        get_dividends_method=None, get_splits_method=None):
         """Update/create all the objects in the asset_base session.
 
         This method updates its class collection of ``ListedEOD`` and
@@ -1942,12 +1938,8 @@ class ListedEquity(Listed):
         No object shall be destroyed, only updated, or missing object created.
 
         """
-        # TODO: Make more intelligent behaviour for new securities fetching.
-        # This can be done at the level of the common module where action for
-        # new and unseen securities can be taken.
-
         # Get securities
-        super().update_all(session, get_meta_method, get_eod_method, **kwargs)
+        super().update_all(session, get_meta_method, get_eod_method)
 
         # Get Dividend data.
         if get_dividends_method is not None:
@@ -2359,6 +2351,7 @@ class ListedEquity(Listed):
 
 
 class Index(AssetBase):
+    # TODO: Should be a child of Common as it isn'st an asset per se.
     """An index representing some financial data.
 
     Wikipedia defines an index is an indirect short-cut derived from and
@@ -2426,16 +2419,6 @@ class Index(AssetBase):
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
 
-    # EOD historical time-series collection ranked by date_stamp
-    # FIXME: Do not assign to declared property method _eod_series
-    _eod_series = relationship(
-        IndexEOD, order_by=IndexEOD.date_stamp, back_populates="index"
-    )
-    """list: EOD historical time-series collection ranked by date_stamp
-
-    A list of ``time_series.IndexEOD`` instances.
-    """
-
     # Unique index ticker
     ticker = Column(String(12), nullable=False)
 
@@ -2461,11 +2444,9 @@ class Index(AssetBase):
 
     def __repr__(self):
         """Return the official string output."""
-        msg = '{}(name="{}", ticker="{}", currency={!r})'.format(
-            self.class_name, self.name, self.ticker, self.currency
+        return '{}(name="{}", ticker="{}", currency={!r}, total_return={!r}, static={!r})'.format(
+            self.__class__.__name__, self.name, self.ticker, self.currency, self.total_return, self.static
         )
-
-        return msg
 
     @property
     def key_code(self):
@@ -2538,11 +2519,8 @@ class Index(AssetBase):
         return obj
 
     @classmethod
-    def update_all(cls, session, get_meta_method, get_eod_method=None, **kwargs):
+    def update_all(cls, session, get_meta_method, get_eod_method=None):
         """Update/create all the objects in the asset_base session.
-
-        This method updates its class collection of ``Index`` instances from
-        the ``financial_data`` module.
 
         Parameters
         ----------
@@ -2564,7 +2542,7 @@ class Index(AssetBase):
 
         """
         # Get securities
-        super().update_all(session, get_meta_method, **kwargs)
+        super().update_all(session, get_meta_method)
 
         # Get EOD trade data.
         if get_eod_method is not None:
@@ -2678,6 +2656,12 @@ class ExchangeTradeFund(ListedEquity):
                 self.ter = float("nan")
         else:  # Default to zero.
             self.ter = float("nan")
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
+            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
+        )
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".

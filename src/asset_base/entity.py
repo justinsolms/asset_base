@@ -134,8 +134,8 @@ class Currency(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(ticker="{}", name="{}")'.format(
-            self.__class__.__name__, self.ticker, self.name
+        return '{}(ticker="{}", name="{}", country_code_list={!r})'.format(
+            self.__class__.__name__, self.ticker, self.name, self.country_code_list
         )
 
     @classmethod
@@ -363,7 +363,7 @@ class Domicile(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(country_code="{}", country_code="{}", currency={!r})'.format(
+        return '{}(country_code="{}", country_name="{}", currency={!r})'.format(
             self.__class__.__name__, self.country_code, self.country_name, self.currency
         )
 

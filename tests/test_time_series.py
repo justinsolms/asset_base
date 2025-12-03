@@ -1,12 +1,17 @@
 from io import StringIO
+from os import close
 import unittest
 import datetime
+from attrs import Factory
 import pandas as pd
+
+from pygments import highlight
+from sqlalchemy.exc import IntegrityError
 
 from src.asset_base.common import TestSession
 from src.asset_base.financial_data import Dump, MetaData, History, Static
 from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
-from src.asset_base.asset import Forex, Index, Listed, ListedEquity
+from src.asset_base.asset import Asset, AssetBase, Forex, Index, Listed, ListedEquity, Share
 from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, SimpleEOD
 from src.asset_base.time_series import TimeSeriesBase, ListedEOD, TradeEOD
 
@@ -20,28 +25,14 @@ class TestTimeSeriesBase(unittest.TestCase):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = TimeSeriesBase
+        # Today
+        cls.today = datetime.date.today()
         # Similar set up to test_financial_data
         # Securities meta-data
         cls.get_method = MetaData().get_etfs
         cls.securities_dataframe = cls.get_method()
         # Securities feed
         cls.feed = History()
-        # Select Test security symbol identities subset
-        symbols = [("AAPL", "XNYS"), ("MCD", "XNYS"), ("STX40", "XJSE")]
-        cls.securities_dataframe.set_index(["ticker", "mic"], inplace=True)
-        cls.securities_dataframe = cls.securities_dataframe.loc[symbols]
-        cls.securities_dataframe.reset_index(drop=False, inplace=True)
-        # Apple Inc.
-        cls.security_item = cls.securities_dataframe[
-            cls.securities_dataframe.ticker == "AAPL"
-        ]
-        cls.mic = cls.security_item.mic.to_list()[0]
-        cls.ticker = cls.security_item.ticker.to_list()[0]
-        cls.name = cls.security_item.listed_name.to_list()[0]
-        cls.issuer_domicile_code = cls.security_item.issuer_domicile_code.to_list()[0]
-        cls.issuer_name = cls.security_item.issuer_name.to_list()[0]
-        cls.isin = cls.security_item["isin"].to_list()[0]
-        cls.status = cls.security_item["status"].to_list()[0]
 
     def setUp(self):
         """Set up test case fixtures."""
@@ -53,50 +44,35 @@ class TestTimeSeriesBase(unittest.TestCase):
         Currency.update_all(self.session, get_method=static.get_currency)
         Domicile.update_all(self.session, get_method=static.get_domicile)
         Exchange.update_all(self.session, get_method=static.get_exchange)
-        # Create a Listed instance, but do not commit it!! This may pollute
-        # child class tests.
-        self.exchange = Exchange.factory(self.session, mic=self.mic)
-        self.issuer = Issuer.factory(
-            self.session, self.issuer_name, self.issuer_domicile_code
-        )
+        # Get fixture instances
+        self.currency = Currency.factory(self.session, "USD")
 
     def tearDown(self) -> None:
         """Tear down test case fixtures."""
         del self.test_session
 
     def test___init__(self):
-        """Initialization."""
-        # Get AAPL Inc instance form committed instances. Don't create this in
-        # `setUp` as this risk mix-ups in the child test classes.
-        self.listed = Listed(
-            self.name,
-            self.issuer,
-            self.isin,
-            self.exchange,
-            self.ticker,
-            status=self.status,
-        )
-        ts_item = TimeSeriesBase(self.listed, date_stamp=datetime.date.today())
-        self.assertIsInstance(ts_item, TimeSeriesBase)
-        self.assertEqual(ts_item._asset_id, self.listed.id)
-        self.assertEqual(ts_item.date_stamp, datetime.date.today())
+        """Test class relationship and polymorphism functionality."""
+        # Create an minimal args asset and a time series instance
+        asset = AssetBase(self.name, self.currency)
+        ts_item = TimeSeriesBase(asset, date_stamp=self.today)
+        # Test adding them to the database
+        self.session.add(asset)
+        self.session.add(ts_item)
+        self.session.flush()
+        # Test the relationship between them
+        self.assertEqual(asset, ts_item.base_obj)
+        # Test attributes
+        self.assertEqual(ts_item.date_stamp, self.today)
 
     def test_unique_constraint(self):
         """Fail the UniqueConstraint('_listed_id', 'date_stamp')"""
-        from sqlalchemy.exc import IntegrityError
-
-        # Get AAPL Inc instance form committed instances. Don't create this in
-        # `setUp` as this risk mix-ups in the child test classes.
-        self.listed = Listed(
-            self.name,
-            self.issuer,
-            self.isin,
-            self.exchange,
-            self.ticker,
-            status=self.status,
-        )
-        ts_item1 = TimeSeriesBase(self.listed, date_stamp=datetime.date.today())
-        ts_item2 = TimeSeriesBase(self.listed, date_stamp=datetime.date.today())
+        # Create an asset and two time series items with the same date_stamp
+        # thus violating the UniqueConstraint
+        asset = AssetBase(self.name, self.currency)
+        ts_item1 = TimeSeriesBase(asset, date_stamp=self.today)
+        ts_item2 = TimeSeriesBase(asset, date_stamp=self.today)
+        self.session.add(asset)
         self.session.add(ts_item1)
         self.session.add(ts_item2)
         with self.assertRaises(IntegrityError):
@@ -104,32 +80,41 @@ class TestTimeSeriesBase(unittest.TestCase):
 
 
 class TestSimpleEOD(TestTimeSeriesBase):
-    """A simple time series with a price."""
+    """Test an asset's date-stamped ``SimpleEOD`` trade data item.
+
+    Use an ``Asset`` and a ``SimpleEOD`` time series item with the asset's day
+    price.
+    """
 
     def test___init__(self):
-        """Test class polymorphism functionality."""
-        # Create a Cash instance and add it to the session
-        listed = Listed(
-            self.name,
-            self.issuer,
-            self.isin,
-            self.exchange,
-            self.ticker,
-            status=self.status,
-        )
-        ts_item = SimpleEOD(listed, date_stamp=datetime.date.today(), close=123.45)
+        """Test class relationship and polymorphism functionality."""
+        # Fixture
+        close = 123.45
+        # Create an minimal args asset and a time series instance
+        asset = Asset(self.name, self.currency)
+        ts_item = SimpleEOD(asset, date_stamp=self.today, close=close)
+        # Test adding them to the database
+        self.session.add(asset)
         self.session.add(ts_item)
-        # Query the superclass Asset which should produce a Cash polymorphic
-        # instance
-        instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance.class_name, "SimpleEOD")
-        self.assertEqual(instance._discriminator, "simple_eod")
-        self.assertEqual(ts_item, instance)
+        self.session.flush()
+        # Test the relationship between them
+        self.assertEqual(asset, ts_item.base_obj)
+        # Query them back
+        asset = self.session.query(Asset).one()
+        ts_item = self.session.query(SimpleEOD).one()
+        # Test the relationship between them
+        self.assertEqual(asset, ts_item.base_obj)
+        # Test attributes
+        self.assertEqual(ts_item.date_stamp, self.today)
+        self.assertEqual(ts_item._close, close)
 
 
 class TestTradeEOD(TestTimeSeriesBase):
+    """Test a share's date-stamped ``TradeEOD`` trade data item.
 
-    """A single listed security's date-stamped EOD trade data."""
+    Use an ``Asset`` and a ``TradeEOD`` time series item with the shares's day
+    trade data.
+    """
 
     def to_dict(self, item):
         """Convert all class price attributes to a dictionary."""
@@ -144,29 +129,52 @@ class TestTradeEOD(TestTimeSeriesBase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        # Specify which class is being tested. Apply when tests are meant to be
-        # inherited.
+        # Share fixtures
+        cls.issuer_name = "ABC Inc"
+        cls.issuer_domicile_code = "US"
+        cls.name = "ABC Share"
+        # Trade data
         cls.Cls = TradeEOD
-        # Test data
-        cls.from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d").date()
-        cls.to_date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
-        cls.columns = [
-            "date_stamp",
-            "ticker",
-            "mic",
-            "isin",
-            "adjusted_close",
-            "close",
-            "high",
-            "low",
-            "open",
-        ]
-        cls.test_columns = ["adjusted_close", "close", "high", "low", "open"]
-        # Exclude adjusted_close as it changes
+        cls.open = 123.0
+        cls.close = 123.1
+        cls.high = 123.2
+        cls.low = 123.3
+        cls.adjusted_close = 123.4
+        cls.volume = 1000
 
     def setUp(self):
         """Set up test case fixtures."""
         super().setUp()
+        self.issuer = Issuer.factory(self.session, self.issuer_name, self.issuer_domicile_code)
+
+    def test___init__(self):
+        """Test class relationship and polymorphism functionality."""
+        # Create an minimal args asset and a time series instance
+        share = Share(self.name, self.issuer)
+        ts_item = TradeEOD(
+            share, date_stamp=self.today, open=self.open, close=self.close,
+            high=self.high, low=self.low, adjusted_close=self.adjusted_close,
+            volume=self.volume)
+        # Test adding them to the database
+        self.session.add(share)
+        self.session.add(ts_item)
+        self.session.flush()
+        # Test the relationship between them
+        self.assertEqual(share, ts_item.base_obj)
+        # Query them back
+        share = self.session.query(Asset).one()
+        ts_item = self.session.query(SimpleEOD).one()
+        # Test the relationship between them
+        self.assertEqual(share, ts_item.base_obj)
+        # Test data items and to_dict method
+        trade_data = ts_item.to_dict()
+        self.assertEqual(trade_data['date_stamp'], self.today)
+        self.assertEqual(trade_data['open'], self.open)
+        self.assertEqual(trade_data['close'], self.close)
+        self.assertEqual(trade_data['high'], self.high)
+        self.assertEqual(trade_data['low'], self.low)
+        self.assertEqual(trade_data['adjusted_close'], self.adjusted_close)
+        self.assertEqual(trade_data['volume'], self.volume)
 
 
 class TestForexEOD(TestTradeEOD):
@@ -176,349 +184,101 @@ class TestForexEOD(TestTradeEOD):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = Forex
-        # Lessen the number of forex tickers for shorter testing.
-        # NOTE: Remember to use `self.Cls` instead of `Forex` for less tickers.
-        cls.Cls.foreign_currencies = ["USD", "EUR", "ZAR"]
-        # Currency data
-        cls.get_method = History().get_forex
-        # Test strings
-        cls.name = "USDZAR"
-        cls.test_str = "One USD priced in ZAR"
-        cls.key_code = "USDZAR"
-        cls.identity_code = "USDZAR"
-        # Test values
-        cls.columns = [
-            "date_stamp",
-            "ticker",
-            "close",
-            "high",
-            "low",
-            "open",
-            "adjusted_close",
-            "volume",
-        ]
-        cls.test_columns = ["close", "high", "low", "open", "volume"]
-        # Exclude adjusted_close as it varies
-        # NOTE: These values may change as EOD historical data gets corrected
-        cls.test_values = pd.DataFrame(
-            [  # Last date data
-                [14.6878, 14.7204, 14.5707, 14.6078, 0],
-                [1.0000, 1.0000, 1.0000, 1.0000, 0],
-                [0.8185, 0.8191, 0.8123, 0.8131, 89060],
-            ],
-            columns=cls.test_columns,
-        )
 
     def setUp(self):
         """Set up test case fixtures."""
         super().setUp()
         # Currencies for Forex tests
         self.base_currency = Currency.factory(self.session, Forex.root_currency_ticker)
-        self.price_currency = Currency.factory(
-            self.session, Forex.foreign_currencies[-1]
-        )  # Pick last one
-        # Tickers
-        self.base_ticker = self.base_currency.ticker
-        self.price_ticker = self.price_currency.ticker
-        # Add *ALL* Listed security instances
-        Listed.from_data_frame(self.session, self.securities_dataframe)
+        self.price_currency = Currency.factory( self.session, Forex.foreign_currencies[0])  # Pick first foreign currency
 
     def test___init__(self):
-        """Initialization."""
-        # Get AAPL Inc instance form committed instances. Don't create this in
-        # `setUp` as this risk mix-ups in the child test classes.
-        forex = Forex.factory(self.session, self.base_ticker, self.price_ticker)
-        # Test for AAPL Inc.
-        forex_eod = ForexEOD(
-            forex,
-            date_stamp=datetime.date.today(),
-            open=1.0,
-            close=2.0,
-            high=3.0,
-            low=4.0,
-            adjusted_close=5.0,
-            volume=6.0,
-        )
-        self.session.add(forex_eod)
-        self.assertIsInstance(forex_eod, ForexEOD)
-        # test the inherited Asset backref
-        self.assertEqual(forex_eod.base_obj, forex)
-        self.assertEqual(forex_eod.date_stamp, datetime.date.today())
-        self.assertEqual(forex_eod._close, forex_eod._close)
-        self.assertEqual(forex_eod._open, 1.0)
-        self.assertEqual(forex_eod._close, 2.0)
-        self.assertEqual(forex_eod._high, 3.0)
-        self.assertEqual(forex_eod._low, 4.0)
-        self.assertEqual(forex_eod._adjusted_close, 5.0)
-        self.assertEqual(forex_eod._volume, 6.0)
+        """Test class relationship and polymorphism functionality."""
+        # Create an minimal args asset and a time series instance
+        forex = Forex.factory(self.session, self.base_currency.ticker, self.price_currency.ticker)
+        ts_item = TradeEOD(
+            forex, date_stamp=self.today, open=self.open, close=self.close,
+            high=self.high, low=self.low, adjusted_close=self.adjusted_close,
+            volume=self.volume)
+        # Test adding them to the database
+        self.session.add(forex)
+        self.session.add(ts_item)
+        self.session.flush()
+        # Test the relationship between them
+        self.assertEqual(forex, ts_item.base_obj)
+        # Query them back
+        forex = self.session.query(Asset).one()
+        ts_item = self.session.query(SimpleEOD).one()
+        # Test the relationship between them
+        self.assertEqual(forex, ts_item.base_obj)
+        # Test data items and to_dict method
+        trade_data = ts_item.to_dict()
+        self.assertEqual(trade_data['date_stamp'], self.today)
+        self.assertEqual(trade_data['open'], self.open)
+        self.assertEqual(trade_data['close'], self.close)
+        self.assertEqual(trade_data['high'], self.high)
+        self.assertEqual(trade_data['low'], self.low)
+        self.assertEqual(trade_data['adjusted_close'], self.adjusted_close)
+        self.assertEqual(trade_data['volume'], self.volume)
 
-        # Test polymorphism functionality by query of the superclass
-        # TimeSeriesBase which should produce a ListedEOD polymorphic instance
-        instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance.class_name, "ForexEOD")
-        self.assertEqual(instance._discriminator, "forex_eod")
-        self.assertEqual(forex_eod, instance)
-
-        # Test Forex._eod_series <-> ForexEOD.forex relationship
-        self.assertEqual(forex._series[0], forex_eod)
-        self.assertEqual(forex_eod.forex, forex)
-
-        # Test that ListedEquity._eod_series lists purely ListedEOD instances
-        # and Forex._eod_series lists purely ForexEOD instances.
-        # This requires the addition of a Listed in addition to the ListedEOD.
-        self.assertEqual(len(forex._series), 1)
-        listed = Listed.factory(self.session, isin=self.isin)
-        listed_eod = ListedEOD(
-            listed,
-            date_stamp=datetime.date.today(),
-            open=1.0,
-            close=2.0,
-            high=3.0,
-            low=4.0,
-            adjusted_close=5.0,
-            volume=6.0,
-        )
-        self.session.add(listed_eod)
-        # (again) Test Forex._eod_series <-> ForexEOD.forex relationship
-        self.assertEqual(forex._series[0], forex_eod)
-        self.assertEqual(forex_eod.forex, forex)
-        # Test Listed._eod_series <-> ListedEOD.listed relationship
-        # There should now be two time TimeSeriesBase instances
-        self.assertEqual(len(forex._series), 1)
-        self.assertEqual(len(listed._series), 1)
-        # Test equivalence of the TimeSeriesBase._series parent attribute
-
-
+# Skip this for now
+@unittest.skip("IndexEOD not deployed yet.")
 class TestIndexEOD(TestTradeEOD):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        # Specify which class is being tested. Apply when tests are meant to be
-        # inherited.
-        cls.Cls = Index
-        # Index data getter
-        cls.get_method = History().get_indices
-        # Test strings
-        cls.index_list = ("GSPC", "ASX", "J200")
-        cls.name = "The Index"
-        cls.currency_code = "ZAR"
-        cls.test_str = "The Index priced in ZAR"
-        cls.key_code = "XYZ.INDX"
-        cls.identity_code = "XYZ.INDX"
-        # Test values
-        cls.test_values = pd.DataFrame(
-            [  # Last date data
-                [3673.63, 3723.98, 3664.69, 3723.98, 49334000.0],
-                [3756.0701, 3760.2, 3726.8799, 3733.27, 3172510000.0],
-                [54379.58, 54615.33, 53932.88, 54615.33, 0.0],
-            ],
-            columns=cls.test_columns,
-        )
-
-    def setUp(self):
-        """Set up test case fixtures."""
-        super().setUp()
-        # Currencies for Forex tests
-        self.currency = Currency.factory(self.session, self.currency_code)
-        # Add *ALL* Listed security instances
-        Listed.from_data_frame(self.session, self.securities_dataframe)
-
-    def test___init__(self):
-        """Initialization."""
-        # Get AAPL Inc instance form committed instances. Don't create this in
-        # `setUp` as this risk mix-ups in the child test classes.
-        index = Index.factory(self.session, self.name, self.ticker, self.currency_code)
-        # Test for AAPL Inc.
-        index_eod = IndexEOD(
-            index,
-            date_stamp=datetime.date.today(),
-            open=1.0,
-            close=2.0,
-            high=3.0,
-            low=4.0,
-            adjusted_close=5.0,
-            volume=6.0,
-        )
-        self.session.add(index_eod)
-        self.assertIsInstance(index_eod, IndexEOD)
-        # test the inherited Asset backref
-        self.assertEqual(index_eod.base_obj, index)
-        self.assertEqual(index_eod.date_stamp, datetime.date.today())
-        self.assertEqual(index_eod._close, index_eod._close)
-        self.assertEqual(index_eod._open, 1.0)
-        self.assertEqual(index_eod._close, 2.0)
-        self.assertEqual(index_eod._high, 3.0)
-        self.assertEqual(index_eod._low, 4.0)
-        self.assertEqual(index_eod._adjusted_close, 5.0)
-        self.assertEqual(index_eod._volume, 6.0)
-
-        # Test polymorphism functionality by query of the superclass
-        # TimeSeriesBase which should produce a ListedEOD polymorphic instance
-        instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance.class_name, "IndexEOD")
-        self.assertEqual(instance._discriminator, "index_eod")
-        self.assertEqual(index_eod, instance)
-
-        # Test Forex._eod_series <-> IndexEOD.index relationship
-        self.assertEqual(index._series[0], index_eod)
-        self.assertEqual(index_eod.index, index)
-
-        # Test that `ListedEquity._eod_series` lists purely `ListedEOD`
-        # instances and Forex._eod_series lists purely IndexEOD instances. This
-        # requires the addition of a `Listed` in addition to the `ListedEOD`.
-        self.assertEqual(len(index._series), 1)
-        listed = Listed.factory(self.session, isin=self.isin)
-        listed_eod = ListedEOD(
-            listed,
-            date_stamp=datetime.date.today(),
-            open=1.0,
-            close=2.0,
-            high=3.0,
-            low=4.0,
-            adjusted_close=5.0,
-            volume=6.0,
-        )
-        self.session.add(listed_eod)
-        # (again) Test Forex._eod_series <-> IndexEOD.index relationship
-        self.assertEqual(index._series[0], index_eod)
-        self.assertEqual(index_eod.index, index)
-        # Test Listed._eod_series <-> ListedEOD.listed relationship
-        self.assertEqual(listed_eod.listed, listed)
-        # There should now be two time TimeSeriesBase instances
-        self.assertEqual(len(index._series), 1)
-        self.assertEqual(len(listed._series), 1)
-        # Test equivalence of the TimeSeriesBase._series parent attribute
-
+    pass
 
 class TestListedEOD(TestTradeEOD):
+
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = ListedEOD
+        # Listed argument fixtures
+        cls.isin = "US88579Y1010"
+        cls.ticker = "ABC"
+        cls.status = "listed"  # Must be listed to be updatable
+        # Exchange
+        cls.mic = "XNYS"
+        # Time series test data
+        test_csv = (
+            "date_stamp,adjusted_close,close,high,low,open,volume,isin\n"
+            f"2020-12-01,123.0,123.1,123.2,123.3,123.4,1000,{cls.isin}\n"
+            f"2020-12-02,124.0,124.1,124.2,124.3,124.4,1001,{cls.isin}\n"
+            f"2020-12-03,125.0,125.1,125.2,125.3,125.4,1002,{cls.isin}\n"
+        )
+        # Convert String into StringIO
+        test_df = pd.read_csv(StringIO(test_csv))
+        # Convert date_stamp to pandas datetime
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        cls.test_df = test_df
 
     def setUp(self):
         """Set up test case fixtures."""
         super().setUp()
-        # Add *ALL* Listed security instances
-        Listed.from_data_frame(self.session, self.securities_dataframe)
-        # Securities asset_base instances list
-        self.securities_list = self.session.query(Listed).all()
-        # Test data
-        self.date = datetime.datetime.strptime("2020-12-31", "%Y-%m-%d").date()
-        # Test data
-        test_csv = (
-            "date_stamp,adjusted_close,close,high,low,open,volume,isin\n"
-            "2020-12-31,130.3872,132.69,134.74,131.72,134.08,99116600,US0378331005\n"
-            "2020-12-31,201.8414,214.58,214.93,210.78,211.25,2610900,US5801351017\n"
-            "2020-12-31,51.851674,54.600,55.110,54.030,54.920,112700,ZAE000027108\n"
-        )
-        test_io = StringIO(test_csv)   # Convert String into StringIO
-        test_df = pd.read_csv(test_io)
-        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
-        self.test_df = test_df
-
-    def test___init__(self):
-        """Initialization."""
-        # Get AAPL Inc instance form committed instances. Don't create this in
-        # `setUp` as this risk mix-ups in the child test classes.
-        listed = Listed.factory(self.session, isin=self.isin)
-        # Test for AAPL Inc.
-        listed_eod = ListedEOD(
-            listed,
-            date_stamp=datetime.date.today(),
-            open=1.0,
-            close=2.0,
-            high=3.0,
-            low=4.0,
-            adjusted_close=5.0,
-            volume=6.0,
-        )
-        self.session.add(listed_eod)
-        self.assertIsInstance(listed_eod, ListedEOD)
-        # test the inherited Asset backref
-        self.assertEqual(listed_eod.base_obj, listed)
-        self.assertEqual(listed_eod.date_stamp, datetime.date.today())
-        self.assertEqual(listed_eod._close, listed_eod._close)
-        self.assertEqual(listed_eod._open, 1.0)
-        self.assertEqual(listed_eod._close, 2.0)
-        self.assertEqual(listed_eod._high, 3.0)
-        self.assertEqual(listed_eod._low, 4.0)
-        self.assertEqual(listed_eod._adjusted_close, 5.0)
-        self.assertEqual(listed_eod._volume, 6.0)
-
-        # Test polymorphism functionality by query of the superclass
-        # TimeSeriesBase which should produce a ListedEOD polymorphic instance
-        instance = self.session.query(TimeSeriesBase).one()
-        self.assertEqual(instance.class_name, "ListedEOD")
-        self.assertEqual(instance._discriminator, "listed_eod")
-        self.assertEqual(listed_eod, instance)
-
-        # Test Listed._eod_series <-> ListedEOD.listed relationship
-        self.assertEqual(listed._series[0], listed_eod)
-        self.assertEqual(listed._eod_series[0], listed_eod)
-        self.assertEqual(listed_eod.listed, listed)
-
-    def test_session_commit(self):
-        """Committing to the database."""
-        # Get AAPL Inc instance form committed instances. Don't create this in
-        # `setUp` as this risk mix-ups in the child test classes.
-        listed = Listed.factory(self.session, isin=self.isin)
-        # Test for AAPL Inc.
-        ts_item = ListedEOD(
-            listed,
-            date_stamp=datetime.date.today(),
-            open=1.0,
-            close=2.0,
-            high=3.0,
-            low=4.0,
-            adjusted_close=5.0,
-            volume=6.0,
-        )
-        self.session.add(ts_item)
-        self.session.commit()
-        self.assertEqual(ts_item.base_obj, listed)
+        # US Domicile
+        self.domicile = Domicile.factory(self.session, "US")
+        self.exchange = Exchange.factory(self.session, self.mic)
 
     def test_data_frame(self):
-        """To and from dataframe."""
-        test_df = self.test_df
-        # Methods tested
-        df = self.feed.get_eod(self.securities_list, self.date, self.date)
-        ListedEOD.from_data_frame(self.session, Listed, data_frame=df)
-        df = ListedEOD.to_data_frame(self.session, Listed)
-        # Do not test for 'adjusted_close' as it changes
-        test_df.drop(columns="adjusted_close", inplace=True)
-        df.drop(columns="adjusted_close", inplace=True)
-        # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values('isin').sort_index(axis='columns')
-        df = df.sort_values('isin').sort_index(axis='columns')
-        # Reset indices for test
-        test_df.reset_index(drop=True, inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        # Test
-        pd.testing.assert_frame_equal(test_df, df)
+        """Test from and to a pandas trade time-series DataFrame.
 
-    def test_update_all(self):
-        """Update/create all the objects in the asset_base session."""
-        test_df = self.test_df
-        # Methods tested
-        ListedEOD.update_all(self.session, self.feed.get_eod)
+        Its or meaningful to test ths at this level as TradeEOD is rich in data
+        fields and testing at parent levels would be less effective and testing
+        at child levels would be more complex. So a ``Share`` test seems right.
+        """
+        # Create an minimal args Listed and a time series instance
+        listed = Listed(self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status)
+        self.session.add(listed)
+        self.session.flush()
+        # Create time series items from test DataFrame
+        ListedEOD.from_data_frame(self.session, Listed, data_frame=self.test_df)
+        # Query the listed back them back
+        listed = self.session.query(Asset).one()
+        # Get all time series items back
         df = ListedEOD.to_data_frame(self.session, Listed)
-        # Test date range
-        df = df[df.date_stamp.dt.date == self.date]
-        # Do not test for 'adjusted_close' as it changes
-        test_df.drop(columns="adjusted_close", inplace=True)
-        df.drop(columns="adjusted_close", inplace=True)
-        # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values('isin').sort_index(axis='columns')
-        df = df.sort_values('isin').sort_index(axis='columns')
-        # Reset indices for test
-        test_df.reset_index(drop=True, inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        # Test
-        pd.testing.assert_frame_equal(test_df, df)
-
+        # Test DataFrames
+        pd.testing.assert_frame_equal(df.sort_index(axis=1), self.test_df.sort_index(axis=1))
 
     def test_0_dump(self):
         """Dump all class instances and their time series data to disk."""

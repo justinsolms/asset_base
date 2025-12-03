@@ -171,15 +171,12 @@ class TimeSeriesBase(Base):
 
         data_table = data_frame
 
-        # Warn of non-uniqueness by date_stamp and KEY_CODE_LABEL then drop
-        # duplicates if any found (keeping the first duplicate instance in every
-        # case)
+        # Check for non-uniqueness by date_stamp and KEY_CODE_LABEL
         if data_table.duplicated(subset=["date_stamp", asset_class.KEY_CODE_LABEL]).any():
-            logger.warning(
+            raise ValueError(
                 f"Duplicate rows found in {cls.class_name} data for "
                 f"date_stamp and {asset_class.KEY_CODE_LABEL}. Duplicates will be removed."
             )
-        data_frame.drop_duplicates(["date_stamp", asset_class.KEY_CODE_LABEL], inplace=True)
 
         # Guarantee date ranking of the data
         data_table.sort_values(by="date_stamp")
@@ -315,7 +312,7 @@ class TimeSeriesBase(Base):
         # SQLAlchemy with the SQLite backend can only store `None` for DateTime
         # columns. So we must convert any `None` back to `np.nan` for proper
         # pandas DataFrame representation.
-        data_table.replace({None: np.nan}, inplace=True)
+        instance_table.replace({None: np.nan}, inplace=True)
 
         # Join in the `id` column. Only for time series instances (left
         # join).
