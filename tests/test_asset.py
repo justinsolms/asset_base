@@ -540,9 +540,9 @@ class TestListed(TestShare):
         """The time_series to_dict method is augmented with extra items."""
         data = item.to_dict()
         data.update(
-            isin=item.base_obj.isin,
-            ticker=item.base_obj.ticker,
-            mic=item.base_obj.exchange.mic,
+            isin=item._base_obj.isin,
+            ticker=item._base_obj.ticker,
+            mic=item._base_obj.exchange.mic,
         )
         return data
 
@@ -887,12 +887,12 @@ class TestListed(TestShare):
         )
 
     def test_key_code_id_table(self):
-        """A table of all instance's ``Common.id`` against ``key_code``."""
+        """A table of all instance's ``Common._id`` against ``key_code``."""
         # Insert all securities meta-data (for all securities)
         Listed.update_all(self.session, self.get_meta_method)
         instances_list = self.session.query(Listed).all()
         test_df = pd.DataFrame(
-            [(item.id, item.key_code) for item in instances_list],
+            [(item._id, item.key_code) for item in instances_list],
             columns=["id", "isin"],
         )
         df = Listed.key_code_id_table(self.session)

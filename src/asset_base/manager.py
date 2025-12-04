@@ -53,7 +53,7 @@ is why the relationships and hierarchies matter.
 
 It is part of the To-Do list to bring natural entities (natural persons) into
 this view. However, it may be practical to keep them in a separate schemas with
-the ``Asset.id``'s being the glue. Such a scheme is used with another database
+the ``Asset._id``'s being the glue. Such a scheme is used with another database
 module, the fund ``submissions``. module.
 
 See also
@@ -135,7 +135,7 @@ def substitute_security_labels(data_frame, identifier, inplace=False, labels_onl
     """
     # Pick column label identifier.
     if identifier == "id":
-        columns = [s.id for s in data_frame.columns]
+        columns = [s._id for s in data_frame.columns]
     elif identifier == "identity_code":
         # Translation of column id to codes.
         columns = [s.identity_code for s in data_frame.columns]
@@ -497,7 +497,7 @@ class ManagerBase(object):
         Parameters
         ----------
         id : list
-            A list if database session `Asset.id` id numbers of the required
+            A list if database session `Asset._id` id numbers of the required
             database assets. See `.Asset`.
 
         Return
@@ -508,8 +508,8 @@ class ManagerBase(object):
         """
         if isinstance(id, list):
             # Get the list of matching funds and construct a new list.
-            entities = self.session.query(Asset).filter(Asset.id.in_(id))
-            return dict([(asset.id, asset) for asset in entities])
+            entities = self.session.query(Asset).filter(Asset._id.in_(id))
+            return dict([(asset._id, asset) for asset in entities])
         else:
             raise ValueError(
                 "Argument `id` must be a list of asset id numbers."
@@ -677,7 +677,7 @@ class ManagerBase(object):
         if identifier == "asset":
             id_dict = {}
         elif identifier == "id":
-            id_dict = {asset: asset.id for asset in asset_list}
+            id_dict = {asset: asset._id for asset in asset_list}
         elif identifier == "isin":
             id_dict = {asset: asset.isin for asset in asset_list}
         elif identifier == "ticker":

@@ -36,6 +36,7 @@ from .time_series import (
     ForexEOD,
     IndexEOD,
     ListedEOD,
+    EODBase,
     Split,
     TimeSeriesBase,
 )
@@ -73,32 +74,21 @@ class AssetBase(Common):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("common.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("common._id"), primary_key=True)
     """ Primary key."""
 
     # Asset currency. Optional.
-    _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=False)
+    _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship(Currency)
 
     # All historical generic time-series collection ranked by date_stamp
     _series = relationship(
         TimeSeriesBase,
         order_by=TimeSeriesBase.date_stamp,
-        back_populates="base_obj",
+        back_populates="_base_obj",
         uselist=True,
         )
-    """list: EOD historical time-series collection ranked by date_stamp
-
-    A list of ``time_series.TimeSeriesBase`` instances.
-
-    Warning
-    -------
-    As this is an abstract class please do not directly use this attribute.
-
-    See also
-    --------
-    _eod_series
-    """
+    """list: EOD historical time-series collection ranked by date_stamp."""
 
     def __init__(self, name, currency, **kwargs):
         """Instance initialization."""
@@ -118,7 +108,7 @@ class AssetBase(Common):
 
     def __lt__(self, other):
         """Use primarily key ``id`` for sorting. (See Note in class docstring)."""
-        return self.id < other.id
+        return self._id < other._id
 
     @property
     def long_name(self):
@@ -141,83 +131,6 @@ class AssetBase(Common):
     def currency_ticker(self):
         """ISO 4217 3-letter currency code."""
         return self.currency.ticker
-
-    def get_eod(self):
-        """Return the EOD time series for the asset.
-
-        # TODO: Rename to `get_eod_series`
-
-        Returns
-        -------
-        pandas.DataFrame
-            An End-Of-Day (EOD) ``pandas.DataFrame`` with columns identical to
-            the keys from the ``time_series.SimpleEOD.to_dict()`` or
-            ``time_series.ListedEOD.to_dict()`` or polymorph class method.
-
-        Raises
-        ------
-        EODSeriesNoData
-            If no time series exists.
-        """
-        # FIXME: Ge this _series to work
-        trade_eod_dict_list = [s.to_dict() for s in self._series]
-        if len(trade_eod_dict_list) == 0:
-            raise EODSeriesNoData(f"Expected EOD data for {self}.")
-        data_frame = pd.DataFrame(trade_eod_dict_list)
-        data_frame["date_stamp"] = pd.to_datetime(data_frame["date_stamp"])
-        data_frame.set_index("date_stamp", inplace=True)
-        data_frame.sort_index(inplace=True)  # Assure ascending
-        data_frame.name = self
-
-        return data_frame
-
-    def _get_last_eod(self):
-        """Helper method.
-
-        Raises
-        ------
-        EODSeriesNoData
-            If no time series exists.
-        """
-        try:
-            # FIXME: Ge this _series to work
-            last_eod = self._series[-1]
-        except IndexError:
-            raise EODSeriesNoData(f"Expected EOD data for {self}.")
-
-        return last_eod
-
-    def get_last_eod(self):
-        """Return the EOD last date's, data dict, for the asset.
-
-        Returns
-        -------
-        dict
-            An End-Of-Day (EOD) price data dictionary with keys from the
-            ``time_series.ListedEOD.to_dict()`` method.
-
-        Raises
-        ------
-        EODSeriesNoData
-            If no time series exists.
-        """
-        return self._get_last_eod().to_dict()
-
-    def get_last_eod_date(self):
-        """Return the EOD last date for the listed share.
-
-        Returns
-        -------
-        datetime.date or None
-            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
-            time series. Returns `None` if no data series exists.
-        """
-        try:
-            last_date = self._get_last_eod().date_stamp
-        except EODSeriesNoData:
-            last_date = None
-
-        return last_date
 
 
 class Asset(AssetBase):
@@ -312,13 +225,13 @@ class Asset(AssetBase):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("asset_base.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("asset_base._id"), primary_key=True)
     """ Primary key."""
 
     # Entity owns Asset. Entity has a reference list to many owned Asset named
     # `asset_list`
     # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
-    _owner_id = Column(Integer, ForeignKey("entity.id"), nullable=True)
+    _owner_id = Column(Integer, ForeignKey("entity._id"), nullable=True)
     owner = relationship("Entity", backref="asset_list", foreign_keys=[_owner_id])
 
     # Price quote in cents or units. Strictly convert all prices to currency
@@ -355,6 +268,11 @@ class Asset(AssetBase):
             )
 
         return msg
+
+    @property
+    def _eod_series(self):
+        """list: EOD historical time-series collection ranked by date_stamp."""
+        return [s for s in self._series if isinstance(s, EODBase)]
 
     @property
     def long_name(self):
@@ -404,6 +322,53 @@ class Asset(AssetBase):
         """
 
         return self._asset_class
+
+    def get_eod(self):
+        """Return the EOD time series for the asset.
+
+        # TODO: Rename to `get_eod_series`
+
+        Returns
+        -------
+        pandas.DataFrame
+            An End-Of-Day (EOD) ``pandas.DataFrame`` with columns identical to
+            the keys from the ``time_series.SimpleEOD.to_dict()`` or
+            ``time_series.ListedEOD.to_dict()`` or polymorph class method.
+
+        Raises
+        ------
+        EODSeriesNoData
+            If no time series exists.
+        """
+        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
+        if len(trade_eod_dict_list) == 0:
+            raise EODSeriesNoData(f"Expected EOD data for {self}.")
+        data_frame = pd.DataFrame(trade_eod_dict_list)
+        data_frame["date_stamp"] = pd.to_datetime(data_frame["date_stamp"])
+        data_frame.set_index("date_stamp", inplace=True)
+        data_frame.sort_index(inplace=True)  # Assure ascending
+        data_frame.name = self
+
+        return data_frame
+
+    def get_last_eod(self):
+        """Return the last EOD for the asset.
+
+        Returns
+        -------
+        .time_series.EODBase or polymorph child class
+            The last ``.time_series.EODBase`` (or child class) time series
+            instance.
+
+        Raises
+        ------
+        EODSeriesNoData
+            If no time series exists.
+        """
+        if len(self._eod_series) == 0:
+            raise EODSeriesNoData(f"Expected EOD data for {self}.")
+        else:
+            return self._eod_series[-1]
 
     @classmethod
     def factory(cls, session, asset_name, currency_code, create=True, **kwargs):
@@ -506,7 +471,7 @@ class Cash(Asset):
     __tablename__ = "cash"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey("asset.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("asset._id"), primary_key=True)
 
     KEY_CODE_LABEL = "asset_currency"
     """str: The name to attach to the ``key_code`` attribute (@property method).
@@ -704,7 +669,7 @@ class Cash(Asset):
         if identifier == "asset":
             series.name = self
         elif identifier == "id":
-            series.name = self.id
+            series.name = self._id
         elif identifier == "ticker":
             series.name = self.ticker
         elif identifier == "identity_code":
@@ -767,7 +732,7 @@ class Forex(Cash):
     __tablename__ = "forex"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey("cash.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("cash._id"), primary_key=True)
 
     KEY_CODE_LABEL = "ticker"
     """str: The name to attach to the ``key_code`` attribute (@property method).
@@ -780,7 +745,7 @@ class Forex(Cash):
     _name_appendix = "Forex"
 
     # Priced currency, or ``base_currency``
-    _currency_id2 = Column(Integer, ForeignKey("currency.id"), nullable=False)
+    _currency_id2 = Column(Integer, ForeignKey("currency._id"), nullable=False)
     base_currency = relationship(Currency, foreign_keys=[_currency_id2])
 
     # Currency ticker is redundant information, but very useful and inexpensive
@@ -1090,14 +1055,14 @@ class Share(Asset):
     __tablename__ = "share"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey("asset.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("asset._id"), primary_key=True)
     """ Primary key."""
 
     # TODO: Here we would add share unitization and ownership relationships
 
     # Issuer issues Share. Issuer has a reference list to many issued Share
     # named `share_list`
-    _issuer_id = Column(Integer, ForeignKey("issuer.id"), nullable=False)
+    _issuer_id = Column(Integer, ForeignKey("issuer._id"), nullable=False)
     issuer = relationship("Issuer", backref="share_list")
 
     # Number of share units issued byu the Issuer
@@ -1292,12 +1257,12 @@ class Listed(Share):
     __tablename__ = "listed"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey("share.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("share._id"), primary_key=True)
     """ Primary key."""
 
     # Exchange lists Listed. Exchange has a reference list to many issued Listed
     # named `securities_list`
-    _exchange_id = Column(Integer, ForeignKey("exchange.id"), nullable=False)
+    _exchange_id = Column(Integer, ForeignKey("exchange._id"), nullable=False)
     exchange = relationship("Exchange", backref="securities_list")
 
     # Ticker on the listing exchange.
@@ -1543,7 +1508,7 @@ class Listed(Share):
                     session.query(cls)
                     .filter(
                         # Must use explicit join in this line!
-                        cls._exchange_id == Exchange.id
+                        cls._exchange_id == Exchange._id
                     )
                     .filter(Exchange.mic == mic, cls.ticker == ticker)
                     .one()
@@ -1787,7 +1752,7 @@ class ListedEquity(Listed):
     # Major asset class constant. Possibly be overridden by child classes.
     _asset_class = "equity"
 
-    id = Column(Integer, ForeignKey("listed.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("listed._id"), primary_key=True)
     """ Primary key."""
 
     # Industry classification
@@ -1801,7 +1766,7 @@ class ListedEquity(Listed):
     # Industry classification foreign keys. This is backref'ed as
     # industry_class_icb
     _industry_class_icb_id = Column(
-        Integer, ForeignKey("industry_class_icb.id"), nullable=True
+        Integer, ForeignKey("industry_class_icb._id"), nullable=True
     )
 
     #  A short class name for use in naming
@@ -1841,6 +1806,14 @@ class ListedEquity(Listed):
         return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
             self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
         )
+
+    @property
+    def _dividend_series(self):
+        return [ts for ts in self._series if isinstance(ts, Dividend)]
+
+    @property
+    def _split_series(self):
+        return [ts for ts in self._series if isinstance(ts, Split)]
 
     @property
     def industry_class_instance(self):
@@ -2035,39 +2008,19 @@ class ListedEquity(Listed):
 
         Returns
         -------
-        dict
-            A Dividend price data dictionary with keys from the
-            ``time_series.Dividend.to_dict()`` method.
+        .time_series.Dividend or polymorph child class
+            The last ``.time_series.Dividend`` (or child class) time series
+            instance.
 
         Raises
         ------
         DividendSeriesNoData
             If no time series exists.
         """
-        # Note that _dividend_series is ordered by Dividend.last_date
-        try:
-            last_dividend = list(self._dividend_series)[-1]
-        except IndexError:
+        if len(self._dividend_series) == 0:
             raise DividendSeriesNoData(f"Expected dividend data for {self}")
-
-        return last_dividend.to_dict()
-
-    def get_last_dividend_date(self):
-        """Return the dividend last date for the listed asset.
-
-        Returns
-        -------
-        datetime.date or None
-            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
-            time series. Returns `None` if no data series exists.
-        """
-        try:
-            last_dividend = self._dividend_series[-1]
-            last_date = last_dividend.date_stamp
-        except IndexError:
-            last_date = None
-
-        return last_date
+        else:
+            return self._dividend_series[-1]
 
     def get_split_series(self):
         """Return the splits data series for the security.
@@ -2099,38 +2052,19 @@ class ListedEquity(Listed):
 
         Returns
         -------
-        dict
-            A Split price data dictionary with keys from the
-            ``time_series.Split.to_dict()`` method.
+        .time_series.Split or polymorph child class
+            The last ``.time_series.Split`` (or child class) time series
+            instance.
+
         Raises
         ------
         SplitSeriesNoData
             If no time series exists.
         """
-        # Note that _split_series is ordered by Split.last_date
-        try:
-            last_split = list(self._split_series)[-1]
-        except IndexError:
+        if len(self._split_series) == 0:
             raise SplitSeriesNoData(f"Expected split data for {self}")
-
-        return last_split.to_dict()
-
-    def get_last_split_date(self):
-        """Return the split last date for the listed asset.
-
-        Returns
-        -------
-        datetime.date or None
-            Last date for the ``.time_series.TimeSeriesBase`` (or child class)
-            time series. Returns `None` if no data series exists.
-        """
-        try:
-            last_split = self._split_series[-1]
-            last_date = last_split.date_stamp
-        except IndexError:
-            last_date = None
-
-        return last_date
+        else:
+            return self._split_series[-1]
 
     def time_series(
         self,
@@ -2337,7 +2271,7 @@ class ListedEquity(Listed):
         if identifier == "asset":
             result.name = self
         elif identifier == "id":
-            result.name = self.id
+            result.name = self._id
         elif identifier == "ticker":
             result.name = self.ticker
         elif identifier == "isin":
@@ -2412,7 +2346,7 @@ class Index(AssetBase):
     __tablename__ = "index"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey("asset_base.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("asset_base._id"), primary_key=True)
 
     KEY_CODE_LABEL = "ticker"
     """str: The name to attach to the ``key_code`` attribute (@property method).
@@ -2621,11 +2555,11 @@ class ExchangeTradeFund(ListedEquity):
     __tablename__ = "exchange_traded_fund"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
 
-    id = Column(Integer, ForeignKey("listed_equity.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("listed_equity._id"), primary_key=True)
     """ Primary key."""
 
     # The index, if any, that the ETF attempts to replicate.
-    index = Column(Integer, ForeignKey("index.id"), nullable=True)
+    index = Column(Integer, ForeignKey("index._id"), nullable=True)
 
     # HACK: These are are workarounds for not having data for all the underlying
     # securities for our ETFs.

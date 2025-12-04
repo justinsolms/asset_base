@@ -114,7 +114,7 @@ class Currency(Base):
     __tablename__ = "currency"
     __table_args__ = (UniqueConstraint("ticker"),)
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    _id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
 
     # Data.
@@ -331,11 +331,11 @@ class Domicile(Base):
 
     __tablename__ = "domicile"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    _id = Column(Integer, primary_key=True, autoincrement=True)
     """ int : Primary key."""
 
     # Official currency
-    _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=False)
+    _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship("Currency")
 
     # Data.
@@ -579,12 +579,12 @@ class Entity(Common):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("common.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("common._id"), primary_key=True)
     """ Primary key."""
 
     # Entity's domicile. Domicile has a reference list to many domiciled Entity
     # named `entity_list`
-    _domicile_id = Column(Integer, ForeignKey("domicile.id"), nullable=False)
+    _domicile_id = Column(Integer, ForeignKey("domicile._id"), nullable=False)
     domicile = relationship("Domicile", backref="entity_list")
 
     def __init__(self, name, domicile, **kwargs):
@@ -662,9 +662,9 @@ class Entity(Common):
             Build the dictionary as follows::
 
                 children = {
-                    'entity1.id': weight1,
+                    'entity1._id': weight1,
                     ...,
-                    `entityN.id`: weightN,
+                    `entityN._id`: weightN,
                 }
 
         create : bool, optional
@@ -722,7 +722,7 @@ class Entity(Common):
             for id, value in children.items():
                 # Query (find) and add.
                 try:
-                    item = session.query(Entity).filter(Entity.id == id).one()
+                    item = session.query(Entity).filter(Entity._id == id).one()
                 except NoResultFound:
                     raise FactoryError("Child Entity, id=%i, not found." % id)
                 else:
@@ -762,7 +762,7 @@ class Institution(Entity):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("entity.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("entity._id"), primary_key=True)
     """ Primary key."""
 
     def __init__(self, name, domicile, **kwargs):
@@ -791,7 +791,7 @@ class Issuer(Institution):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("institution.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("institution._id"), primary_key=True)
     """ Primary key."""
 
     # Collection of the issued Model instances.
@@ -846,7 +846,7 @@ class Exchange(Institution):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("institution.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("institution._id"), primary_key=True)
     """ Primary key."""
 
     # List of listed Shares on the Exchange

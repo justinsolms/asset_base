@@ -53,9 +53,9 @@ class TestCurrency(unittest.TestCase):
         )
         self.assertIsInstance(test_obj, Currency)
         self.session.add(test_obj)
-        self.assertIsNone(test_obj.id)
+        self.assertIsNone(test_obj._id)
         self.session.flush()
-        self.assertIsNotNone(test_obj.id)
+        self.assertIsNotNone(test_obj._id)
         obj = self.session.query(Currency).one()
         self.assertEqual(test_obj, obj)
         self.assertEqual(obj.ticker, self.ticker)
@@ -390,11 +390,11 @@ class TestEntity(unittest.TestCase):
         assert True  # FIXME: We don't test this yet.
 
     def test_key_code_id_table(self):
-        """A table of all instance's ``Common.id`` against ``key_code``."""
+        """A table of all instance's ``Common._id`` against ``key_code``."""
         Entity.factory(self.session, self.name, self.country_code)
         instances_list = self.session.query(Entity).all()
         test_df = pd.DataFrame(
-            [(item.id, item.key_code) for item in instances_list],
+            [(item._id, item.key_code) for item in instances_list],
             columns=["id", "key_code"],
         )
         df = Entity.key_code_id_table(self.session)

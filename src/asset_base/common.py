@@ -186,10 +186,10 @@ class Common(Base):
         "polymorphic_on": _discriminator,
     }
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    _id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
 
-    __table_args__ = (UniqueConstraint("_discriminator", "id"),)
+    __table_args__ = (UniqueConstraint("_discriminator", "_id"),)
 
     name = Column(String(256), nullable=False)
     """str: Entity name."""
@@ -215,11 +215,11 @@ class Common(Base):
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return "{} - {}".format(self.id, self.name)
+        return "{} - {}".format(self._id, self.name)
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", id={!r})'.format(self.__class__.__name__, self.name, self.id)
+        return '{}(name="{}", id={!r})'.format(self.__class__.__name__, self.name, self._id)
 
     @property
     def class_name(self):
@@ -229,19 +229,19 @@ class Common(Base):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return "{}.{}".format(self.id, self.name)
+        return "{}.{}".format(self._id, self.name)
 
     @property
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return "{}.{}".format(self.id, self.name)
+        return "{}.{}".format(self._id, self.name)
 
     @classmethod
     def key_code_id_table(cls, session):
-        """A table of all instance's ``Common.id`` against ``key_code``.
+        """A table of all instance's ``Common._id`` against ``key_code``.
 
         This table is useful for translating any other party's unique entity
-        code keys to ``Common.id`` numbers, especially if the other party names
+        code keys to ``Common._id`` numbers, especially if the other party names
         their column the same as the ``entity_code_name`` attribute
 
         Returns
@@ -249,14 +249,14 @@ class Common(Base):
         pandas.DataFrame
             One row per instance in the database with two columns:
             - The first column shall be named ``id`` and contain the instance's
-              ``Common.id`` number.
+              ``Common._id`` number.
             - The second column shall be named after the class's
               ``KEY_CODE_LABEL`` attribute and contain the instance's
               ``key_code`` property value.
         """
         instances_list = session.query(cls).all()
         return pd.DataFrame(
-            [(item.id, item.key_code) for item in instances_list],
+            [(item._id, item.key_code) for item in instances_list],
             columns=["id", cls.KEY_CODE_LABEL],
         )
 

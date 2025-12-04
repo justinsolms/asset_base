@@ -97,7 +97,7 @@ class IndustryClassICB(Base):
 
     __tablename__ = "industry_class_icb"
 
-    id = Column(Integer, primary_key=True)
+    _id = Column(Integer, primary_key=True)
     """ Primary key."""
 
     # Collection of ListedEquity instances having this instance of

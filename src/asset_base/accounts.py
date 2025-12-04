@@ -21,7 +21,7 @@ class CashAccount(Cash):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("cash.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("cash._id"), primary_key=True)
 
 
 class SettlementAccount(Cash):
@@ -34,7 +34,7 @@ class SettlementAccount(Cash):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("cash.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("cash._id"), primary_key=True)
 
     @property
     def identity_code(self):

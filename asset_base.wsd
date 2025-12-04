@@ -116,10 +116,10 @@ package "Time Series" {
 
     class TimeSeriesBase {
         +date_stamp : date
-        +base_obj : AssetBase
+        +_base_obj : AssetBase
     }
 
-    class SimpleEOD {
+    class EODBase {
         +price : float
     }
 
@@ -154,8 +154,8 @@ package "Time Series" {
     }
 
     ' Time Series
-    TimeSeriesBase <|-- SimpleEOD
-    SimpleEOD <|-- TradeEOD
+    TimeSeriesBase <|-- EODBase
+    EODBase <|-- TradeEOD
     TradeEOD <|-- ListedEOD
     TradeEOD <|-- ForexEOD
     TradeEOD <|-- IndexEOD
