@@ -151,7 +151,8 @@ class Dump(_Feed):
         Parameters
         ----------
         dump_dict : dict of pandas.DataFrame
-            The key shall be the CSV file prefix
+            A dict of pandas DataFrames to dump. The key shall be used to
+            construct the file name as `<key>.pandas.dataframe.pkl`.
         """
         for key, item in list(dump_dict.items()):
             file_name = f"{key}.pandas.dataframe.pkl"
@@ -159,15 +160,16 @@ class Dump(_Feed):
             item.to_pickle(path)
             logger.info(f"Dumped class {key} to {path}")
 
-    def read(self, name_list):
+    def read(self, key_name_list):
         """Read a dict of ``pandas.DataFrame`` from CSV files.
 
         The file prefix is the key.
 
         Parameters
         ----------
-        name_list : list
-            Names of CSV file name prefixes.
+        key_name_list : list of str
+            A set or subset list object of the strings used for dict keys in the
+            `write()` method.
 
         Returns
         -------
@@ -175,7 +177,7 @@ class Dump(_Feed):
             The key shall be the CSV file name prefix
         """
         dump_dict = dict()
-        for name in name_list:
+        for name in key_name_list:
             file_name = f"{name}.pandas.dataframe.pkl"
             path = self._path(file_name)
             dump_dict[name] = pd.read_pickle(path)
@@ -209,22 +211,21 @@ class Dump(_Feed):
             os.remove(path)
             logger.debug("Deleted dump file %s", path)
 
-    def exists(self, class_to_dump):
-        """Verify that a dump file exits for a dumped class.
-
-        Warning
-        -------
-        An important use is to verify that dump files were created before
-        tearing down a database.
+    def exists(self, key_name):
+        """Check if dump file exists for the given key_name.
 
         Parameters
         ----------
-        class_to_dump : .asset.Asset or child class
-            The class for which the dump files existence must be verified.
-        """
-        file_name = f"{class_to_dump.class_name}.pandas.dataframe.pkl"
-        path = self._path(file_name)
+        key_name : str
+            The string used for dict key in the `write()` method.
 
+        Returns
+        -------
+        bool
+            True if dump file exists for the class.
+        """
+        file_name = f"{key_name}.pandas.dataframe.pkl"
+        path = self._path(file_name)
         return os.path.exists(path)
 
 

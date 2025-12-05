@@ -1479,7 +1479,6 @@ class TestListedEquity(TestListed):
         date_to_str(df)  # Convert Timestamps
         # Test
         # FIXME: /home/justin/Documents/Develop/asset_base/tests/test_asset.py:1476: FutureWarning: Mismatched null-like values nan and None found. In a future version, pandas equality-testing functions (e.g. assert_frame_equal) will consider these not-matching and raise. pd.testing.assert_frame_equal(test_df, df)
-        import ipdb; ipdb.set_trace()
         pd.testing.assert_frame_equal(test_df, df)
 
         # Test splits

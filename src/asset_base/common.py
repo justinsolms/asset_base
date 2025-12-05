@@ -28,7 +28,11 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 Base = declarative_base()
 
 class _Session(ABC):
-    """Set up and destroy a database and session.
+    """Set up and destroy a database and session with proper resource management.
+
+    This class provides a context manager interface for safe database session handling.
+    It ensures proper cleanup of database resources and provides methods for session
+    recreation when needed.
 
     Parameters
     ----------
@@ -39,131 +43,244 @@ class _Session(ABC):
         If True, the database will be dropped upon destruction. This is useful
         for testing purposes to ensure a clean state for each test run. If False,
         the database will not be dropped, allowing it to persist across runs.
+    echo : bool, optional
+        If True, enables SQL statement logging. Default is False.
 
+    Examples
+    --------
+    >>> # Preferred usage with context manager
+    >>> with TestSession() as session_manager:
+    >>>     session = session_manager.session
+    >>>     # Use session...
+    >>> # Resources automatically cleaned up
+
+    >>> # Manual management (ensure close() is called)
+    >>> session_manager = TestSession()
+    >>> try:
+    >>>     session = session_manager.session
+    >>>     # Use session...
+    >>> finally:
+    >>>     session_manager.close()
     """
 
-    def __init__(self, url, testing):
+    def __init__(self, url, testing, echo=False):
         """Initialization."""
         self.testing = testing
         self.db_url = url
+        self.echo = echo
+        self.engine = None
+        self.session = None
+        self._closed = False
 
+        try:
+            self._initialize_database()
+        except Exception as e:
+            logger.error(f"Failed to initialize database {self.db_url}: {e}")
+            self.close()  # Cleanup on failure
+            raise
+
+    def _initialize_database(self):
+        """Initialize database engine, create database if needed, and create session."""
         # Create the SQLAlchemy ORM engine.
-        # Set echo=False to disable logging of SQL statements.
-        # Set echo=True to enable logging of SQL statements.
-        self.engine = create_engine(self.db_url, echo=False)  # No logging
+        self.engine = create_engine(self.db_url, echo=self.echo)
         logger.debug(f"Created database engine {self.db_url}")
 
-        # Create all the database tables using the declarative_base defined
-        # above.
-        if not database_exists(self.db_url):
+        # Create database if it doesn't exist (skip for in-memory SQLite)
+        if not self.db_url.startswith("sqlite:///:memory:") and not database_exists(self.db_url):
             logger.debug(f"Database {self.db_url} does not exist. Creating...")
             create_database(self.db_url)
             logger.debug(f"Created database {self.db_url}.")
         else:
-            logger.debug(f"Database {self.db_url} already exists.")
+            logger.debug(f"Database {self.db_url} ready.")
 
+        # Create all tables
         Base.metadata.create_all(self.engine)
         logger.debug(f"Ensuring all tables exist in {self.db_url}.")
 
-        # Create a new session for the database. Set autoflush=True to flush
-        # changes to the database before each query. Set autocommit=False to
-        # disable autocommit mode. This means that changes are not committed to
-        # the database until explicitly called with session.commit(). This is
-        # useful for ensuring that all changes are made in a single transaction,
-        # which can be rolled back if needed. If autoflush is set to False, you
-        # need to call session.flush() before querying the database to ensure
-        # that all changes are flushed to the database. The "autocommit" keyword
-        # is present for backwards compatibility but must remain at its default
-        # value of False.
+        # Create session
         self.session = Session(self.engine, autoflush=True, autocommit=False)
         logger.debug(f"Opened database session {self.db_url}")
 
-    def __del__(self):
-        """Destruction.
+    def __enter__(self):
+        """Context manager entry."""
+        return self
 
-        This method is called when the object is about to be destroyed. This
-        will ensure that the database session and engine are properly closed and
-        disposed of.
-
-
-        If the `testing` flag is set to True (See class testing parameter), the
-        database will be dropped to ensure a clean state for the next test run.
-        If False, the database will not be dropped, allowing it to persist
-        across runs.
-        """
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with proper cleanup."""
+        self.close()
         if self.testing:
-            logger.debug(f"Deleting database {self.db_url} because we are testing.")
-            self.close(drop=True)
-        else:
-            self.close(drop=False)
+            self.drop_database()
 
-    def close(self, drop=False):
+    def new_session(self):
+        """Create a new session, closing the current one if it exists.
+
+        This is useful when you need a fresh session after operations that
+        might have left the session in an inconsistent state.
+
+        Returns
+        -------
+        sqlalchemy.orm.Session
+            A new database session
+        """
+        if self._closed:
+            raise RuntimeError("Cannot create new session - SessionManager is closed")
+
+        if self.session:
+            self.session.close()
+
+        self.session = Session(self.engine, autoflush=True, autocommit=False)
+        logger.debug(f"Created new session for {self.db_url}")
+        return self.session
+
+    def __del__(self):
+        """Destructor - provides backup cleanup but should not be relied upon.
+
+        Warning: __del__ is unreliable in Python. Use context manager or explicit
+        close() calls instead. This is only a safety net.
+        """
+        if not self._closed:
+            logger.warning(f"SessionManager for {self.db_url} was not properly closed. "
+                         "Use context manager or explicit close() for reliable cleanup.")
+            try:
+                self.close()
+                if self.testing:
+                    self.drop_database()
+            except Exception as e:
+                logger.error(f"Error during cleanup in __del__: {e}")
+
+    def close(self):
         """Close the database session and dispose of the engine.
 
-        Parameters
-        ----------
-        drop : bool, optional
-            If True, the database will be dropped. This is useful for testing
-            purposes to ensure a clean state for the next test run. If False,
-            the database will not be dropped, allowing it to persist across runs.
-
+        This method is idempotent - it can be called multiple times safely.
+        After calling this method, the SessionManager should not be used further.
         """
-        # Delete database session and engine only if the database exists. This
-        # guard is important as the database may not exist when __del__ is
-        # called, due to previous calls to close() or when testing.
-        if not database_exists(self.db_url):
-            logger.debug(f"Database {self.db_url} does not exist. Nothing to delete.")
+        if self._closed:
+            return  # Already closed
+
+        try:
+            # Close session if it exists
+            if hasattr(self, 'session') and self.session is not None:
+                try:
+                    self.session.close()
+                    logger.debug(f"Closed session for {self.db_url}.")
+                except Exception as e:
+                    logger.error(f"Error closing session for {self.db_url}: {e}")
+                finally:
+                    self.session = None
+
+            # Dispose of engine if it exists
+            if hasattr(self, 'engine') and self.engine is not None:
+                try:
+                    self.engine.dispose()
+                    logger.debug(f"Disposed of engine for {self.db_url}.")
+                except Exception as e:
+                    logger.error(f"Error disposing engine for {self.db_url}: {e}")
+                finally:
+                    self.engine = None
+
+        finally:
+            self._closed = True
+
+    def drop_database(self):
+        """Drop the database if it exists.
+
+        Warning: This permanently destroys all data in the database.
+        Only use for testing or when you're certain you want to delete everything.
+        """
+        if self.db_url.startswith("sqlite:///:memory:"):
+            logger.debug("In-memory database will be dropped automatically.")
             return
 
-        # If the session exists, close it and dispose of the engine.
-        if hasattr(self, 'session') and self.session is not None:
-            # Close the session to release any resources it holds. This is
-            # important to ensure that the session is properly cleaned up and
-            # does not hold onto any database connections or resources. This is
-            # especially important in a testing environment where the database
-            # may be dropped and recreated frequently. Closing the session will
-            # also ensure that any pending changes are flushed to the database
-            # before the session is closed. This is important to ensure that any
-            # changes made to the database are properly saved before the session
-            # is closed.
-            self.session.close()
-            del self.session  # Delete the session attribute
-            logger.debug(f"Closed session for {self.db_url}.")
-            # Dispose of the engine to release any resources it holds.
-            self.engine.dispose()
-            del self.engine  # Delete the engine attribute
-            logger.debug(f"Disposed of engine for {self.db_url}.")
+        try:
+            if database_exists(self.db_url):
+                drop_database(self.db_url)
+                logger.debug(f"Dropped database {self.db_url}.")
+        except Exception as e:
+            logger.error(f"Error dropping database {self.db_url}: {e}")
+            raise
 
-        if drop is True:
-            # If we are not testing, just close the session and engine.
-            drop_database(self.db_url)
-            logger.debug(f"Dropped database for {self.db_url}.")
+    @property
+    def is_closed(self):
+        """Check if the session manager has been closed."""
+        return self._closed
 
 
 class TestSession(_Session):
-    """Set up an `in-memory` test database and session."""
+    """Set up an in-memory test database and session for testing.
 
-    _URL = "sqlite://"
+    This class creates a SQLite in-memory database that exists only for the
+    duration of the session. It's automatically cleaned up when the session
+    is closed, making it ideal for unit tests that need isolation.
 
-    def __init__(self):
-        # Default is testing is True
-        super().__init__(self._URL, testing=True)
+    The session is immediately available as .session attribute for use with
+    unittest setUp/tearDown patterns.
+
+    Parameters
+    ----------
+    echo : bool, optional
+        If True, enables SQL statement logging for debugging. Default is False.
+
+    Examples
+    --------
+    >>> # For unittest setUp/tearDown pattern
+    >>> def setUp(self):
+    >>>     self.test_session = TestSession()
+    >>>     self.session = self.test_session.session
+    >>>
+    >>> def tearDown(self):
+    >>>     del self.test_session  # Automatic cleanup
+    >>>
+    >>> # For fresh session when needed (e.g., after deletes)
+    >>> def test_something(self):
+    >>>     # ... do some operations ...
+    >>>     self.session = self.test_session.new_session()  # Fresh session
+    """
+
+    _URL = "sqlite://"  # In-memory SQLite database
+
+    def __init__(self, echo=False):
+        # Always testing=True for test sessions since in-memory DB is ephemeral
+        super().__init__(self._URL, testing=True, echo=echo)
 
 
 class SQLiteSession(_Session):
-    """Set up an `in-memory` test database and session."""
+    """Set up a file-based SQLite database and session.
+
+    This creates a persistent SQLite database file that survives across
+    application runs. Useful for development and production environments.
+
+    Parameters
+    ----------
+    testing : bool, optional
+        If True, creates a test database that will be dropped when closed.
+        If False (default), creates a persistent database. Default is False.
+    echo : bool, optional
+        If True, enables SQL statement logging for debugging. Default is False.
+
+    Examples
+    --------
+    >>> # Production usage - persistent database
+    >>> with SQLiteSession() as session_manager:
+    >>>     session = session_manager.session
+    >>>     # Work with persistent data...
+
+    >>> # Testing usage - temporary database
+    >>> with SQLiteSession(testing=True) as session_manager:
+    >>>     session = session_manager.session
+    >>>     # Database will be deleted on exit...
+    """
 
     _DB_NAME = "asset_base"
 
-    def __init__(self, testing=False):
+    def __init__(self, testing=False, echo=False):
         # Construct SQLite file name with path expansion for a URL
-        self._db_name = "%s.db" % self._DB_NAME
+        self._db_name = f"{self._DB_NAME}.db"
 
-        # Put files in a `cache`` folder under the `var` path scheme.
+        # Put files in a `cache` folder under the `var` path scheme.
         db_path = get_cache_path(self._db_name, testing=testing)
-        db_url = "sqlite:///" + db_path
+        db_url = f"sqlite:///{db_path}"
 
-        super().__init__(db_url, testing=testing)
+        super().__init__(db_url, testing=testing, echo=echo)
 
 
 class Common(Base):

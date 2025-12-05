@@ -278,7 +278,9 @@ class ManagerBase(object):
 
         """
         if hasattr(self, "session_obj") and self.session_obj is not None:
-            self.session_obj.close(drop=drop)
+            self.session_obj.close()
+            if drop is True:
+                self.drop_database()
             del self.session_obj
         if hasattr(self, "session"):
             # Also delete the _make_session convenience attribute
@@ -463,7 +465,7 @@ class ManagerBase(object):
         """
         for cls in self.classes_to_dump:
             # Use uninstantiated class name for logging
-            class_name = cls.class_name
+            class_name = cls.__name__
             try:
                 cls.reuse(self.session, self.dumper)
             except FileNotFoundError:

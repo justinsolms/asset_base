@@ -16,6 +16,8 @@ tables is stored as indicated by ``asset.Base.quote_units`` bool attribute
 # Allows  in type hints to use class names instead of class name strings
 from __future__ import annotations
 
+from datetime import date
+import datetime
 import sys
 import numpy as np
 import pandas as pd
@@ -95,12 +97,18 @@ class TimeSeriesBase(Base):
 
     def __init__(self, base_obj, date_stamp):
         """Instance initialization."""
+        # Type check date_stamp - must be datetime.date but not pandas.Timestamp
+        if not isinstance(date_stamp, datetime.date) or isinstance(date_stamp, pd.Timestamp):
+            raise TypeError(
+                f"The `date_stamp` must be a datetime.date instance, not "
+                f"{type(date_stamp)}. Use .date() to convert pandas.Timestamp.")
+
         self._base_obj = base_obj
         self.date_stamp = date_stamp
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        name = self.class_name
+        name = self.__class__.__name__
         date = self.date_stamp
         id_code = self._base_obj.identity_code
 
@@ -108,15 +116,11 @@ class TimeSeriesBase(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        name = self.class_name
+        name = self.__class__.__name__
         asset = self._base_obj
         date = self.date_stamp
 
         return f"{name}(asset={asset!r}, date_stamp={date})"
-
-    @property
-    def class_name(cls):
-        return cls.__class__.__name__
 
     @classmethod
     def _get_last_date(cls, security):
@@ -172,7 +176,7 @@ class TimeSeriesBase(Base):
         # Check for non-uniqueness by date_stamp and KEY_CODE_LABEL
         if data_table.duplicated(subset=["date_stamp", asset_class.KEY_CODE_LABEL]).any():
             raise ValueError(
-                f"Duplicate rows found in {cls.class_name} data for "
+                f"Duplicate rows found in {cls.__name__} data for "
                 f"date_stamp and {asset_class.KEY_CODE_LABEL}. Duplicates will be removed."
             )
 
@@ -190,48 +194,52 @@ class TimeSeriesBase(Base):
         key_code_id_table = asset_class.key_code_id_table(session)
         # Join to create a new extended instance_table with the security column.
         # Only for time series instances (left join).
-        # FIXME: Warn or raise if left and right are not congruent
+        # FIXME: Check if there are securities in data_table that are not in key_code_id_table
         data_table = data_table.merge(key_code_id_table, on=asset_class.KEY_CODE_LABEL, how="left")
         data_table.drop(columns=asset_class.KEY_CODE_LABEL, inplace=True)
-
-        instances_list = list()
         data_table.set_index(["id", "date_stamp"], inplace=True, drop=True)
-        # Iterate over all Asset polymorph instances
 
-        # Determine which, if any, security id's are present in the data.
-        id_list = data_table.index.to_frame(index=False).id.drop_duplicates().to_list()
-        # Avoid empty data edge case - with certain date ranges in a data fetch,
-        # there may be no new data to be found
-        if len(id_list) == 0:
+        # With certain date ranges in a data fetch there may be no new data
+        if data_table.empty:
             # Nothing to process so just return
             return
-        # Fetch the relevant securities
-        security_list = (
-            session.query(asset_class).filter(asset_class._id.in_(id_list)).all()
+        # Fetch the relevant .asset.Asset or polymorph instances
+        asset_id_list = data_table.index.to_frame(index=False).id.drop_duplicates().to_list()
+        asset_list = (
+            session.query(asset_class).filter(asset_class._id.in_(asset_id_list)).all()
         )
         # Add data to each security's time series' asset_class
-        for security in security_list:
+        for asset in asset_list:
             # Get the security's time series.
-            series = data_table.loc[security._id]
+            time_series_df = data_table.loc[asset._id]
             # Sort by ascending date_stamp. Use a copy (inplace=False) to avoid
             # a SettingWithCopyWarning
-            series.sort_index(inplace=True)
+            time_series_df.sort_index(inplace=True)
             # Reset date_stamp index making it a column
-            series.reset_index(inplace=True)
+            time_series_df.reset_index(inplace=True)
 
             # Bulk upsert approach: query existing records first, then bulk operations
             existing_records = session.query(cls).filter(
-                cls._asset_id == security._id,
-                cls.date_stamp.in_(series["date_stamp"].tolist())
+                cls._asset_id == asset._id,
+                cls.date_stamp.in_(time_series_df["date_stamp"].tolist())
             ).all()
 
             # Create lookup of existing records by date_stamp
             existing_by_date = {record.date_stamp: record for record in existing_records}
 
             new_instances = []
-            for _, row in series.iterrows():
-                # Convert from pandas.Timestamp to datetime.date used by SQLAlchemy
-                date_stamp = row["date_stamp"].date()
+            for _, row in time_series_df.iterrows():
+                # Convert to datetime.date - handle pandas.Timestamp and datetime.date explicitly
+                raw_date = row["date_stamp"]
+                if isinstance(raw_date, pd.Timestamp):
+                    date_stamp = raw_date.date()
+                elif isinstance(raw_date, datetime.date):
+                    date_stamp = raw_date
+                else:
+                    raise TypeError(f"Unsupported date type {type(raw_date)} for date_stamp")
+
+                # Check if record exists - we're updating or inserting
+                # accordingly (only public attrs)
                 if date_stamp in existing_by_date:
                     # Update existing record - only modify public attributes
                     existing_record = existing_by_date[date_stamp]
@@ -242,11 +250,15 @@ class TimeSeriesBase(Base):
                                 setattr(existing_record, key, value)
                 else:
                     # Create new instance for bulk insert
-                    new_instances.append(cls(base_obj=security, **row))
+                    # Convert pandas row to dict and fix date_stamp
+                    row_dict = row.to_dict()
+                    row_dict["date_stamp"] = date_stamp  # Must be type datetime.date
+                    new_instances.append(cls(base_obj=asset, **row_dict))
 
             # Bulk insert only new records
             if new_instances:
                 session.add_all(new_instances)
+            pass
 
     @classmethod
     def to_data_frame(cls, session, asset_class):
@@ -357,7 +369,7 @@ class TimeSeriesBase(Base):
         cls.from_data_frame(session, asset_class, data_frame)
 
     @classmethod
-    def dump(cls, session, dumper: Dump, asset_class):
+    def dump(cls, session, dumper: Dump, asset_class_cls):
         """Dump all class instances and their time series data to disk.
 
         The data can be re-used to re-create all class instances and the time
@@ -369,10 +381,9 @@ class TimeSeriesBase(Base):
             A session attached to the desired database.
         dumper : .financial_data.Dump
             The financial data dumper.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
+        asset_class_cls : .asset.Asset (or child class) class reference
+            The ``Asset`` class reference which which when instantiated could be
+            composed of this time-series data.
 
         See also
         --------
@@ -382,18 +393,20 @@ class TimeSeriesBase(Base):
         dump_dict = dict()
 
         # A table item for  all instances of this class
-        data_frame = cls.to_data_frame(session, asset_class)
+        data_frame = cls.to_data_frame(session, asset_class_cls)
 
         # Handle empty DataFrame case gracefully - still dump it but with a log message
         if data_frame.empty:
-            logger.info(f"No time series data found for {cls.class_name} with asset class {asset_class.__name__}. Creating empty dump file.")
+            logger.warning(
+                f"No time series data found for {cls.__name__}. "
+                "Creating empty dump file.")
 
-        dump_dict[cls.class_name] = data_frame
+        dump_dict[cls.__name__] = data_frame
         # Serialize
         dumper.write(dump_dict)
 
     @classmethod
-    def reuse(cls, session, dumper: Dump, asset_class):
+    def reuse(cls, session, dumper: Dump, asset_class_cls):
         """Reuse dumped data as a database initialization resource.
 
         Parameters
@@ -402,8 +415,9 @@ class TimeSeriesBase(Base):
             A session attached to the desired database.
         dumper : .financial_data.Dump
             The financial data dumper.
-        asset_class : .asset.Asset (or child class)
-            The ``Asset`` class which is composed of this time-series data.
+        asset_class_cls : .asset.Asset (or child class) class reference
+            The ``Asset`` class reference which which when instantiated could be
+            composed of this time-series data.
 
         Warning
         -------
@@ -418,9 +432,18 @@ class TimeSeriesBase(Base):
 
         """
         # Uses dict data structures. See the docs.
-        class_name = cls.class_name
-        data_frame_dict = dumper.read(name_list=[class_name])
-        cls.from_data_frame(session, asset_class, data_frame_dict[class_name])
+        class_name = cls.__name__
+        # Restricted to only one item at a time
+        data_frame_dict = dumper.read([class_name])
+
+        # For reuse operations, ensure we delete any existing records first
+        # to prevent conflicts during bulk insert
+        existing_count = session.query(cls).count()
+        if existing_count > 0:
+            session.query(cls).delete()
+            session.flush()
+
+        cls.from_data_frame(session, asset_class_cls, data_frame_dict[class_name])
 
 
 class EODBase(TimeSeriesBase):

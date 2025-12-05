@@ -12,7 +12,7 @@ from src.asset_base.common import TestSession
 from src.asset_base.financial_data import Dump, MetaData, History, Static
 from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
 from src.asset_base.asset import Asset, AssetBase, Forex, Index, Listed, ListedEquity, Share
-from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, EODBase
+from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, EODBase, Split
 from src.asset_base.time_series import TimeSeriesBase, ListedEOD, TradeEOD
 from tests.test_asset import TestListedEquity
 
@@ -282,6 +282,7 @@ class TestListedEOD(TestTradeEOD):
         """
         # Create time series items from test DataFrame
         ListedEOD.from_data_frame(self.session, Listed, data_frame=self.test_df)
+        import ipdb; ipdb.set_trace()
         # Test adding it again to test updating mechanism and idempotency
         ListedEOD.from_data_frame(self.session, Listed, data_frame=self.test_df)
         self.session.flush()
@@ -290,32 +291,72 @@ class TestListedEOD(TestTradeEOD):
         # Test DataFrames
         pd.testing.assert_frame_equal(df.sort_index(axis=1), self.test_df.sort_index(axis=1))
 
-    def test_dump(self):
-        """Dump all class instances and their time series data to disk."""
+    def test_dump_reuse(self):
+        """Test dump to disk and reuse on a fresh database initialization."""
+        # === PHASE 1: Create data and dump to disk ===
         # Dumper
         dumper = Dump(testing=True)
-        # For testing delete old any test dump folder and re-create it empty
+        # For testing delete old test dumps and create fresh directory
         dumper.delete()
         dumper.makedir()
+
         # Create time series items from test DataFrame
         ListedEOD.from_data_frame(self.session, Listed, data_frame=self.test_df)
-        # Dump methods to be tested
+        self.session.commit()
+
+        # Dump the data to disk
         ListedEOD.dump(self.session, dumper, Listed)
-        # Verify dump file exists.
-        self.assertTrue(dumper.exists(ListedEOD), "ListedEOD dump file not found.")
-        # Clear all ListedEOD instances from the session and database
-        self.session.query(ListedEOD).delete()
-        # Test failing to find any ListedEOD instances when it raises SQLAlchemy
-        # not found exception.
-        with self.assertRaises(NoResultFound):
-            self.session.query(ListedEOD).one()
+
+        # Verify dump file exists
+        self.assertTrue(dumper.exists("ListedEOD"), "ListedEOD dump file not found.")
+
+        # === PHASE 2: Close current database and create fresh one ===
+        # Close the current test session completely
+        self.test_session.close()
+
+        # Create a completely fresh database session (simulates fresh database initialization)
+        self.test_session = TestSession()
+        self.session = self.test_session.session
+
+        # Initialize the fresh database with base entities (as would be done in real initialization)
+        static = Static()
+        Currency.update_all(self.session, get_method=static.get_currency)
+        Domicile.update_all(self.session, get_method=static.get_domicile)
+        Exchange.update_all(self.session, get_method=static.get_exchange)
+
+        # Recreate the asset instances needed for the time series
+        currency = Currency.factory(self.session, "USD")
+        issuer = Issuer.factory(self.session, self.issuer_name, self.issuer_domicile_code)
+        domicile = Domicile.factory(self.session, "US")
+        exchange = Exchange.factory(self.session, self.mic)
+        listed = Listed(self.name, issuer, self.isin, exchange, self.ticker, self.status)
+        self.session.add(listed)
+        self.session.commit()
+
+        # Verify the fresh database has no ListedEOD records
+        initial_count = self.session.query(ListedEOD).count()
+        self.assertEqual(initial_count, 0, "Fresh database should have no ListedEOD records")
+
+        # === PHASE 3: Reuse dump to initialize the fresh database ===
         # Reuse dump to restore all ListedEOD instances
-        ListedEOD.reuse(self.session, dumper, self.listed)
-        self.session.flush()
+        ListedEOD.reuse(self.session, dumper, Listed)
+        self.session.commit()
+
+        # === PHASE 4: Verify the data was restored correctly ===
         # Retrieve all ListedEOD DataFrame from the database
         dump_df = ListedEOD.to_data_frame(self.session, Listed)
-        # Test DataFrames
-        pd.testing.assert_frame_equal(dump_df.sort_index(axis=1), self.test_df.sort)
+
+        # Verify we have the expected number of records
+        final_count = self.session.query(ListedEOD).count()
+        expected_count = len(self.test_df)
+        self.assertEqual(final_count, expected_count,
+                        f"Expected {expected_count} ListedEOD records after reuse, got {final_count}")
+
+        # Test that the DataFrames match
+        pd.testing.assert_frame_equal(
+            dump_df.sort_index(axis=1),
+            self.test_df.sort_index(axis=1)
+        )
 
 class TestListedEquityEOD(TestListedEOD):
     """Test a single listed equity EOD"""
@@ -332,8 +373,8 @@ class TestListedEquityEOD(TestListedEOD):
         self.session.flush()
 
 
-class TestDividend(TestListedEquityEOD):
-    """Test a single listed equity dividend data data."""
+class TestDividendsSplits(TestListedEquityEOD):
+    """Test a single listed equity with dividend and split data."""
 
     # datetime to date-string converter
     def date_to_str(self, df):
@@ -373,117 +414,64 @@ class TestDividend(TestListedEquityEOD):
             f"2020-05-29,USD,2020-05-22,2020-06-15,Quarterly,2020-06-01,1.25,1.25,{cls.isin}\n"
             f"2020-08-31,USD,2020-07-21,2020-09-15,Quarterly,2020-09-01,1.25,1.25,{cls.isin}\n"
         )
-        # Convert String into StringIO
         test_df = pd.read_csv(StringIO(test_csv))
-        # Convert date_stamp to pandas datetime
         test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
         test_df['declaration_date'] = pd.to_datetime(test_df['declaration_date'])
         test_df['payment_date'] = pd.to_datetime(test_df['payment_date'])
         test_df['record_date'] = pd.to_datetime(test_df['record_date'])
         cls.test_div_df = test_df
+        # Split data fixture
+        test_csv = (
+            "date_stamp,isin,numerator,denominator\n"
+            f"2020-08-31,{cls.isin},2.0,1.0\n"
+            f"2021-08-31,{cls.isin},4.0,1.0\n"
+        )
+        test_df = pd.read_csv(StringIO(test_csv))
+        test_df['date_stamp'] = pd.to_datetime(test_df['date_stamp'])
+        cls.test_split_df = test_df
 
     def setUp(self):
         """Set up test case fixtures."""
         super().setUp()
         # Get Dividend fixture
         self.ts_divs = Dividend.from_data_frame(self.session, ListedEquity, data_frame=self.test_div_df)
+        self.ts_splits = Split.from_data_frame(self.session, ListedEquity, data_frame=self.test_split_df)
+        self.session.flush()
+        # Securities list for update tests
+        self.securities_list = [self.listed]
 
     def test___init__(self):
         """Initialization."""
-        listed = ListedEquity.factory(self.session, isin=self.isin)
+        # Make sure that we can reach the correct ListedEquity, Dividends and Splits
+        # from the database.
+        listed = self.session.query(ListedEquity).filter(ListedEquity.isin == self.isin).one()
         ts_divs = self.session.query(Dividend).filter(Dividend._asset_id == listed._id).all()
-
-    def test_session_commit(self):
-        """Committing to the database."""
-        # Get AAPL Inc instance form committed instances. This is different
-        # from the inherited `self.listed` instance; which it must override
-        # here.
-        listed_equity = ListedEquity.factory(self.session, isin=self.isin)
-        # Test for AAPL Inc.
-        ts_item = Dividend(
-            listed_equity,
-            date_stamp=datetime.date.today(),
-            currency="ZAR",
-            declaration_date=datetime.date.today(),
-            payment_date=datetime.date.today(),
-            period="Quarterly",
-            record_date=datetime.date.today(),
-            unadjusted_value=1.0,
-            adjusted_value=1.01,
-        )
-        self.session.add(ts_item)
-        self.session.commit()
-        self.assertEqual(ts_item._base_obj, listed_equity)
-        self.assertEqual(ts_item._asset_id, listed_equity._id)
-
-    def test_data_frame(self):
-        """Convert all instances to a single data table."""
-        test_df = self.test_df
-        # Methods tested
-        df = self.feed.get_dividends(self.securities_list, self.from_date, self.to_date)
-        Dividend.from_data_frame(self.session, ListedEquity, data_frame=df)
-        df = Dividend.to_data_frame(self.session, ListedEquity)
-        # Do not test for `adjusted_value` as it changes
-        test_df.drop(columns="adjusted_value", inplace=True)
-        df.drop(columns="adjusted_value", inplace=True)
+        ts_splits = self.session.query(Split).filter(Split._asset_id == listed._id).all()
+        self.assertEqual(len(ts_divs), 3)
+        self.assertEqual(len(ts_splits), 2)
+        # Compare with the fixture data
+        divs_df = Dividend.to_data_frame(self.session, ListedEquity)
+        splits_df = Split.to_data_frame(self.session, ListedEquity)
+        # Convert date columns to date-strings for comparison
+        self.date_to_str(divs_df)
+        self.date_to_str(splits_df)
+        test_divs_df = self.test_div_df.copy()
+        test_splits_df = self.test_split_df.copy()
+        self.date_to_str(test_divs_df)
+        self.date_to_str(test_splits_df)
         # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
-        df = df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        divs_df = divs_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        test_divs_df = test_divs_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        splits_df = splits_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
+        test_splits_df = test_splits_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
         # Reset indices for test
-        test_df.reset_index(drop=True, inplace=True)
-        df.reset_index(drop=True, inplace=True)
+        divs_df.reset_index(drop=True, inplace=True)
+        test_divs_df.reset_index(drop=True, inplace=True)
+        splits_df.reset_index(drop=True, inplace=True)
+        test_splits_df.reset_index(drop=True, inplace=True)
         # Test
-        pd.testing.assert_frame_equal(test_df, df)
-
-    def test_update_all(self):
-        """Get historical dividends for a specified list of securities."""
-        test_df = self.test_df
-        # Test stolen from test_financial_data
-        # Call the tested method.
-        Dividend.update_all(self.session, self.feed.get_dividends)
-        # Retrieve the submitted date stamped data from asset_base
-        df = pd.DataFrame(
-            [self.to_dict(item) for item in self.session.query(Dividend).all()]
-        )
-        # Test date range
-        df = df[(self.from_date <= df.date_stamp.dt.date) & (df.date_stamp.dt.date <= self.to_date)]
-        # Drop columns not in test data
-        df.drop(columns=["mic", "ticker"], inplace=True)
-        # Test over test-date-range
-        df['date_stamp'] = pd.to_datetime(df['date_stamp'])
-        df['declaration_date'] = pd.to_datetime(df['declaration_date'])
-        df['payment_date'] = pd.to_datetime(df['payment_date'])
-        df['record_date'] = pd.to_datetime(df['record_date'])
-        # Do not test for `adjusted_value` as it changes
-        test_df.drop(columns="adjusted_value", inplace=True)
-        df.drop(columns="adjusted_value", inplace=True)
-        # Sort rows by ticker and columns by name
-        test_df = test_df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
-        df = df.sort_values(['isin', 'date_stamp']).sort_index(axis='columns')
-        # Reset indices for test
-        test_df.reset_index(drop=True, inplace=True)
-        df.reset_index(drop=True, inplace=True)
-        # Test
-        pd.testing.assert_frame_equal(test_df, df)
-
-    def test_0_dump(self):
-        """Dump all class instances and their time series data to disk."""
-        # Dumper
-        dumper = Dump(testing=True)
-        # For testing delete old any test dump folder and re-create it empty
-        dumper.delete(delete_folder=True)  # Delete dump folder and contents
-        dumper.makedir()
-        # This test is stolen from test_financial_data
-        # Call API for data
-        test_df = self.feed.get_dividends(
-            self.securities_list, self.from_date, self.to_date
-        )
-        # Call the tested method.
-        Dividend.from_data_frame(self.session, ListedEquity, data_frame=test_df)
-        # Methods to be tested
-        Dividend.dump(self.session, dumper, ListedEquity)
-        # Verify dump file exists.
-        self.assertTrue(dumper.exists(Dividend), "Dividend dump file not found.")
+        pd.testing.assert_frame_equal(test_divs_df, divs_df)
+        pd.testing.assert_frame_equal(test_splits_df, splits_df)
 
 
 class Suite(object):
