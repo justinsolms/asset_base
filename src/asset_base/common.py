@@ -30,9 +30,9 @@ Base = declarative_base()
 class _Session(ABC):
     """Set up and destroy a database and session with proper resource management.
 
-    This class provides a context manager interface for safe database session handling.
-    It ensures proper cleanup of database resources and provides methods for session
-    recreation when needed.
+    This class provides a context manager interface for safe database session
+    handling. It ensures proper cleanup of database resources and provides
+    methods for session recreation when needed.
 
     Parameters
     ----------
@@ -289,7 +289,8 @@ class Common(Base):
     This is the common base class Assets and Entities. As they and their child
     classes inherit from this class, they will share the common ``id`` and
     ``name`` attributes forcing uniqueness of id and name across both Assets and
-    Entities.
+    Entities which is a primary feature of this financial database system
+    allowing entities to own assets.
 
     """
 
@@ -306,10 +307,12 @@ class Common(Base):
     _id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
 
-    __table_args__ = (UniqueConstraint("_discriminator", "_id"),)
 
     name = Column(String(256), nullable=False)
     """str: Entity name."""
+
+    # Each child class must ensure uniqueness of name within its type.
+    __table_args__ = (UniqueConstraint("_discriminator", "name"),)
 
     KEY_CODE_LABEL = "key_code"
     """str: The name to attach to the ``key_code`` attribute (@property method).

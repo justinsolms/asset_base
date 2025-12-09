@@ -18,7 +18,7 @@ import stdnum.isin as stdisin
 from numpy import abs
 from scipy.signal import filtfilt
 
-from sqlalchemy import Float, Integer, String, Enum, Boolean
+from sqlalchemy import Float, Integer, String, Enum, Boolean, UniqueConstraint
 from sqlalchemy import MetaData, Column, ForeignKey
 
 from sqlalchemy.orm import relationship
@@ -77,7 +77,7 @@ class AssetBase(Common):
     _id = Column(Integer, ForeignKey("common._id"), primary_key=True)
     """ Primary key."""
 
-    # Asset currency. Optional.
+    # Each Asset has one Currency.
     _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship(Currency)
 
@@ -228,8 +228,7 @@ class Asset(AssetBase):
     _id = Column(Integer, ForeignKey("asset_base._id"), primary_key=True)
     """ Primary key."""
 
-    # Entity owns Asset. Entity has a reference list to many owned Asset named
-    # `asset_list`
+    # An Entity owns many Assets. Each Asset has one owner Entity.
     # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
     _owner_id = Column(Integer, ForeignKey("entity._id"), nullable=True)
     owner = relationship("Entity", backref="asset_list", foreign_keys=[_owner_id])
@@ -486,9 +485,10 @@ class Cash(Asset):
     def __init__(self, currency):
         """Instance initialization."""
 
+        # Quote units always in 'units' for cash
+        super().__init__(name, currency, quote_units="units")
         # The name is constrained to that of the currency.
         name = currency.name
-        super().__init__(name, currency, quote_units="units")
 
     def __repr__(self):
         """Return the official string output."""
@@ -751,6 +751,11 @@ class Forex(Cash):
     # Currency ticker is redundant information, but very useful and inexpensive
     ticker = Column(String(6))
 
+    # There can be only one forex instance for a given
+    # base_currency/price_currency which is already encoded in the
+    # ticker column at class initialization.
+    __table_args__ = (UniqueConstraint("ticker"),)
+
     # The reference or root ticker. Its price will always be 1.0.
     root_currency_ticker = "USD"
 
@@ -782,19 +787,21 @@ class Forex(Cash):
         """Instance initialization."""
         # FIXME: For this version assert the ``base_currency`` to be the ``root_currency_ticker`` and state clearly in the documentation
 
-        # The name is constrained to that of the currency.
         # Note that we set the pricing currency of the cash asset here.
         super().__init__(price_currency)
+
+        # Override the name to be the joined currency tickers
         self.name = f"{base_currency.ticker}{price_currency.ticker}"
 
-        self.currency = price_currency
+        # Expect the `base_currency` to be the root currency (USD).
         self.base_currency = base_currency
+        if base_currency.ticker != self.root_currency_ticker:
+            raise AssertionError(
+                "Expected the `base_currency` to be the root currency (USD)."
+            )
 
-        assert (
-            base_currency.ticker == self.root_currency_ticker
-        ), "Expected the `base_currency` to be the root currency (USD)."
-
-        # Ticker is Joined ISO 4217 3-letter currency codes
+        # Ticker is Joined ISO 4217 3-letter currency code which is constrained
+        # to be unique by the UniqueConstraint on the ticker column.
         self.ticker = "{}{}".format(self.base_currency.ticker, self.currency.ticker)
 
     def __repr__(self):
@@ -1060,8 +1067,7 @@ class Share(Asset):
 
     # TODO: Here we would add share unitization and ownership relationships
 
-    # Issuer issues Share. Issuer has a reference list to many issued Share
-    # named `share_list`
+    # Issuer issues Shares. Each Share has one Issuer.
     _issuer_id = Column(Integer, ForeignKey("issuer._id"), nullable=False)
     issuer = relationship("Issuer", backref="share_list")
 
@@ -1075,13 +1081,11 @@ class Share(Asset):
     #  A short class name for use in naming
     _name_appendix = "Share"
 
-    def __init__(self, name, issuer, **kwargs):
+    def __init__(self, name, issuer, currency, **kwargs):
         """Instance initialization."""
         # If the currency is not provided then the currency is the issuer's
         # domicile's currency
-        if "currency" in kwargs:
-            currency = kwargs.pop("currency")
-        else:
+        if currency is None:
             currency = issuer.domicile.currency
 
         super().__init__(name, currency, **kwargs)
@@ -1260,15 +1264,21 @@ class Listed(Share):
     _id = Column(Integer, ForeignKey("share._id"), primary_key=True)
     """ Primary key."""
 
-    # Exchange lists Listed. Exchange has a reference list to many issued Listed
-    # named `securities_list`
+    # Exchange lists Listed. Each Listed has one Exchange.
     _exchange_id = Column(Integer, ForeignKey("exchange._id"), nullable=False)
     exchange = relationship("Exchange", backref="securities_list")
 
     # Ticker on the listing exchange.
     ticker = Column(String(12), nullable=False)
+
     # National Securities Identifying Number
     isin = Column(String(12), nullable=False)
+
+    # Each ISIN is unique and each Exchange/ticker pair is unique
+    __table_args__ = (
+        UniqueConstraint("exchange_id", "ticker"),
+        UniqueConstraint("isin"),
+    )
 
     KEY_CODE_LABEL = "isin"
     """str: The name to attach to the ``key_code`` attribute (@property method).
@@ -1285,15 +1295,10 @@ class Listed(Share):
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
         # Currency is the exchange listing currency, i.e., the exchange's
-        # domicile currency. This overrides the `Share` parent class defaulting
-        # to forcing of the instance currency to be tha of the issuer's
-        # domicile currency
-        if "currency" in kwargs:
-            raise ValueError(
-                "The `currency` argument is not allowed here and is forced to that of the exchange.")
+        # domicile currency.
         currency = exchange.domicile.currency
 
-        super().__init__(name, issuer, currency=currency, **kwargs)
+        super().__init__(name, issuer, currency, **kwargs)
 
         # Do no remove this code!!. Some methods that use this class (such as
         # factory methods) are able to place arguments with a None value, this
@@ -1312,7 +1317,6 @@ class Listed(Share):
         # Check to see if the isin number provided is valid. This checks the
         # length and check digit.
         isin = Listed._check_isin(isin)
-
         # Check issuer domicile against the 1st two ISIN letters (ISO 3166-1
         # alpha-2 code)
         if isin[0:2] == self.issuer.domicile.country_code:
@@ -2355,6 +2359,9 @@ class Index(AssetBase):
 
     # Unique index ticker
     ticker = Column(String(12), nullable=False)
+
+    # Ticker must be unique
+    __table_args__ = (UniqueConstraint("ticker"),)
 
     # Indicates the index time series is a total return price series
     total_return = Column(Boolean, nullable=False)
