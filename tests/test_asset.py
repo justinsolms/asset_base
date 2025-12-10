@@ -216,6 +216,185 @@ class TestCash(TestBase):
         self.assertEqual(self.cash.class_name, "Cash")
 
 
+class TestForex(TestBase):
+    """Test suite for Forex class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class-wide test fixtures."""
+        super().setUpClass()
+        cls.base_currency_ticker = "USD"
+        cls.price_currency_ticker = "EUR"
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        # Get base and price currencies
+        self.base_currency = Currency.factory(self.session, self.base_currency_ticker)
+        self.price_currency = Currency.factory(self.session, self.price_currency_ticker)
+        # Create a Forex instance for testing
+        self.forex = Forex(self.base_currency, self.price_currency)
+
+    def test_class_initialization(self):
+        """Test class initialization."""
+        self.assertIsInstance(self.forex, Forex)
+        self.assertEqual(self.forex.base_currency, self.base_currency)
+        self.assertEqual(self.forex.currency, self.price_currency)
+
+    def test_name_derived_from_currencies(self):
+        """Test that name is set to joined currency tickers."""
+        expected_name = f"{self.base_currency_ticker}{self.price_currency_ticker}"
+        self.assertEqual(self.forex.name, expected_name)
+
+    def test_ticker_property(self):
+        """Test ticker property returns joined currency tickers."""
+        expected_ticker = f"{self.base_currency_ticker}{self.price_currency_ticker}"
+        self.assertEqual(self.forex.ticker, expected_ticker)
+
+    def test_base_currency_ticker_property(self):
+        """Test base_currency_ticker property."""
+        self.assertEqual(self.forex.base_currency_ticker, self.base_currency_ticker)
+
+    def test_price_currency_ticker_property(self):
+        """Test price_currency_ticker property."""
+        self.assertEqual(self.forex.price_currency_ticker, self.price_currency_ticker)
+
+    def test_key_code_property(self):
+        """Test key_code property returns ticker."""
+        expected = f"{self.base_currency_ticker}{self.price_currency_ticker}"
+        self.assertEqual(self.forex.key_code, expected)
+
+    def test_identity_code_property(self):
+        """Test identity_code property returns ticker."""
+        expected = f"{self.base_currency_ticker}{self.price_currency_ticker}"
+        self.assertEqual(self.forex.identity_code, expected)
+
+    def test_long_name_property(self):
+        """Test long_name property returns descriptive string."""
+        result = self.forex.long_name
+        self.assertIsInstance(result, str)
+        self.assertIn(self.base_currency_ticker, result)
+        self.assertIn(self.price_currency_ticker, result)
+
+    def test_repr_method(self):
+        """Test __repr__ method returns correct format."""
+        result = repr(self.forex)
+        self.assertIn("Forex", result)
+        self.assertIn("base_currency=", result)
+        self.assertIn("price_currency=", result)
+        self.assertIn(self.base_currency_ticker, result)
+        self.assertIn(self.price_currency_ticker, result)
+
+    def test_asset_class(self):
+        """Test that asset class is 'forex'."""
+        self.assertEqual(self.forex._asset_class, "forex")
+
+    def test_key_code_label(self):
+        """Test KEY_CODE_LABEL class attribute."""
+        self.assertEqual(Forex.KEY_CODE_LABEL, "ticker")
+
+    def test_root_currency_ticker(self):
+        """Test root_currency_ticker class attribute."""
+        self.assertEqual(Forex.root_currency_ticker, "USD")
+
+    def test_database_persistence(self):
+        """Test that Forex instance can be persisted to database."""
+        self.session.add(self.forex)
+        self.session.commit()
+
+        # Query back from database by name
+        retrieved = self.session.query(Forex).filter(Forex.name == self.forex.name).first()
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.name, self.forex.name)
+        self.assertEqual(retrieved.ticker, self.forex.ticker)
+
+    def test_unique_ticker_constraint(self):
+        """Test that ticker uniqueness is enforced."""
+        self.session.add(self.forex)
+        self.session.commit()
+
+        # Try to add another with same currencies
+        forex2 = Forex(self.base_currency, self.price_currency)
+        self.session.add(forex2)
+
+        from sqlalchemy.exc import IntegrityError
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_factory_creates_instance(self):
+        """Test factory method creates Forex instance."""
+        forex_instance = Forex.factory(
+            self.session,
+            self.base_currency_ticker,
+            self.price_currency_ticker
+        )
+        self.assertIsInstance(forex_instance, Forex)
+        self.assertEqual(forex_instance.base_currency_ticker, self.base_currency_ticker)
+        self.assertEqual(forex_instance.price_currency_ticker, self.price_currency_ticker)
+
+    def test_factory_retrieves_existing_instance(self):
+        """Test factory method with existing instance in database."""
+        # Create and commit first instance through factory
+        forex1 = Forex.factory(
+            self.session,
+            self.base_currency_ticker,
+            self.price_currency_ticker
+        )
+        self.session.commit()
+
+        # Verify it was saved
+        count = self.session.query(Forex).filter(Forex.ticker == self.forex.ticker).count()
+        self.assertEqual(count, 1)
+
+        # Factory call again should find existing
+        forex2 = Forex.factory(
+            self.session,
+            self.base_currency_ticker,
+            self.price_currency_ticker
+        )
+        self.assertIsInstance(forex2, Forex)
+        self.assertEqual(forex2.ticker, forex1.ticker)
+
+    def test_factory_create_false_raises_error(self):
+        """Test factory with create=False raises error for non-existent forex."""
+        with self.assertRaises(FactoryError):
+            Forex.factory(
+                self.session,
+                self.base_currency_ticker,
+                "XXX",  # Non-existent currency
+                create=False
+            )
+
+    def test_foreign_currencies_list(self):
+        """Test that foreign_currencies class attribute is a list."""
+        self.assertIsInstance(Forex.foreign_currencies, list)
+        self.assertIn("USD", Forex.foreign_currencies)
+        self.assertIn("EUR", Forex.foreign_currencies)
+        self.assertIn("GBP", Forex.foreign_currencies)
+
+    def test_update_all_creates_forex_for_foreign_currencies(self):
+        """Test update_all creates Forex instances for foreign currencies."""
+        # Run update_all (will create forex for foreign currencies)
+        Forex.update_all(self.session)
+        self.session.commit()
+
+        # Check that Forex instances were created
+        forex_count = self.session.query(Forex).count()
+        # Should have one for each foreign currency (minus USD itself)
+        self.assertGreater(forex_count, 0)
+
+        # Verify USDEUR exists
+        usdeur = self.session.query(Forex).filter(Forex.ticker == "USDEUR").first()
+        self.assertIsNotNone(usdeur)
+
+    def test_class_name_property(self):
+        """Test class_name property returns correct value."""
+        self.assertEqual(self.forex.class_name, "Forex")
+
+    def test_quote_units_inherited_from_cash(self):
+        """Test that quote_units is inherited and set correctly."""
+        self.assertEqual(self.forex.quote_units, "units")
+
 
 
 class Suite(object):

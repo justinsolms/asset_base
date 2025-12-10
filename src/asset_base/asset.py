@@ -651,9 +651,9 @@ class Forex(Cash):
     secondary currency. As such the code for this exchange rate shall be USDJPY
     and may be read as USD to JPY, i.e., 1 USD to 135 JPY, or 1USD costs 135JPY.
 
-    All stored forex rates will have as their ``base_currency`` be the
-    ``root_currency_ticker``. Arbitrary rates will then be calculated off these stored
-    rates.
+    All stored forex rates EOD time-series will have as their ``base_currency``
+    be the ``root_currency_ticker``. Arbitrary rates will then be calculated off
+    these stored rates.
 
     Note
     ----
