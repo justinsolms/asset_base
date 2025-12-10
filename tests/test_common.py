@@ -14,7 +14,7 @@ from sqlalchemy import Column, Integer, String
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy_utils import database_exists
 
-from src.asset_base.common import _Session, TestSession, SQLiteSession, Base
+from src.asset_base.common import _Session, TestSession, SQLiteSession, Base, Common
 
 
 class MockTable(Base):
@@ -391,6 +391,53 @@ class TestSessionErrorHandling(TestSessionBase):
         session_manager.session = None
 
 
+class TestCommon(unittest.TestCase):
+    """Test the abstract methods in Common class."""
+
+    def test_class_name_abstract_method(self):
+        """Test that class_name property returns the class name."""
+        # Create a concrete implementation of Common for testing
+        class ConcreteCommon(Common):
+            """Concrete implementation of Common for testing."""
+            __mapper_args__ = {
+                "polymorphic_identity": "concrete_common",
+            }
+
+            def __str__(self):
+                return f"ConcreteCommon({self.name})"
+
+            def __repr__(self):
+                return f"ConcreteCommon(name='{self.name}')"
+
+            @property
+            def key_code(self):
+                return f"cc_{self.name}"
+
+            @property
+            def identity_code(self):
+                return f"identity_{self.name}"
+
+            @classmethod
+            def factory(cls, session, **kwargs):
+                return cls(**kwargs)
+
+        # Test with TestSession
+        test_session = TestSession()
+
+        try:
+            # Create an instance
+            instance = ConcreteCommon(name="test_instance")
+
+            # Test that class_name returns the correct class name
+            self.assertEqual(instance.class_name, "ConcreteCommon")
+            self.assertIsInstance(instance.class_name, str)
+
+        finally:
+            test_session.close()
+
+
+
+
 if __name__ == "__main__":
     # Create test suite
     suite = unittest.TestSuite()
@@ -401,7 +448,8 @@ if __name__ == "__main__":
         TestTestSession,
         TestSQLiteSession,
         TestSessionIntegration,
-        TestSessionErrorHandling
+        TestSessionErrorHandling,
+        TestCommon
     ]
 
     loader = unittest.TestLoader()

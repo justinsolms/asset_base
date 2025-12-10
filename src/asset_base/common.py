@@ -4,7 +4,7 @@
 
 """ Declare common object infrastructure
 """
-from abc import ABC
+from abc import ABC, ABCMeta, abstractmethod
 
 import sys
 import datetime
@@ -14,8 +14,10 @@ import pandas as pd
 
 from sqlalchemy import create_engine
 from sqlalchemy import Integer, String, Date, Column, UniqueConstraint
-from sqlalchemy.orm import declarative_base, Session
+from sqlalchemy.orm.decl_api import DeclarativeMeta
+from sqlalchemy.orm import declarative_base, Session, declared_attr
 from sqlalchemy_utils import drop_database, database_exists, create_database  # type: ignore
+
 
 from asset_base import get_cache_path
 
@@ -24,8 +26,6 @@ logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
-# Create the declarative base
-Base = declarative_base()
 
 class _Session(ABC):
     """Set up and destroy a database and session with proper resource management.
@@ -283,6 +283,56 @@ class SQLiteSession(_Session):
         super().__init__(db_url, testing=testing, echo=echo)
 
 
+class UniqueNameMixin(object):
+    """Mixin to ensure uniqueness of names within each subclass."""
+
+    _id = Column(Integer, primary_key=True, autoincrement=True)
+    _discriminator = Column(String(50))
+    name = Column(String(256), nullable=False)
+
+    __mapper_args__ = { "polymorphic_on": _discriminator, }
+
+    @declared_attr
+    def __table_args__(cls):
+        # Applies to every mapped subclass that includes this mixin
+        return (UniqueConstraint("_discriminator", "name"),)
+
+
+class CombinedMeta(DeclarativeMeta, ABCMeta):
+    """Create a combined metaclass inheriting from DeclarativeMeta and ABCMeta.
+
+    This avoids metaclass conflicts when using abstract base classes with
+    SQLAlchemy's declarative base such as:
+
+        `TypeError: metaclass conflict: the metaclass of a derived class must be
+        a (non-strict) subclass of the metaclasses of all its bases`
+
+    Note
+    ----
+    Why This Works is when Python sees class Common(Base, ABC, ...), it needs to
+    determine the metaclass:
+
+    - Check Base → uses CombinedMeta
+    - Check ABC → uses ABCMeta
+    - Verify: Is CombinedMeta a subclass of ABCMeta? → Yes! ✓
+
+    Since CombinedMeta inherits from ABCMeta (and DeclarativeMeta), there's no
+    conflict. Python uses CombinedMeta for Common, which gives you:
+
+    - SQLAlchemy's automatic table mapping behaviour
+    - Python's abstract base class enforcement
+    - All functionality from both!
+
+    This is a common pattern when working with libraries that use custom
+    metaclasses alongside Python's built-in abstract classes.
+    """
+    pass
+
+
+# Create the declarative base with the combined metaclass
+Base = declarative_base(metaclass=CombinedMeta)
+
+
 class Common(Base):
     """Common object.
 
@@ -296,23 +346,21 @@ class Common(Base):
 
     __tablename__ = "common"
 
+    # Primary key.
+    _id = Column(Integer, primary_key=True, autoincrement=True)
     # Polymorphism discriminator.
     _discriminator = Column(String(32))
+    # Common name
+    name = Column(String(256), nullable=False)
+
+    # Each child class must ensure uniqueness of name across all instances.
+    __table_args__ = (UniqueConstraint("_discriminator", "name"),)
+
 
     __mapper_args__ = {
-        "polymorphic_identity": __tablename__,
         "polymorphic_on": _discriminator,
+        # no polymorphic_identity here; this class is effectively abstract
     }
-
-    _id = Column(Integer, primary_key=True, autoincrement=True)
-    """ Primary key."""
-
-
-    name = Column(String(256), nullable=False)
-    """str: Entity name."""
-
-    # Each child class must ensure uniqueness of name within its type.
-    __table_args__ = (UniqueConstraint("_discriminator", "name"),)
 
     KEY_CODE_LABEL = "key_code"
     """str: The name to attach to the ``key_code`` attribute (@property method).
@@ -333,28 +381,37 @@ class Common(Base):
         # Record creation date
         self.date_create = datetime.datetime.today()
 
+    @abstractmethod
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return "{} - {}".format(self._id, self.name)
+        pass
 
+    @abstractmethod
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", id={!r})'.format(self.__class__.__name__, self.name, self._id)
+        pass
+
+    @property
+    @abstractmethod
+    def key_code(self):
+        """A key string unique to the class instance."""
+        pass
+
+    @property
+    @abstractmethod
+    def identity_code(self):
+        """A human readable string unique to the class instance."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def factory(cls, session, **kwargs):
+        pass
 
     @property
     def class_name(self):
         """Single word class name (not the full module path)."""
         return self.__class__.__name__
-
-    @property
-    def key_code(self):
-        """A key string unique to the class instance."""
-        return "{}.{}".format(self._id, self.name)
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
-        return "{}.{}".format(self._id, self.name)
 
     @classmethod
     def key_code_id_table(cls, session):
@@ -379,10 +436,6 @@ class Common(Base):
             [(item._id, item.key_code) for item in instances_list],
             columns=["id", cls.KEY_CODE_LABEL],
         )
-
-    @classmethod
-    def factory(cls, session, **kwargs):
-        raise NotImplementedError("This method must be overridden.")
 
     @classmethod
     def from_data_frame(cls, session, data_frame):
