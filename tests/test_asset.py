@@ -396,6 +396,282 @@ class TestForex(TestBase):
         self.assertEqual(self.forex.quote_units, "units")
 
 
+class TestListedEquity(TestBase):
+    """Test suite for ListedEquity class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class-wide test fixtures."""
+        super().setUpClass()
+        cls.listed_name = "Test Listed Company"
+        cls.isin = "US0378331005"  # Apple Inc. ISIN as example
+        cls.ticker_symbol = "TEST"
+        cls.status = "listed"
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        # Create a ListedEquity instance for testing
+        self.listed_equity = ListedEquity(
+            name=self.listed_name,
+            issuer=self.issuer,
+            isin=self.isin,
+            exchange=self.exchange,
+            ticker=self.ticker_symbol,
+            status=self.status
+        )
+
+    def test_class_initialization(self):
+        """Test class initialization."""
+        self.assertIsInstance(self.listed_equity, ListedEquity)
+        self.assertEqual(self.listed_equity.name, self.listed_name)
+        self.assertEqual(self.listed_equity.issuer, self.issuer)
+        self.assertEqual(self.listed_equity.isin, self.isin)
+        self.assertEqual(self.listed_equity.exchange, self.exchange)
+        self.assertEqual(self.listed_equity.ticker, self.ticker_symbol)
+        self.assertEqual(self.listed_equity.status, self.status)
+
+    def test_currency_from_exchange(self):
+        """Test that currency is derived from exchange domicile."""
+        self.assertEqual(self.listed_equity.currency, self.exchange.domicile.currency)
+
+    def test_asset_class(self):
+        """Test that asset class is 'equity'."""
+        self.assertEqual(self.listed_equity._asset_class, "equity")
+
+    def test_key_code_label(self):
+        """Test KEY_CODE_LABEL class attribute."""
+        self.assertEqual(ListedEquity.KEY_CODE_LABEL, "isin")
+
+    def test_key_code_property(self):
+        """Test key_code property returns ISIN."""
+        self.assertEqual(self.listed_equity.key_code, self.isin)
+
+    def test_identity_code_property(self):
+        """Test identity_code property returns isin.ticker format."""
+        expected = f"{self.isin}.{self.ticker_symbol}"
+        self.assertEqual(self.listed_equity.identity_code, expected)
+
+    def test_domicile_property(self):
+        """Test domicile property returns exchange domicile."""
+        self.assertEqual(self.listed_equity.domicile, self.exchange.domicile)
+
+    def test_long_name_property(self):
+        """Test long_name property returns descriptive string."""
+        result = self.listed_equity.long_name
+        self.assertIsInstance(result, str)
+        self.assertIn(self.listed_name, result)
+
+    def test_repr_method(self):
+        """Test __repr__ method returns correct format."""
+        result = repr(self.listed_equity)
+        self.assertIn("ListedEquity", result)
+        self.assertIn(f'name="{self.listed_name}"', result)
+        self.assertIn(self.isin, result)
+        self.assertIn(f'ticker="{self.ticker_symbol}"', result)
+
+    def test_mic_property(self):
+        """Test that MIC is set from exchange."""
+        self.assertEqual(self.listed_equity.mic, self.exchange.mic)
+
+    def test_database_persistence(self):
+        """Test that ListedEquity instance can be persisted to database."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Query back from database by ISIN
+        retrieved = self.session.query(ListedEquity).filter(ListedEquity.isin == self.isin).first()
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.isin, self.isin)
+        self.assertEqual(retrieved.name, self.listed_name)
+
+    def test_unique_isin_constraint(self):
+        """Test that ISIN uniqueness is enforced."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Try to add another with same ISIN
+        listed2 = ListedEquity(
+            name="Another Company",
+            issuer=self.issuer,
+            isin=self.isin,
+            exchange=self.exchange,
+            ticker="OTHER",
+            status="listed"
+        )
+        self.session.add(listed2)
+
+        from sqlalchemy.exc import IntegrityError
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_get_locality_domestic(self):
+        """Test get_locality returns 'domestic' for same domicile."""
+        # Exchange is in US, so US domicile should be domestic
+        locality = self.listed_equity.get_locality(self.exchange.domicile.country_code)
+        self.assertEqual(locality, "domestic")
+
+    def test_get_locality_foreign(self):
+        """Test get_locality returns 'foreign' for different domicile."""
+        # Exchange is in US, so ZA domicile should be foreign
+        locality = self.listed_equity.get_locality("ZA")
+        self.assertEqual(locality, "foreign")
+
+    def test_to_dict_method(self):
+        """Test to_dict method returns correct dictionary."""
+        # to_dict requires industry_class to be set, so skip for basic instance
+        # Just verify the basic parent to_dict works (from Listed class)
+        # Full to_dict testing would require setting up industry classification
+        parent_dict = super(ListedEquity, self.listed_equity).to_dict()
+        self.assertIsInstance(parent_dict, dict)
+        self.assertEqual(parent_dict["isin"], self.isin)
+        self.assertEqual(parent_dict["mic"], self.exchange.mic)
+        self.assertEqual(parent_dict["ticker"], self.ticker_symbol)
+        self.assertEqual(parent_dict["listed_name"], self.listed_name)
+        self.assertEqual(parent_dict["status"], self.status)
+
+    def test_factory_creates_instance(self):
+        """Test factory method creates ListedEquity instance."""
+        listed_instance = ListedEquity.factory(
+            self.session,
+            isin=self.isin,
+            mic=self.exchange.mic,
+            ticker=self.ticker_symbol,
+            listed_name=self.listed_name,
+            issuer_name=self.issuer.name,
+            issuer_domicile_code=self.issuer.domicile.country_code,
+            status=self.status
+        )
+        self.assertIsInstance(listed_instance, ListedEquity)
+        self.assertEqual(listed_instance.isin, self.isin)
+        self.assertEqual(listed_instance.ticker, self.ticker_symbol)
+
+    def test_factory_retrieves_existing_instance(self):
+        """Test factory method with existing instance in database."""
+        # Create and commit first instance through factory
+        listed1 = ListedEquity.factory(
+            self.session,
+            isin=self.isin,
+            mic=self.exchange.mic,
+            ticker=self.ticker_symbol,
+            listed_name=self.listed_name,
+            issuer_name=self.issuer.name,
+            issuer_domicile_code=self.issuer.domicile.country_code,
+            status=self.status
+        )
+        self.session.commit()
+
+        # Verify it was saved
+        count = self.session.query(ListedEquity).filter(ListedEquity.isin == self.isin).count()
+        self.assertEqual(count, 1)
+
+        # Factory call again should find existing
+        listed2 = ListedEquity.factory(
+            self.session,
+            isin=self.isin,
+            mic=self.exchange.mic,
+            ticker=self.ticker_symbol,
+            listed_name=self.listed_name,
+            issuer_name=self.issuer.name,
+            issuer_domicile_code=self.issuer.domicile.country_code,
+            status=self.status
+        )
+        self.assertIsInstance(listed2, ListedEquity)
+        self.assertEqual(listed2.isin, listed1.isin)
+
+    def test_factory_isin_only_retrieves_existing_instance(self):
+        """Test factory method recall with isin only."""
+        # Create and commit first instance through factory
+        listed1 = ListedEquity.factory(
+            self.session,
+            isin=self.isin,
+            mic=self.exchange.mic,
+            ticker=self.ticker_symbol,
+            listed_name=self.listed_name,
+            issuer_name=self.issuer.name,
+            issuer_domicile_code=self.issuer.domicile.country_code,
+            status=self.status
+        )
+        self.session.commit()
+
+        # Verify it was saved
+        count = self.session.query(ListedEquity).filter(ListedEquity.isin == self.isin).count()
+        self.assertEqual(count, 1)
+
+        # Factory call again should find existing
+        listed2 = ListedEquity.factory(
+            self.session,
+            isin=self.isin,
+        )
+        self.assertIsInstance(listed2, ListedEquity)
+        self.assertEqual(listed2.isin, listed1.isin)
+
+    def test_factory_mic_ticker_only_retrieves_existing_instance(self):
+        """Test factory method recall with mic and ticker only."""
+        # Create and commit first instance through factory
+        listed1 = ListedEquity.factory(
+            self.session,
+            isin=self.isin,
+            mic=self.exchange.mic,
+            ticker=self.ticker_symbol,
+            listed_name=self.listed_name,
+            issuer_name=self.issuer.name,
+            issuer_domicile_code=self.issuer.domicile.country_code,
+            status=self.status
+        )
+        self.session.commit()
+
+        # Verify it was saved
+        count = self.session.query(ListedEquity).filter(ListedEquity.isin == self.isin).count()
+        self.assertEqual(count, 1)
+
+        # Factory call again should find existing
+        listed2 = ListedEquity.factory(
+            self.session,
+            mic=self.exchange.mic,
+            ticker=self.ticker_symbol,
+        )
+        self.assertIsInstance(listed2, ListedEquity)
+        self.assertEqual(listed2.isin, listed1.isin)
+
+    def test_factory_create_false_raises_error(self):
+        """Test factory with create=False raises error for non-existent listed equity."""
+        # Use valid ISIN format that doesn't exist in database
+        with self.assertRaises(FactoryError):
+            ListedEquity.factory(
+                self.session,
+                isin="GB0002374006",  # Valid ISIN for Diageo (but not in our test db)
+                mic=self.exchange.mic,
+                ticker="NONE",
+                listed_name="Non-existent",
+                issuer_name="Non-existent Issuer",
+                issuer_domicile_code="US",
+                status="listed",
+                create=False
+            )
+
+    def test_class_name_property(self):
+        """Test class_name property returns correct value."""
+        self.assertEqual(self.listed_equity.class_name, "ListedEquity")
+
+    def test_status_listed(self):
+        """Test status can be 'listed'."""
+        self.assertEqual(self.listed_equity.status, "listed")
+
+    def test_status_delisted(self):
+        """Test status can be 'delisted'."""
+        # Use valid ISIN: US0378331006 (similar to Apple but different checksum)
+        delisted = ListedEquity(
+            name="Delisted Company",
+            issuer=self.issuer,
+            isin="US88160R1014",  # Valid ISIN for Tesla
+            exchange=self.exchange,
+            ticker="DLIST",
+            status="delisted"
+        )
+        self.assertEqual(delisted.status, "delisted")
+
+
 
 class Suite(object):
     """Test suite"""

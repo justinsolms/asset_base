@@ -1065,36 +1065,10 @@ class Share(Asset):
             # the column attribute definition, so we do it here anyway
             self.distributions = False
 
-    def __repr__(self):
-        """Return the official string output."""
-        return '{}(name="{}", issuer={!r})'.format(
-            self.__class__.__name__, self.name, self.issuer
-        )
-
     @property
     def domicile(self):
         """.entity.Domicile : Same as that of ``Share`` ``Issuer``."""
         return self.issuer.domicile
-
-    @property
-    def key_code(self):
-        """A key string unique to the class instance."""
-        return self.issuer.key_code + "." + self.name
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
-        return self.issuer.identity_code + "." + self.name
-
-    @property
-    def long_name(self):
-        """str: Return the long name string."""
-        return "{} is a {} issued by {} in {}.".format(
-            self.name,
-            self.__class__.__name__,
-            self.issuer.name,
-            self.issuer.domicile.country_name,
-        )
 
     def get_locality(self, domicile_code):
         """Return the locality "domestic" or "foreign".
@@ -1275,6 +1249,12 @@ class Listed(Share):
             self.isin = isin
         else:
             raise ValueError("Unexpected domicile. Does not match ISIN country code.")
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
+            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
+        )
 
     def __repr__(self):
         """Return the official string output."""
