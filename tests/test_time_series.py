@@ -242,6 +242,21 @@ class TestListedEOD(TestTradeEOD):
         # Specify which class is being tested. Apply when tests are meant to be
         # inherited.
         cls.Cls = ListedEOD
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        super().setUp()
+
+
+class TestListedEquityEOD(TestListedEOD):
+    """Test a single listed equity EOD"""
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        # Specify which class is being tested. Apply when tests are meant to be
+        # inherited.
+        cls.Cls = ListedEOD
         # Listed argument fixtures
         cls.isin = "US88579Y1010"
         cls.ticker = "ABC"
@@ -268,7 +283,7 @@ class TestListedEOD(TestTradeEOD):
         self.domicile = Domicile.factory(self.session, "US")
         self.exchange = Exchange.factory(self.session, self.mic)
         # Create an minimal args Listed instance
-        listed = Listed(self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status)
+        listed = ListedEquity(self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status)
         self.session.add(listed)
         self.session.flush()
         self.listed = listed
@@ -281,13 +296,13 @@ class TestListedEOD(TestTradeEOD):
         at child levels would be more complex. So a ``Share`` test seems right.
         """
         # Create time series items from test DataFrame
-        ListedEOD.from_data_frame(self.session, Listed, data_frame=self.test_df)
+        ListedEOD.from_data_frame(self.session, ListedEquity, data_frame=self.test_df)
         import ipdb; ipdb.set_trace()
         # Test adding it again to test updating mechanism and idempotency
-        ListedEOD.from_data_frame(self.session, Listed, data_frame=self.test_df)
+        ListedEOD.from_data_frame(self.session, ListedEquity, data_frame=self.test_df)
         self.session.flush()
         # Get all time series items back
-        df = ListedEOD.to_data_frame(self.session, Listed)
+        df = ListedEOD.to_data_frame(self.session, ListedEquity)
         # Test DataFrames
         pd.testing.assert_frame_equal(df.sort_index(axis=1), self.test_df.sort_index(axis=1))
 
@@ -301,11 +316,11 @@ class TestListedEOD(TestTradeEOD):
         dumper.makedir()
 
         # Create time series items from test DataFrame
-        ListedEOD.from_data_frame(self.session, Listed, data_frame=self.test_df)
+        ListedEOD.from_data_frame(self.session, ListedEquity, data_frame=self.test_df)
         self.session.commit()
 
         # Dump the data to disk
-        ListedEOD.dump(self.session, dumper, Listed)
+        ListedEOD.dump(self.session, dumper, ListedEquity)
 
         # Verify dump file exists
         self.assertTrue(dumper.exists("ListedEOD"), "ListedEOD dump file not found.")
@@ -329,7 +344,7 @@ class TestListedEOD(TestTradeEOD):
         issuer = Issuer.factory(self.session, self.issuer_name, self.issuer_domicile_code)
         domicile = Domicile.factory(self.session, "US")
         exchange = Exchange.factory(self.session, self.mic)
-        listed = Listed(self.name, issuer, self.isin, exchange, self.ticker, self.status)
+        listed = ListedEquity(self.name, issuer, self.isin, exchange, self.ticker, self.status)
         self.session.add(listed)
         self.session.commit()
 
@@ -339,12 +354,12 @@ class TestListedEOD(TestTradeEOD):
 
         # === PHASE 3: Reuse dump to initialize the fresh database ===
         # Reuse dump to restore all ListedEOD instances
-        ListedEOD.reuse(self.session, dumper, Listed)
+        ListedEOD.reuse(self.session, dumper, ListedEquity)
         self.session.commit()
 
         # === PHASE 4: Verify the data was restored correctly ===
         # Retrieve all ListedEOD DataFrame from the database
-        dump_df = ListedEOD.to_data_frame(self.session, Listed)
+        dump_df = ListedEOD.to_data_frame(self.session, ListedEquity)
 
         # Verify we have the expected number of records
         final_count = self.session.query(ListedEOD).count()
@@ -357,20 +372,6 @@ class TestListedEOD(TestTradeEOD):
             dump_df.sort_index(axis=1),
             self.test_df.sort_index(axis=1)
         )
-
-class TestListedEquityEOD(TestListedEOD):
-    """Test a single listed equity EOD"""
-
-    def setUp(self):
-        """Set up test case fixtures."""
-        super().setUp()
-        # US Domicile
-        self.domicile = Domicile.factory(self.session, "US")
-        self.exchange = Exchange.factory(self.session, self.mic)
-        # Create an minimal args Listed instance
-        listed = ListedEquity(self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status)
-        self.session.add(listed)
-        self.session.flush()
 
 
 class TestDividendsSplits(TestListedEquityEOD):

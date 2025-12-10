@@ -1117,6 +1117,10 @@ class TestListedEquity(TestListed):
         )
         return data
 
+    # FIXME: Its passible to create a Listed and a ListedEquity with the same parameters
+    #        in the same database session. This should not be allowed.
+    #        Make a test for this.
+
     def test___init__(self):
         """Initialization."""
         # Create Issuer instance here as it should be created during testing
