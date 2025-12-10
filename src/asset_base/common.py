@@ -356,7 +356,6 @@ class Common(Base):
     # Each child class must ensure uniqueness of name across all instances.
     __table_args__ = (UniqueConstraint("_discriminator", "name"),)
 
-
     __mapper_args__ = {
         "polymorphic_on": _discriminator,
         # no polymorphic_identity here; this class is effectively abstract
@@ -374,7 +373,7 @@ class Common(Base):
     date_mod_stamp = Column(Date, nullable=True)
     """sqlalchemy.DateTime: Modification date stamp. May be in the past."""
 
-    def __init__(self, name, **kwargs):
+    def __init__(self, name):
         """Instance initialization."""
         self.name = name
 
@@ -401,6 +400,12 @@ class Common(Base):
     @abstractmethod
     def identity_code(self):
         """A human readable string unique to the class instance."""
+        pass
+
+    @property
+    @abstractmethod
+    def long_name(self):
+        """str: Return the long name string."""
         pass
 
     @classmethod

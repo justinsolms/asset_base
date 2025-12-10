@@ -90,42 +90,15 @@ class AssetBase(Common):
         )
     """list: EOD historical time-series collection ranked by date_stamp."""
 
-    def __init__(self, name, currency, **kwargs):
+    def __init__(self, name, currency):
         """Instance initialization."""
-        super().__init__(name, **kwargs)
+        super().__init__(name)
 
         self.currency = currency
-
-    def __str__(self):
-        """Return the informal string output. Currently ``identity_code``."""
-        return self.identity_code
-
-    def __repr__(self):
-        """Return the official string output."""
-        return '{}(name="{}", currency={!r})'.format(
-            self.__class__.__name__, self.name, self.currency
-        )
 
     def __lt__(self, other):
         """Use primarily key ``id`` for sorting. (See Note in class docstring)."""
         return self._id < other._id
-
-    @property
-    def long_name(self):
-        """str: Return the long name string."""
-        return "{} is an {} priced in {}.".format(
-            self.name, self.__class__.__name__, self.currency_ticker
-        )
-
-    @property
-    def key_code(self):
-        """A key string unique to the class instance."""
-        return self.currency.ticker + "." + self.name
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
-        return self.currency.ticker + "." + self.name
 
     @property
     def currency_ticker(self):
@@ -246,7 +219,6 @@ class Asset(AssetBase):
 
     def __init__(self, name, currency, **kwargs):
         """Instance initialization."""
-        super().__init__(name, currency, **kwargs)
 
         if "quote_units" in kwargs:
             self.quote_units = kwargs.pop("quote_units")
@@ -257,16 +229,7 @@ class Asset(AssetBase):
         if "owner" in kwargs:
             self.owner = kwargs.pop("owner")
 
-    def __repr__(self):
-        """Return the official string output."""
-        if self.owner is None:
-            msg = super().__repr__()
-        else:
-            msg = '{}(name="{}", currency={!r}, owner={!r})'.format(
-                self.__class__.__name__, self.name, self.currency, self.owner
-            )
-
-        return msg
+        super().__init__(name, currency, **kwargs)
 
     @property
     def _eod_series(self):
@@ -274,18 +237,9 @@ class Asset(AssetBase):
         return [s for s in self._series if isinstance(s, EODBase)]
 
     @property
-    def long_name(self):
-        """str: Return the long name string."""
-        msg = super().__str__()
-        if self.owner is not None:
-            msg += " Owner: {}".format(self.owner)
-
-        return msg
-
-    @property
     def domicile(self):
-        """.entity.Domicile : ``Domicile`` of the ``Share`` owner ``Entity``."""
-        # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
+        """Defined as the owner domicile."""
+        # NOTE: In future the owner may be forced to be not None
         if self.owner is None:
             return None
         else:
@@ -369,70 +323,71 @@ class Asset(AssetBase):
         else:
             return self._eod_series[-1]
 
-    @classmethod
-    def factory(cls, session, asset_name, currency_code, create=True, **kwargs):
-        """Manufacture/retrieve an instance from the given parameters.
+    # NOTE: Disabled.This is just in case we subclass Asset directly.
+    # @classmethod
+    # def factory(cls, session, asset_name, currency_code, create=True, **kwargs):
+    #     """Manufacture/retrieve an instance from the given parameters.
 
-        If a record of the specified class instance does not exist then add it,
-        else do nothing. Then return the instance.
+    #     If a record of the specified class instance does not exist then add it,
+    #     else do nothing. Then return the instance.
 
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        asset_name : str
-            Asset full name.
-        currency_code : str(3)
-            ISO 4217 3-letter currency codes.
-        create : bool, optional
-            If `False` then the factory shall expect the specified `Entity` to
-            already exist in the session or it shall raise an exception instead
-            of creating a first instance.
+    #     Parameters
+    #     ----------
+    #     session : sqlalchemy.orm.Session
+    #         A session attached to the desired database.
+    #     asset_name : str
+    #         Asset full name.
+    #     currency_code : str(3)
+    #         ISO 4217 3-letter currency codes.
+    #     create : bool, optional
+    #         If `False` then the factory shall expect the specified `Entity` to
+    #         already exist in the session or it shall raise an exception instead
+    #         of creating a first instance.
 
-        Note
-        ----
-        The entity's domicile (and by implication the related currency) must
-        already exist in the session or an exception shall be raised.
+    #     Note
+    #     ----
+    #     The entity's domicile (and by implication the related currency) must
+    #     already exist in the session or an exception shall be raised.
 
 
-        Return
-        ------
-        .Entity
-            The single instance that is in the session.
+    #     Return
+    #     ------
+    #     .Entity
+    #         The single instance that is in the session.
 
-        See also
-        --------
-        .Domicile.factory
+    #     See also
+    #     --------
+    #     .Domicile.factory
 
-        """
-        # TODO: It is debatable whether or not this factory method should exist
-        # as Entity should ber an abstract class. Check if entity exists in the
-        # session and if not then add it.
-        try:
-            obj = (
-                session.query(cls)
-                .join(Currency)
-                .filter(cls.name == asset_name, Currency.ticker == currency_code)
-                .one()
-            )
-        except NoResultFound:
-            if not create:
-                raise FactoryError(
-                    'Asset "{}", currency="{}", not found.'.format(
-                        asset_name, currency_code
-                    )
-                )
-            else:
-                # Create a new instance, fetch pre-existing currency
-                currency = Currency.factory(session, currency_code)
-                obj = cls(asset_name, currency, **kwargs)
-                session.add(obj)
-        else:
-            # No changes to reconcile, country_code and entity_name are the key
-            # arguments.
-            pass
+    #     """
+    #     # TODO: It is debatable whether or not this factory method should exist
+    #     # as Entity should ber an abstract class. Check if entity exists in the
+    #     # session and if not then add it.
+    #     try:
+    #         obj = (
+    #             session.query(cls)
+    #             .join(Currency)
+    #             .filter(cls.name == asset_name, Currency.ticker == currency_code)
+    #             .one()
+    #         )
+    #     except NoResultFound:
+    #         if not create:
+    #             raise FactoryError(
+    #                 'Asset "{}", currency="{}", not found.'.format(
+    #                     asset_name, currency_code
+    #                 )
+    #             )
+    #         else:
+    #             # Create a new instance, fetch pre-existing currency
+    #             currency = Currency.factory(session, currency_code)
+    #             obj = cls(asset_name, currency, **kwargs)
+    #             session.add(obj)
+    #     else:
+    #         # No changes to reconcile, country_code and entity_name are the key
+    #         # arguments.
+    #         pass
 
-        return obj
+    #     return obj
 
 
 class Cash(Asset):
@@ -490,6 +445,12 @@ class Cash(Asset):
         # Quote units always in 'units' for cash
         super().__init__(name, currency, quote_units="units")
 
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        msg = "{}({})".format(self.__class__.__name__, self.currency.ticker)
+
+        return msg
+
     def __repr__(self):
         """Return the official string output."""
         msg = "{}(currency={!r})".format(self.__class__.__name__, self.currency)
@@ -515,7 +476,7 @@ class Cash(Asset):
     def long_name(self):
         """str: Return the long name string."""
         msg = "{} is an {} priced in {}.".format(
-            self.name, self.__class__.__name__, self.currency_ticker
+            self.name, self.__class__.__name__, self.currency.ticker
         )
 
         return msg
@@ -2394,7 +2355,7 @@ class Index(AssetBase):
     def long_name(self):
         """str: Return the long name string."""
         msg = "{} is an {} priced in {}.".format(
-            self.name, self.__class__.__name__, self.currency_ticker
+            self.name, self.__class__.__name__, self.currency.ticker
         )
 
         return msg

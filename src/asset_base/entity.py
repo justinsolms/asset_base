@@ -801,6 +801,11 @@ class Issuer(Institution):
         """Instance initialization."""
         super().__init__(name=name, domicile=domicile, **kwargs)
 
+    @property
+    def long_name(self):
+        """Return the long name of the issuer."""
+        return f"{self.name} ({self.domicile.country_name})"
+
 
 class Exchange(Institution):
     """Stock Exchanges identified by ISO 10383 MICs (Market Identifier Codes).
@@ -891,6 +896,11 @@ class Exchange(Institution):
     def identity_code(self):
         """A human readable string unique to the class instance."""
         return self.mic
+
+    @property
+    def long_name(self):
+        """Return the long name of the exchange."""
+        return f"{self.name} ({self.mic})"
 
     @classmethod
     def factory(
