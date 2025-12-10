@@ -10,6 +10,7 @@ import os
 import datetime
 from unittest.mock import patch, MagicMock
 
+import pandas as pd
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy_utils import database_exists
@@ -391,49 +392,309 @@ class TestSessionErrorHandling(TestSessionBase):
         session_manager.session = None
 
 
+# Create a concrete implementation of Common for testing
+class ConcreteCommon(Common):
+    """Concrete implementation of Common for testing."""
+    __mapper_args__ = {
+        "polymorphic_identity": "concrete_common",
+    }
+
+    def __str__(self):
+        return f"ConcreteCommon({self.name})"
+
+    def __repr__(self):
+        return f"ConcreteCommon(name='{self.name}')"
+
+    @property
+    def key_code(self):
+        return f"cc_{self.name}"
+
+    @property
+    def identity_code(self):
+        return f"identity_{self.name}"
+
+    @classmethod
+    def factory(cls, session, **kwargs):
+        instance = cls(**kwargs)
+        session.add(instance)
+        return instance
+
+    def to_dict(self):
+        """Convert instance to dictionary for DataFrame export."""
+        return {
+            'name': self.name,
+        }
+
+
 class TestCommon(unittest.TestCase):
     """Test the abstract methods in Common class."""
 
+    @classmethod
+    def setUpClass(cls):
+        """Set up test class fixtures."""
+        cls.name = "Concrete common instance"
+
+    def setUp(self):
+        """Set up test case fixtures."""
+        # Test with TestSession
+        self.test_session = TestSession()
+        self.session = self.test_session.session
+        # Instantiate ConcreteCommon
+        self.concrete_common = ConcreteCommon(name=self.name)
+
+    def tearDown(self):
+        """Tear down test case fixtures."""
+        self.test_session.close()
+
     def test_class_name_abstract_method(self):
         """Test that class_name property returns the class name."""
-        # Create a concrete implementation of Common for testing
-        class ConcreteCommon(Common):
-            """Concrete implementation of Common for testing."""
-            __mapper_args__ = {
-                "polymorphic_identity": "concrete_common",
-            }
 
-            def __str__(self):
-                return f"ConcreteCommon({self.name})"
+        # Get the test case instance fixture
+        instance = self.concrete_common
 
-            def __repr__(self):
-                return f"ConcreteCommon(name='{self.name}')"
+        # Test that class_name returns the correct class name
+        self.assertEqual(instance.class_name, "ConcreteCommon")
+        self.assertIsInstance(instance.class_name, str)
 
-            @property
-            def key_code(self):
-                return f"cc_{self.name}"
+    def test_init_sets_name(self):
+        """Test that initialization sets name correctly."""
+        # Use the fixture
+        self.assertEqual(self.concrete_common.name, self.name)
 
-            @property
-            def identity_code(self):
-                return f"identity_{self.name}"
+    def test_init_sets_creation_date(self):
+        """Test that initialization sets date_create."""
+        self.assertIsNotNone(self.concrete_common.date_create)
+        # date_create could be datetime or date depending on implementation
+        # Check that it's today
+        if isinstance(self.concrete_common.date_create, datetime.datetime):
+            self.assertEqual(self.concrete_common.date_create.date(), datetime.datetime.today().date())
+        else:
+            self.assertEqual(self.concrete_common.date_create, datetime.datetime.today().date())
 
-            @classmethod
-            def factory(cls, session, **kwargs):
-                return cls(**kwargs)
+    def test_date_mod_stamp_initially_none(self):
+        """Test that date_mod_stamp is initially None."""
+        self.assertIsNone(self.concrete_common.date_mod_stamp)
 
-        # Test with TestSession
-        test_session = TestSession()
+    def test_date_mod_stamp_can_be_set(self):
+        """Test that date_mod_stamp can be set."""
+        test_date = datetime.date(2025, 1, 1)
+        self.concrete_common.date_mod_stamp = test_date
+        self.assertEqual(self.concrete_common.date_mod_stamp, test_date)
 
-        try:
-            # Create an instance
-            instance = ConcreteCommon(name="test_instance")
+    def test_str_method(self):
+        """Test __str__ method returns correct format."""
+        result = str(self.concrete_common)
+        expected = f"ConcreteCommon({self.name})"
+        self.assertEqual(result, expected)
 
-            # Test that class_name returns the correct class name
-            self.assertEqual(instance.class_name, "ConcreteCommon")
-            self.assertIsInstance(instance.class_name, str)
+    def test_repr_method(self):
+        """Test __repr__ method returns correct format."""
+        result = repr(self.concrete_common)
+        expected = f"ConcreteCommon(name='{self.name}')"
+        self.assertEqual(result, expected)
 
-        finally:
-            test_session.close()
+    def test_key_code_property(self):
+        """Test key_code property returns expected value."""
+        expected = f"cc_{self.name}"
+        self.assertEqual(self.concrete_common.key_code, expected)
+
+    def test_identity_code_property(self):
+        """Test identity_code property returns expected value."""
+        expected = f"identity_{self.name}"
+        self.assertEqual(self.concrete_common.identity_code, expected)
+
+    def test_factory_creates_instance(self):
+        """Test factory method creates instances correctly."""
+        instance = ConcreteCommon.factory(self.session, name="Factory Test")
+        self.assertIsNotNone(instance)
+        self.assertEqual(instance.name, "Factory Test")
+        self.assertIsInstance(instance, ConcreteCommon)
+
+    def test_database_persistence(self):
+        """Test that instances can be persisted to database."""
+        self.session.add(self.concrete_common)
+        self.session.commit()
+
+        # Query back from database
+        retrieved = self.session.query(ConcreteCommon).filter_by(name=self.name).first()
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.name, self.name)
+
+    def test_unique_name_constraint(self):
+        """Test that name uniqueness is enforced per discriminator."""
+        instance1 = ConcreteCommon(name="Duplicate")
+        self.session.add(instance1)
+        self.session.commit()
+
+        # Try to add another with same name
+        instance2 = ConcreteCommon(name="Duplicate")
+        self.session.add(instance2)
+
+        with self.assertRaises(SQLAlchemyError):
+            self.session.commit()
+
+    def test_key_code_id_table(self):
+        """Test key_code_id_table returns correct DataFrame."""
+        # Add multiple instances
+        instance1 = ConcreteCommon(name="Entity1")
+        instance2 = ConcreteCommon(name="Entity2")
+        self.session.add(instance1)
+        self.session.add(instance2)
+        self.session.commit()
+
+        # Get the table
+        df = ConcreteCommon.key_code_id_table(self.session)
+
+        # Verify structure
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(df), 2)
+        self.assertIn("id", df.columns)
+        self.assertIn(ConcreteCommon.KEY_CODE_LABEL, df.columns)
+
+        # Verify content
+        self.assertIn("cc_Entity1", df[ConcreteCommon.KEY_CODE_LABEL].values)
+        self.assertIn("cc_Entity2", df[ConcreteCommon.KEY_CODE_LABEL].values)
+
+    def test_key_code_id_table_empty_database(self):
+        """Test key_code_id_table with empty database."""
+        df = ConcreteCommon.key_code_id_table(self.session)
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(df), 0)
+
+    def test_from_data_frame(self):
+        """Test from_data_frame creates instances from DataFrame."""
+        # Create DataFrame
+        data = pd.DataFrame({
+            'name': ['Item1', 'Item2', 'Item3']
+        })
+
+        # Create instances from DataFrame
+        ConcreteCommon.from_data_frame(self.session, data)
+        self.session.commit()
+
+        # Verify instances were created
+        count = self.session.query(ConcreteCommon).count()
+        self.assertEqual(count, 3)
+
+        # Verify names
+        items = self.session.query(ConcreteCommon).all()
+        names = [item.name for item in items]
+        self.assertIn('Item1', names)
+        self.assertIn('Item2', names)
+        self.assertIn('Item3', names)
+
+    def test_from_data_frame_empty_dataframe(self):
+        """Test from_data_frame handles empty DataFrame."""
+        empty_df = pd.DataFrame()
+        # Should not raise an error
+        ConcreteCommon.from_data_frame(self.session, empty_df)
+        self.session.commit()
+
+        # No instances should be created
+        count = self.session.query(ConcreteCommon).count()
+        self.assertEqual(count, 0)
+
+    def test_to_data_frame(self):
+        """Test to_data_frame exports instances correctly."""
+        # Create some instances
+        instance1 = ConcreteCommon(name="Export1")
+        instance2 = ConcreteCommon(name="Export2")
+        self.session.add(instance1)
+        self.session.add(instance2)
+        self.session.commit()
+
+        # Export to DataFrame
+        df = ConcreteCommon.to_data_frame(self.session)
+
+        # Verify structure
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(df), 2)
+        self.assertIn('name', df.columns)
+
+        # Verify content
+        self.assertIn('Export1', df['name'].values)
+        self.assertIn('Export2', df['name'].values)
+
+    def test_to_data_frame_empty_database(self):
+        """Test to_data_frame with empty database."""
+        df = ConcreteCommon.to_data_frame(self.session)
+        self.assertIsInstance(df, pd.DataFrame)
+        self.assertEqual(len(df), 0)
+
+    def test_discriminator_field(self):
+        """Test that discriminator field is set correctly."""
+        self.session.add(self.concrete_common)
+        self.session.commit()
+
+        # Verify discriminator
+        self.assertEqual(self.concrete_common._discriminator, "concrete_common")
+
+    def test_primary_key_autoincrement(self):
+        """Test that primary key auto-increments."""
+        instance1 = ConcreteCommon(name="First")
+        instance2 = ConcreteCommon(name="Second")
+
+        self.session.add(instance1)
+        self.session.commit()
+        id1 = instance1._id
+
+        self.session.add(instance2)
+        self.session.commit()
+        id2 = instance2._id
+
+        self.assertIsNotNone(id1)
+        self.assertIsNotNone(id2)
+        self.assertGreater(id2, id1)
+
+    def test_name_cannot_be_null(self):
+        """Test that name field is required."""
+        # This should fail at the Python level, not database level
+        with self.assertRaises(TypeError):
+            ConcreteCommon()
+
+    def test_multiple_instances_with_different_names(self):
+        """Test multiple instances with different names coexist."""
+        instances = [ConcreteCommon(name=f"Instance{i}") for i in range(5)]
+        for instance in instances:
+            self.session.add(instance)
+        self.session.commit()
+
+        count = self.session.query(ConcreteCommon).count()
+        self.assertEqual(count, 5)
+
+    def test_instance_update(self):
+        """Test updating an instance's attributes."""
+        instance = ConcreteCommon(name="Original")
+        self.session.add(instance)
+        self.session.commit()
+
+        # Update date_mod_stamp
+        new_date = datetime.date(2025, 6, 15)
+        instance.date_mod_stamp = new_date
+        self.session.commit()
+
+        # Retrieve and verify
+        retrieved = self.session.query(ConcreteCommon).filter_by(name="Original").first()
+        self.assertEqual(retrieved.date_mod_stamp, new_date)
+
+    def test_session_query_filter(self):
+        """Test querying instances with filters."""
+        instance1 = ConcreteCommon(name="Alpha")
+        instance2 = ConcreteCommon(name="Beta")
+        instance3 = ConcreteCommon(name="Gamma")
+
+        self.session.add_all([instance1, instance2, instance3])
+        self.session.commit()
+
+        # Query specific instance
+        result = self.session.query(ConcreteCommon).filter_by(name="Beta").first()
+        self.assertIsNotNone(result)
+        self.assertEqual(result.name, "Beta")
+
+    def test_key_code_label_class_attribute(self):
+        """Test that KEY_CODE_LABEL class attribute exists."""
+        self.assertTrue(hasattr(self.concrete_common, 'KEY_CODE_LABEL'))
+        self.assertIsInstance(self.concrete_common.KEY_CODE_LABEL, str)
 
 
 
