@@ -158,7 +158,7 @@ class TestTradeEOD(TestTimeSeriesBase):
         super().setUp()
         self.issuer = Issuer.factory(self.session, self.issuer_name, self.issuer_domicile_code)
         # Create an minimal args Share and a time series instance
-        share = Share(self.name, self.issuer)
+        share = Share(self.name, self.issuer, self.currency)
         ts_item = TradeEOD(
             share, date_stamp=self.today, open=self.open, close=self.close,
             high=self.high, low=self.low, adjusted_close=self.adjusted_close,
@@ -297,7 +297,6 @@ class TestListedEquityEOD(TestListedEOD):
         """
         # Create time series items from test DataFrame
         ListedEOD.from_data_frame(self.session, ListedEquity, data_frame=self.test_df)
-        import ipdb; ipdb.set_trace()
         # Test adding it again to test updating mechanism and idempotency
         ListedEOD.from_data_frame(self.session, ListedEquity, data_frame=self.test_df)
         self.session.flush()

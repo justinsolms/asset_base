@@ -484,11 +484,11 @@ class Cash(Asset):
 
     def __init__(self, currency):
         """Instance initialization."""
+        # The name is constrained to that of the currency.
+        name = currency.name
 
         # Quote units always in 'units' for cash
         super().__init__(name, currency, quote_units="units")
-        # The name is constrained to that of the currency.
-        name = currency.name
 
     def __repr__(self):
         """Return the official string output."""
@@ -1176,15 +1176,6 @@ class Share(Asset):
 class Listed(Share):
     """Any kind of listed financial share.
 
-    Note
-    ----
-    This class is an abstract class and not meant for direct instantiation, but
-    is a base class for all listed or traded shares.
-
-    Note
-    ----
-    The domicile is constrained to the issuer domicile.
-
     An International Securities Identification Number (ISIN) uniquely identifies
     a security. An ISIN consists of three parts: Generally, a two letter
     country code, a nine character alpha-numeric national security identifier,
@@ -1236,15 +1227,13 @@ class Listed(Share):
         Share owner entity.
 
 
-    Attributes
-    ----------
-    exchange : .Exchange
-        The exchange the asset is listed upon.
-    ticker : str
-        The ticker assigned to the asset by the exchange listing process.
-    isin : str
-        An International Securities Identification Number (ISIN) uniquely
-        identifies a security. There is a unique constraint on this attribute.
+    Note
+    ----
+    The domicile is constrained to the issuer domicile.
+
+    Note
+    ----
+    The currency is that of the exchange domicile.
 
     Raises
     ------
@@ -1268,7 +1257,8 @@ class Listed(Share):
     _exchange_id = Column(Integer, ForeignKey("exchange._id"), nullable=False)
     exchange = relationship("Exchange", backref="securities_list")
 
-    # Ticker on the listing exchange.
+    # Ticker on the listing exchange (Uses exchange MIC).
+    mic = Column(String(4), nullable=False)
     ticker = Column(String(12), nullable=False)
 
     # National Securities Identifying Number
@@ -1276,7 +1266,7 @@ class Listed(Share):
 
     # Each ISIN is unique and each Exchange/ticker pair is unique
     __table_args__ = (
-        UniqueConstraint("exchange_id", "ticker"),
+        UniqueConstraint("mic", "ticker"),
         UniqueConstraint("isin"),
     )
 
@@ -1310,6 +1300,7 @@ class Listed(Share):
             raise ValueError("Unexpected `None` value for some positional arguments.")
 
         # Instrument identification and listing
+        self.mic = exchange.mic
         self.exchange = exchange
         self.ticker = ticker
         self.status = status

@@ -43,7 +43,7 @@ class TestCurrency(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Tear down test case fixtures."""
-        del self.test_session
+        self.test_session.close()
 
     def test___init__(self):
         """Initialization."""
@@ -214,7 +214,7 @@ class TestDomicile(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Tear down test case fixtures."""
-        del self.test_session
+        self.test_session.close()
 
     def test___init__(self):
         domicile = Domicile(self.country_code, self.country_name, self.currency)
@@ -337,7 +337,7 @@ class TestEntity(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Tear down test case fixtures."""
-        del self.test_session
+        self.test_session.close()
 
     def test___init__(self):
         entity = Entity(self.name, self.domicile)
