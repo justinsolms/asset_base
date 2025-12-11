@@ -2950,3 +2950,8 @@ class ExchangeTradeFund(ListedEquity):
         data = data.combine_first(back_fill)
 
         return data
+
+
+# Initialize time series ASSET_CLASS references after all classes are defined
+from .time_series import _initialize_asset_class_references
+_initialize_asset_class_references()

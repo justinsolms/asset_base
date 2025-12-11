@@ -13,7 +13,7 @@ from src.asset_base.financial_data import Dump, MetaData, History, Static
 from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
 from src.asset_base.asset import Asset, AssetBase, Cash, Cash, Forex, Index, Listed, ListedEquity, Share
 from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, EODBase, Split
-from src.asset_base.time_series import TimeSeriesBase, ListedEOD, TradeEOD
+from src.asset_base.time_series import TimeSeriesBase, ListedEOD, ListedEquityEOD, TradeEOD
 from tests.test_asset import TestListedEquity
 
 

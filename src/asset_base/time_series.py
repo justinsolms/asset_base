@@ -16,6 +16,7 @@ tables is stored as indicated by ``asset.Base.quote_units`` bool attribute
 # Allows  in type hints to use class names instead of class name strings
 from __future__ import annotations
 
+from abc import abstractmethod
 from datetime import date
 import datetime
 import sys
@@ -103,32 +104,45 @@ class TimeSeriesBase(Base):
                 f"The `date_stamp` must be a datetime.date instance, not "
                 f"{type(date_stamp)}. Use .date() to convert pandas.Timestamp.")
 
+        # Validate base_obj type if ASSET_CLASS is defined
+        if hasattr(self.__class__, 'ASSET_CLASS') and self.__class__.ASSET_CLASS is not None:
+            if not isinstance(base_obj, self.__class__.ASSET_CLASS):
+                raise TypeError(
+                    f"{self.__class__.__name__} requires base_obj to be an instance of "
+                    f"{self.__class__.ASSET_CLASS.__name__}, got {type(base_obj).__name__}")
+
         self._base_obj = base_obj
         self.date_stamp = date_stamp
 
+    @abstractmethod
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        name = self.__class__.__name__
-        date = self.date_stamp
-        id_code = self._base_obj.identity_code
+        pass
 
-        return f"Time series:{name}, date stamp:{date}, asset:{id_code}"
-
+    @abstractmethod
     def __repr__(self):
         """Return the official string output."""
-        name = self.__class__.__name__
-        asset = self._base_obj
-        date = self.date_stamp
+        pass
 
-        return f"{name}(asset={asset!r}, date_stamp={date})"
+    @abstractmethod
+    def to_dict(self):
+        """Convert all instance time-series public attributes to a dictionary."""
+        pass
 
     @classmethod
-    def _get_last_date(cls, security):
-        """Get the time series last date maintained by the security.
+    @abstractmethod
+    def update_all(cls, session, get_method):
+        """Update/create all time-series for the list of asset instances.
 
-        Override for other time series as needed.
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all this class' constructor method arguments.
         """
-        return security.get_last_eod_date()
+        pass
 
     @classmethod
     def from_data_frame(cls, session, asset_class, data_frame):
@@ -341,34 +355,6 @@ class TimeSeriesBase(Base):
         return data_table
 
     @classmethod
-    def update_all(cls, session, asset_class, asset_list, get_method):
-        """Update/create the eod trade data of all the polymorph class instances.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        asset_class : .asset.Asset (or polymorph class)
-            The ``Asset`` or polymorph class that is composed of the time-series
-            data.
-        asset_list : list of .asset.Asset (or polymorph class)
-            The list of specific instances of the``Asset`` or polymorph class
-            for which to update/create their time-series data.
-        get_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all this class' constructor method arguments.
-
-        Note
-        ----
-        No object shall be destroyed, only updated or missing object created.
-
-        """
-        # Get all financial data
-        data_frame = get_method(asset_list)
-        # Bulk add/update data.
-        cls.from_data_frame(session, asset_class, data_frame)
-
-    @classmethod
     def dump(cls, session, dumper: Dump, asset_class_cls):
         """Dump all class instances and their time series data to disk.
 
@@ -476,6 +462,17 @@ class EODBase(TimeSeriesBase):
         super().__init__(base_obj, date_stamp)
         self.price = price
 
+    def __str__(self):
+        """Return the informal string output."""
+        return f"EODBase({self._base_obj.identity_code}, {self.date_stamp}, price={self.price})"
+
+    def __repr__(self):
+        """Return the official string output."""
+        return (
+            f"EODBase(base_obj={self._base_obj!r}, date_stamp={self.date_stamp!r}, "
+            f"price={self.price})"
+        )
+
     def to_dict(self):
         """Convert all class price attributes to a dictionary.
 
@@ -575,6 +572,18 @@ class TradeEOD(EODBase):
         self.adjusted_close = adjusted_close
         self.volume = volume
 
+    def __str__(self):
+        """Return the informal string output."""
+        return f"TradeEOD({self._base_obj.identity_code}, {self.date_stamp}, close={self.close})"
+
+    def __repr__(self):
+        """Return the official string output."""
+        return (
+            f"TradeEOD(base_obj={self._base_obj!r}, date_stamp={self.date_stamp!r}, "
+            f"open={self.open}, close={self.close}, high={self.high}, low={self.low}, "
+            f"adjusted_close={self.adjusted_close}, volume={self.volume})"
+        )
+
     def to_dict(self):
         """Convert all class price attributes to a dictionary.
 
@@ -651,12 +660,27 @@ class ListedEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
+    # Define which asset class this time series belongs to
+    ASSET_CLASS = None  # Will be set after Listed is imported to avoid circular import
+
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
         """Instance initialization."""
         super().__init__(
             base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+        )
+
+    def __str__(self):
+        """Return the informal string output."""
+        return f"ListedEOD({self._base_obj.isin}, {self.date_stamp}, close={self.close})"
+
+    def __repr__(self):
+        """Return the official string output."""
+        return (
+            f"ListedEOD(base_obj={self._base_obj!r}, date_stamp={self.date_stamp!r}, "
+            f"open={self.open}, close={self.close}, high={self.high}, low={self.low}, "
+            f"adjusted_close={self.adjusted_close}, volume={self.volume})"
         )
 
     @classmethod
@@ -686,16 +710,128 @@ class ListedEOD(TradeEOD):
         This method only updates actively listed securities.
 
         """
-        # Get asset class.
-        asset_class = cls.listed.property.mapper.class_
+        # Import here to avoid circular import
+        from .asset import Listed
+
+        # Get asset class
+        asset_class = Listed
 
         # Get only all actively listed Listed instances so we can fetch their
         # EOD trade data
-        asset_list = (
+        securities_list = (
             session.query(asset_class).filter(asset_class.status == "listed").all()
         )
 
-        super().update_all(session, asset_class, asset_list, get_method)
+        # Get all financial data
+        data_frame = get_method(securities_list)
+        # Bulk add/update data.
+        cls.from_data_frame(session, asset_class, data_frame)
+
+
+class ListedEquityEOD(ListedEOD):
+    """A single listed equity's date-stamped EOD trade data.
+
+    This is a specialized version of ListedEOD for equity securities specifically.
+    It inherits all functionality from ListedEOD but provides a distinct table
+    and identity for equity-specific time series data.
+
+    Parameters
+    ----------
+    base_obj : .asset.ListedEquity (or child class)
+        The instance the time series data belongs to. In this case
+        ``.asset.ListedEquity``.
+    date_stamp : datetime.date
+        The end-of-day (EOD) data date stamp.
+    open : float
+        Open price for the day.
+    close : float
+        The EOD closing price for the day.
+    high : float
+        High price for the day.
+    low : float
+        Low price for the day.
+    adjusted_close : float
+        Adjusted close price for the day. The closing price is the raw price,
+        which is just the cash value of the last transacted price before the
+        market closes. The adjusted closing price factors in anything that might
+        affect the stock price after the market closes.
+    volume : float
+        Number of shares traded in the day.
+
+    """
+
+    __tablename__ = "listed_equity_eod"
+    __mapper_args__ = {"polymorphic_identity": __tablename__}
+
+    _id = Column(Integer, ForeignKey("listed_eod._id"), primary_key=True)
+    """ Primary key."""
+
+    # Define which asset class this time series belongs to
+    ASSET_CLASS = None  # Will be set after ListedEquity is imported to avoid circular import
+
+    def __init__(
+        self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+    ):
+        """Instance initialization."""
+        super().__init__(
+            base_obj, date_stamp, open, close, high, low, adjusted_close, volume
+        )
+
+    def __str__(self):
+        """Return the informal string output."""
+        return f"ListedEquityEOD({self._base_obj.isin}, {self.date_stamp}, close={self.close})"
+
+    def __repr__(self):
+        """Return the official string output."""
+        return (
+            f"ListedEquityEOD(base_obj={self._base_obj!r}, date_stamp={self.date_stamp!r}, "
+            f"open={self.open}, close={self.close}, high={self.high}, low={self.low}, "
+            f"adjusted_close={self.adjusted_close}, volume={self.volume})"
+        )
+
+    @classmethod
+    def update_all(cls, session, get_method):
+        """Update/create the eod trade data of all the ListedEquity instances.
+
+        Warning
+        -------
+        The ListedEquity.time_series_last_date attribute (or child class attribute) is
+        not updated by this method as it is the responsibility of the ``ListedEquity``
+        class and its child classes to manage that attribute.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        get_method : financial_data module class method
+            The method that returns a ``pandas.DataFrame`` with columns of the
+            same name as all this class' constructor method arguments.
+
+        Note
+        ----
+        No object shall be destroyed, only updated or missing object created.
+
+        Note
+        ----
+        This method only updates actively listed equity securities.
+
+        """
+        # Import here to avoid circular import
+        from .asset import ListedEquity
+
+        # Get asset class
+        asset_class = ListedEquity
+
+        # Get only all actively listed ListedEquity instances so we can fetch their
+        # EOD trade data
+        securities_list = (
+            session.query(asset_class).filter(asset_class.status == "listed").all()
+        )
+
+        # Get all financial data
+        data_frame = get_method(securities_list)
+        # Bulk add/update data.
+        cls.from_data_frame(session, asset_class, data_frame)
 
 
 class IndexEOD(TradeEOD):
@@ -732,6 +868,9 @@ class IndexEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
+    # Define which asset class this time series belongs to
+    ASSET_CLASS = None  # Will be set after Index is imported to avoid circular import
+
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -763,14 +902,12 @@ class IndexEOD(TradeEOD):
         No object shall be destroyed, only updated or missing object created.
 
         """
-        # Get asset class
-        asset_class = cls.index.property.mapper.class_
+        # Get asset class - use the ASSET_CLASS attribute set during initialization
+        asset_class = cls.ASSET_CLASS
 
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
         index_list = (
-            # Do not use `asset_class.static is False` - `is` does NOT work. See
-            # https://stackoverflow.com/questions/18998010/flake8-complains-on-boolean-comparison-in-filter-clause
             session.query(asset_class).filter(asset_class.static == False).all()  # noqa
         )
 
@@ -811,6 +948,9 @@ class ForexEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
+    # Define which asset class this time series belongs to
+    ASSET_CLASS = None  # Will be set after Forex is imported to avoid circular import
+
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -842,8 +982,8 @@ class ForexEOD(TradeEOD):
         No object shall be destroyed, only updated or missing object created.
 
         """
-        # Get asset class
-        asset_class = cls.forex.property.mapper.class_
+        # Get asset class - use the ASSET_CLASS attribute set during initialization
+        asset_class = cls.ASSET_CLASS
 
         # Get all actively listed Listed instances so we can fetch their
         # EOD trade data
@@ -886,6 +1026,9 @@ class Dividend(TimeSeriesBase):
 
     _id = Column(Integer, ForeignKey("time_series_base._id"), primary_key=True)
     """ Primary key."""
+
+    # Define which asset class this time series belongs to
+    ASSET_CLASS = None  # Will be set after ListedEquity is imported to avoid circular import
 
     # FIXME: Cannot have NULL here but some dividends are triggering tis
     currency = Column(String, nullable=True)
@@ -938,6 +1081,20 @@ class Dividend(TimeSeriesBase):
         self.record_date = record_date
         self.unadjusted_value = unadjusted_value
         self.adjusted_value = adjusted_value
+
+    def __str__(self):
+        """Return the informal string output."""
+        return f"Dividend({self._base_obj.isin}, {self.date_stamp}, value={self.adjusted_value})"
+
+    def __repr__(self):
+        """Return the official string output."""
+        return (
+            f"Dividend(base_obj={self._base_obj!r}, date_stamp={self.date_stamp!r}, "
+            f"currency={self.currency!r}, declaration_date={self.declaration_date!r}, "
+            f"payment_date={self.payment_date!r}, period={self.period!r}, "
+            f"record_date={self.record_date!r}, unadjusted_value={self.unadjusted_value}, "
+            f"adjusted_value={self.adjusted_value})"
+        )
 
     @classmethod
     def _get_last_date(cls, security):
@@ -1009,8 +1166,8 @@ class Dividend(TimeSeriesBase):
         This method only updates actively listed securities.
 
         """
-        # Get asset class
-        asset_class = cls.listed_equity.property.mapper.class_
+        # Get asset class - use the ASSET_CLASS attribute set during initialization
+        asset_class = cls.ASSET_CLASS
 
         # Get all actively listed Listed instances so we can fetch their data
         securities_list = (
@@ -1033,7 +1190,7 @@ class Split(TimeSeriesBase):
     numerator : float
         The numerator of the split ratio, e.g., 2 for a 2-for-1 split.
     denominator : float
-        The denominator of the split ratio, e.g., 1 for a 2-for-
+        The denominator of the split ratio, e.g., 1 for a 2-for-1 split.
 
     """
 
@@ -1045,6 +1202,9 @@ class Split(TimeSeriesBase):
     _id = Column(Integer, ForeignKey("time_series_base._id"), primary_key=True)
     """ Primary key."""
 
+    # Define which asset class this time series belongs to
+    ASSET_CLASS = None  # Will be set after ListedEquity is imported to avoid circular import
+
     numerator = Column(Float, nullable=False)
     """float: The numerator of the split ratio, e.g., 2 for a 2-for-1 split."""
     denominator = Column(Float, nullable=False)
@@ -1055,6 +1215,17 @@ class Split(TimeSeriesBase):
         super().__init__(base_obj, date_stamp)
         self.numerator = numerator
         self.denominator = denominator
+
+    def __str__(self):
+        """Return the informal string output."""
+        return f"Split({self._base_obj.isin}, {self.date_stamp}, {self.numerator}:{self.denominator})"
+
+    def __repr__(self):
+        """Return the official string output."""
+        return (
+            f"Split(base_obj={self._base_obj!r}, date_stamp={self.date_stamp!r}, "
+            f"numerator={self.numerator}, denominator={self.denominator})"
+        )
 
     @classmethod
     def _get_last_date(cls, security):
@@ -1106,8 +1277,8 @@ class Split(TimeSeriesBase):
         # TODO: Find a way to get the financial_data module to look for delisted
         # data. Then skipping de-listed securities below can be avoided
 
-        # Get asset class
-        asset_class = cls.listed_equity.property.mapper.class_
+        # Get asset class - use the ASSET_CLASS attribute set during initialization
+        asset_class = cls.ASSET_CLASS
 
         # Get all actively listed Listed instances so we can fetch their data
         securities_list = (
@@ -1115,3 +1286,25 @@ class Split(TimeSeriesBase):
         )
 
         super().update_all(session, asset_class, securities_list, get_method)
+
+
+# Initialize ASSET_CLASS attributes after all classes are defined
+# This must be called after asset module is imported to avoid circular imports
+def _initialize_asset_class_references():
+    """Initialize ASSET_CLASS attributes for time series classes.
+
+    This function should be called once after the asset module is fully loaded
+    to set up the bidirectional type references between asset and time series classes.
+    This avoids circular import issues while maintaining type safety.
+    """
+    from .asset import Listed, ListedEquity, Index, Forex
+
+    # Set asset class references for EOD time series
+    ListedEOD.ASSET_CLASS = Listed
+    ListedEquityEOD.ASSET_CLASS = ListedEquity
+    IndexEOD.ASSET_CLASS = Index
+    ForexEOD.ASSET_CLASS = Forex
+
+    # Set asset class references for dividend and split time series
+    Dividend.ASSET_CLASS = ListedEquity
+    Split.ASSET_CLASS = ListedEquity
