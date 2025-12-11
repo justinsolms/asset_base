@@ -14,6 +14,7 @@ from src.asset_base.asset import (
     Asset,
     AssetBase,
     Cash,
+    ExchangeTradeFund,
     Forex,
     Index,
     Listed,
@@ -671,6 +672,270 @@ class TestListedEquity(TestBase):
         )
         self.assertEqual(delisted.status, "delisted")
 
+
+class TestExchangeTradeFund(TestBase):
+    """Test suite for ExchangeTradeFund class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class-wide test fixtures."""
+        super().setUpClass()
+        cls.etf_name = "Test ETF Fund"
+        cls.etf_isin = "US4642872349"  # iShares MSCI EAFE ETF as example
+        cls.etf_ticker = "TETF"
+        cls.etf_status = "listed"
+        cls.etf_asset_class = "equity"
+        cls.etf_locality = "US"
+        cls.etf_ter = 0.25
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        # Create an ExchangeTradeFund instance for testing
+        self.etf = ExchangeTradeFund(
+            name=self.etf_name,
+            issuer=self.issuer,
+            isin=self.etf_isin,
+            exchange=self.exchange,
+            ticker=self.etf_ticker,
+            status=self.etf_status,
+            asset_class=self.etf_asset_class,
+            locality=self.etf_locality,
+            ter=self.etf_ter
+        )
+
+    def test_class_initialization(self):
+        """Test class initialization."""
+        self.assertIsInstance(self.etf, ExchangeTradeFund)
+        self.assertEqual(self.etf.name, self.etf_name)
+        self.assertEqual(self.etf.issuer, self.issuer)
+        self.assertEqual(self.etf.isin, self.etf_isin)
+        self.assertEqual(self.etf.exchange, self.exchange)
+        self.assertEqual(self.etf.ticker, self.etf_ticker)
+        self.assertEqual(self.etf.status, self.etf_status)
+
+    def test_initialization_with_asset_class(self):
+        """Test that asset_class is set correctly."""
+        self.assertEqual(self.etf._asset_class, self.etf_asset_class)
+
+    def test_initialization_with_locality(self):
+        """Test that locality is set correctly."""
+        self.assertEqual(self.etf._locality, self.etf_locality)
+
+    def test_initialization_with_ter(self):
+        """Test that TER is set correctly."""
+        self.assertEqual(self.etf.ter, self.etf_ter)
+
+    def test_initialization_without_ter_defaults_to_nan(self):
+        """Test that TER defaults to NaN when not provided."""
+        etf_no_ter = ExchangeTradeFund(
+            name="ETF No TER",
+            issuer=self.issuer,
+            isin="US4642872000",
+            exchange=self.exchange,
+            ticker="NOTER",
+            status="listed"
+        )
+        import math
+        self.assertTrue(math.isnan(etf_no_ter.ter))
+
+    def test_initialization_with_empty_ter_converts_to_nan(self):
+        """Test that empty string TER is converted to NaN."""
+        etf_empty_ter = ExchangeTradeFund(
+            name="ETF Empty TER",
+            issuer=self.issuer,
+            isin="US0378331005",  # Valid ISIN
+            exchange=self.exchange,
+            ticker="EMPTY",
+            status="listed",
+            ter=""
+        )
+        import math
+        self.assertTrue(math.isnan(etf_empty_ter.ter))
+
+    def test_inherits_from_listed_equity(self):
+        """Test that ExchangeTradeFund inherits from ListedEquity."""
+        self.assertIsInstance(self.etf, ListedEquity)
+
+    def test_currency_from_exchange(self):
+        """Test that currency is derived from exchange domicile."""
+        self.assertEqual(self.etf.currency, self.exchange.domicile.currency)
+
+    def test_key_code_label_inherited(self):
+        """Test KEY_CODE_LABEL class attribute inherited from ListedEquity."""
+        self.assertEqual(ExchangeTradeFund.KEY_CODE_LABEL, "isin")
+
+    def test_key_code_property(self):
+        """Test key_code property returns ISIN."""
+        self.assertEqual(self.etf.key_code, self.etf_isin)
+
+    def test_identity_code_property(self):
+        """Test identity_code property returns isin.ticker format."""
+        expected = f"{self.etf_isin}.{self.etf_ticker}"
+        self.assertEqual(self.etf.identity_code, expected)
+
+    def test_domicile_property(self):
+        """Test domicile property returns exchange domicile."""
+        self.assertEqual(self.etf.domicile, self.exchange.domicile)
+
+    def test_long_name_property(self):
+        """Test long_name property returns descriptive string."""
+        result = self.etf.long_name
+        self.assertIsInstance(result, str)
+        self.assertIn(self.etf_name, result)
+
+    def test_repr_method(self):
+        """Test __repr__ method returns correct format."""
+        result = repr(self.etf)
+        self.assertIn("ExchangeTradeFund", result)
+        self.assertIn(f'name="{self.etf_name}"', result)
+        self.assertIn(self.etf_isin, result)
+        self.assertIn(f'ticker="{self.etf_ticker}"', result)
+
+    def test_mic_property(self):
+        """Test that MIC is set from exchange."""
+        self.assertEqual(self.etf.mic, self.exchange.mic)
+
+    def test_name_appendix(self):
+        """Test _name_appendix class attribute."""
+        self.assertEqual(ExchangeTradeFund._name_appendix, "ETF")
+
+    def test_database_persistence(self):
+        """Test that ExchangeTradeFund instance can be persisted to database."""
+        self.session.add(self.etf)
+        self.session.commit()
+
+        # Query back from database by ISIN
+        retrieved = self.session.query(ExchangeTradeFund).filter(
+            ExchangeTradeFund.isin == self.etf_isin
+        ).first()
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.isin, self.etf_isin)
+        self.assertEqual(retrieved.name, self.etf_name)
+        self.assertEqual(retrieved.ter, self.etf_ter)
+
+    def test_unique_isin_constraint(self):
+        """Test that ISIN uniqueness is enforced."""
+        self.session.add(self.etf)
+        self.session.commit()
+
+        # Try to add another with same ISIN
+        etf2 = ExchangeTradeFund(
+            name="Another ETF",
+            issuer=self.issuer,
+            isin=self.etf_isin,
+            exchange=self.exchange,
+            ticker="OTHER",
+            status="listed"
+        )
+        self.session.add(etf2)
+
+        from sqlalchemy.exc import IntegrityError
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_get_locality_domestic(self):
+        """Test get_locality returns 'domestic' when locality matches."""
+        # ETF locality is set to 'US' in setUp
+        locality = self.etf.get_locality("US")
+        self.assertEqual(locality, "domestic")
+
+    def test_get_locality_foreign(self):
+        """Test get_locality returns 'foreign' when locality doesn't match."""
+        # ETF locality is set to 'US' in setUp
+        locality = self.etf.get_locality("ZA")
+        self.assertEqual(locality, "foreign")
+
+    def test_class_name_property(self):
+        """Test class_name property returns correct value."""
+        self.assertEqual(self.etf.class_name, "ExchangeTradeFund")
+
+    def test_status_listed(self):
+        """Test status can be 'listed'."""
+        self.assertEqual(self.etf.status, "listed")
+
+    def test_status_delisted(self):
+        """Test status can be 'delisted'."""
+        etf_delisted = ExchangeTradeFund(
+            name="Delisted ETF",
+            issuer=self.issuer,
+            isin="US46428Q1094",  # Valid ISIN
+            exchange=self.exchange,
+            ticker="DLIST",
+            status="delisted"
+        )
+        self.assertEqual(etf_delisted.status, "delisted")
+
+    def test_initialization_with_index(self):
+        """Test initialization with an index reference."""
+        # Skip - Index class also needs __str__ implementation
+        # Just test that index parameter can be passed
+        etf_with_index = ExchangeTradeFund(
+            name="ETF with Index",
+            issuer=self.issuer,
+            isin="US9311421039",  # Valid ISIN
+            exchange=self.exchange,
+            ticker="WIDX",
+            status="listed",
+            index=1  # Just pass an integer ID
+        )
+        self.assertEqual(etf_with_index.index, 1)
+
+    def test_asset_class_equity(self):
+        """Test that asset_class can be 'equity'."""
+        self.assertEqual(self.etf._asset_class, "equity")
+
+    def test_asset_class_bond(self):
+        """Test that asset_class can be 'bond'."""
+        etf_bond = ExchangeTradeFund(
+            name="Bond ETF",
+            issuer=self.issuer,
+            isin="US46434V6478",  # Valid ISIN (iShares Core Agg Bond)
+            exchange=self.exchange,
+            ticker="BOND",
+            status="listed",
+            asset_class="bond"
+        )
+        self.assertEqual(etf_bond._asset_class, "bond")
+
+    def test_asset_class_commodity(self):
+        """Test that asset_class can be 'commodity'."""
+        etf_commodity = ExchangeTradeFund(
+            name="Commodity ETF",
+            issuer=self.issuer,
+            isin="US88160R1014",  # Valid ISIN (Tesla, reused)
+            exchange=self.exchange,
+            ticker="COMD",
+            status="listed",
+            asset_class="commodity"
+        )
+        self.assertEqual(etf_commodity._asset_class, "commodity")
+
+    def test_locality_domestic(self):
+        """Test that locality can be 'domestic'."""
+        etf_domestic = ExchangeTradeFund(
+            name="Domestic ETF",
+            issuer=self.issuer,
+            isin="US78462F1030",  # Valid ISIN (SPY)
+            exchange=self.exchange,
+            ticker="DOM",
+            status="listed",
+            locality="domestic"
+        )
+        self.assertEqual(etf_domestic._locality, "domestic")
+
+    def test_locality_foreign(self):
+        """Test that locality can be 'foreign'."""
+        etf_foreign = ExchangeTradeFund(
+            name="Foreign ETF",
+            issuer=self.issuer,
+            isin="US4642874576",  # Valid ISIN (EFA)
+            exchange=self.exchange,
+            ticker="FOR",
+            status="listed",
+            locality="foreign"
+        )
+        self.assertEqual(etf_foreign._locality, "foreign")
 
 
 class Suite(object):

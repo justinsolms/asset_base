@@ -92,9 +92,9 @@ class AssetBase(Common):
 
     def __init__(self, name, currency):
         """Instance initialization."""
-        super().__init__(name)
-
         self.currency = currency
+
+        super().__init__(name)
 
     def __lt__(self, other):
         """Use primarily key ``id`` for sorting. (See Note in class docstring)."""
@@ -1049,7 +1049,6 @@ class Share(Asset):
         if currency is None:
             currency = issuer.domicile.currency
 
-        super().__init__(name, currency, **kwargs)
 
         self.issuer = issuer
 
@@ -1064,6 +1063,8 @@ class Share(Asset):
             # Not sure why the default isn't being set to False as specified in
             # the column attribute definition, so we do it here anyway
             self.distributions = False
+
+        super().__init__(name, currency, **kwargs)
 
     @property
     def domicile(self):
@@ -1223,7 +1224,6 @@ class Listed(Share):
         # domicile currency.
         currency = exchange.domicile.currency
 
-        super().__init__(name, issuer, currency, **kwargs)
 
         # Do no remove this code!!. Some methods that use this class (such as
         # factory methods) are able to place arguments with a None value, this
@@ -1233,6 +1233,7 @@ class Listed(Share):
             pass
         else:
             raise ValueError("Unexpected `None` value for some positional arguments.")
+
 
         # Instrument identification and listing
         self.mic = exchange.mic
@@ -1245,10 +1246,12 @@ class Listed(Share):
         isin = Listed._check_isin(isin)
         # Check issuer domicile against the 1st two ISIN letters (ISO 3166-1
         # alpha-2 code)
-        if isin[0:2] == self.issuer.domicile.country_code:
+        if isin[0:2] == issuer.domicile.country_code:
             self.isin = isin
         else:
             raise ValueError("Unexpected domicile. Does not match ISIN country code.")
+
+        super().__init__(name, issuer, currency, **kwargs)
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
@@ -1713,7 +1716,6 @@ class ListedEquity(Listed):
 
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
-        super().__init__(name, issuer, isin, exchange, ticker, status, **kwargs)
 
         # Select industry classification scheme, initialise and add it.
         if "industry_class" in kwargs:
@@ -1736,6 +1738,8 @@ class ListedEquity(Listed):
                         self.industry_class
                     )
                 )
+
+        super().__init__(name, issuer, isin, exchange, ticker, status, **kwargs)
 
     def __repr__(self):
         """Return the official string output."""
@@ -2309,11 +2313,11 @@ class Index(AssetBase):
         self, name, ticker, currency, total_return=False, static=False, **kwargs
     ):
         """Instance initialization."""
-        super().__init__(name, currency, **kwargs)
-
         self.ticker = ticker
         self.total_return = total_return
         self.static = static
+
+        super().__init__(name, currency, **kwargs)
 
     def __repr__(self):
         """Return the official string output."""
@@ -2514,7 +2518,6 @@ class ExchangeTradeFund(ListedEquity):
 
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
-        super().__init__(name, issuer, isin, exchange, ticker, status, **kwargs)
 
         # Optional parameters.
         if "index" in kwargs:
@@ -2529,6 +2532,8 @@ class ExchangeTradeFund(ListedEquity):
                 self.ter = float("nan")
         else:  # Default to zero.
             self.ter = float("nan")
+
+        super().__init__(name, issuer, isin, exchange, ticker, status, **kwargs)
 
     def __repr__(self):
         """Return the official string output."""
