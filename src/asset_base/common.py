@@ -2,7 +2,52 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-""" Declare common object infrastructure
+"""Declare common object infrastructure.
+
+This module provides the foundational classes for the asset_base system,
+including database session management and the base ``Common`` class that
+all entities and assets inherit from.
+
+Factory Method Paradigm
+------------------------
+All classes inheriting from ``Common`` implement a factory method pattern
+with dual-mode behavior:
+
+**Retrieval Mode** (minimal parameters):
+    When only key identifying parameters are provided, the factory attempts
+    to retrieve an existing instance from the database. If not found, raises
+    ``FactoryError``.
+
+    Example::
+
+        currency = Currency.factory(session, ticker="USD")
+
+**Creation Mode** (full parameters):
+    When all required parameters are provided, the factory retrieves an
+    existing instance if found, or creates a new one if missing.
+
+    Example::
+
+        currency = Currency.factory(
+            session, ticker="USD", name="US Dollar",
+            country_code_list=["US"]
+        )
+
+**Dependency Enforcement**:
+    Higher-level classes call lower-level factories in retrieval mode to
+    enforce that dependencies must pre-exist:
+
+    - ``Currency`` (base level, no dependencies)
+    - ``Domicile`` → requires ``Currency`` to exist
+    - ``Entity``/``Exchange`` → require ``Domicile`` to exist
+
+    This ensures referential integrity and prevents accidental creation of
+    foundational data records.
+
+See Also
+--------
+entity : Entity and related classes with factory methods
+asset : Asset classes with factory methods
 """
 from abc import ABC, ABCMeta, abstractmethod
 
@@ -411,6 +456,51 @@ class Common(Base):
     @classmethod
     @abstractmethod
     def factory(cls, session, **kwargs):
+        """Manufacture/retrieve an instance from the given parameters.
+
+        Factory Method Behaviour
+        ------------------------
+        This abstract method defines the factory pattern used throughout the
+        asset_base system. Implementations follow a dual-mode paradigm:
+
+        **Retrieval Mode** (minimal parameters):
+            Provide only key identifying parameters. Returns existing instance
+            or raises ``FactoryError`` if not found.
+
+        **Creation Mode** (full parameters):
+            Provide all required parameters. Returns existing instance if found,
+            creates new instance if missing.
+
+        The ``create`` parameter (when present) can explicitly control behaviour:
+            - ``create=False``: Force retrieval mode, raise error if not found
+            - ``create=True``: Allow creation if instance doesn't exist (default)
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            The database session.
+        **kwargs
+            Class-specific parameters. See concrete implementations for details.
+
+        Returns
+        -------
+        Common
+            The single instance that is in the session.
+
+        Raises
+        ------
+        FactoryError
+            If instance not found in retrieval mode or if required dependencies
+            don't exist.
+        ReconcileError
+            If provided parameters conflict with existing instance data.
+
+        See Also
+        --------
+        Currency.factory : Base-level factory with no dependencies
+        Domicile.factory : Requires Currency to exist
+        Entity.factory : Requires Domicile to exist
+        """
         pass
 
     @property

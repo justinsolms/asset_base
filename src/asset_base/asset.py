@@ -2,7 +2,77 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-""" Define classes describing assets such as financial assets.
+"""Define classes describing assets such as financial assets.
+
+This module defines asset classes representing financial instruments including
+cash, forex pairs, shares, listed equities, and exchange-traded funds.
+
+Factory Method Paradigm
+------------------------
+All asset classes in this module implement the factory method pattern with
+dual-mode behavior, similar to entity classes:
+
+**Retrieval Mode** (minimal parameters):
+    When only key identifying parameters are provided, the factory attempts
+    to retrieve an existing instance. If not found, raises ``FactoryError``.
+
+**Creation Mode** (full parameters):
+    When all required parameters are provided, the factory retrieves an
+    existing instance if found, or creates a new one if missing.
+
+**Dependency on Entity Module**:
+    Asset factories depend on entities (Currency, Domicile, Issuer, Exchange)
+    being pre-loaded. Asset factories call entity factories in retrieval mode
+    to enforce that these dependencies must exist:
+
+    Examples::
+
+        # Cash.factory calls Currency.factory in retrieval mode
+        cash = Cash.factory(session, currency_ticker="USD")
+        # Raises FactoryError if USD currency doesn't exist
+
+        # Forex.factory calls Currency.factory for both currencies
+        forex = Forex.factory(
+            session, base_currency_ticker="USD",
+            price_currency_ticker="EUR"
+        )
+        # Raises FactoryError if either currency doesn't exist
+
+        # Listed.factory calls Issuer.factory and Exchange.factory
+        listed = Listed.factory(
+            session, isin="US0378331005",
+            issuer_name="Apple Inc", issuer_country_code="US",
+            exchange_mic="XNYS", ticker="AAPL"
+        )
+        # Raises FactoryError if issuer domicile or exchange doesn't exist
+
+**Typical Usage Pattern**:
+    1. Load foundational data (Currency, Domicile) using ``update_all()``
+    2. Load entity data (Issuer, Exchange) using ``update_all()``
+    3. Create or load assets, which reference pre-existing entities
+
+    Example::
+
+        # Step 1: Load currencies and domiciles
+        Currency.update_all(session, get_currency_data)
+        Domicile.update_all(session, get_domicile_data)
+
+        # Step 2: Load exchanges and issuers
+        Exchange.update_all(session, get_exchange_data)
+        Issuer.update_all(session, get_issuer_data)
+
+        # Step 3: Now safe to create assets
+        listed = Listed.factory(
+            session, isin="US0378331005",
+            issuer_name="Apple Inc", issuer_country_code="US",
+            exchange_mic="XNYS", ticker="AAPL",
+            quote_units="units"
+        )
+
+See Also
+--------
+entity : Entity classes that assets depend on
+common : Base Common class and factory pattern documentation
 """
 
 # TODO: Decide upon key_code and identity_code formats
@@ -524,25 +594,59 @@ class Cash(Asset):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
+        Factory Method Behavior
+        ------------------------
+        This factory operates in two modes controlled by the ``create`` parameter:
+
+        **Retrieval Mode** (create=False):
+            Retrieves an existing Cash instance by ticker. Raises ``FactoryError``
+            if not found.
+
+            Example::
+
+                # Must already exist in database
+                cash = Cash.factory(session, ticker="USD", create=False)
+
+        **Creation Mode** (create=True, default):
+            Retrieves existing Cash or creates new one if missing. **Important**:
+            The specified currency must already exist or ``FactoryError`` is raised.
+
+            Example::
+
+                # Currency "USD" must already exist
+                cash = Cash.factory(session, ticker="USD")
+
+        **Dependency Enforcement**:
+            This factory calls ``Currency.factory(session, ticker)`` in retrieval
+            mode (without name or country_code_list), ensuring the currency must
+            pre-exist. This prevents accidental creation of Currency records.
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         ticker : str(3)
-            ISO 4217 3-letter currency codes.
+            ISO 4217 3-letter currency code.
         create : bool, optional
-            If `False` then the factory shall expect the specified `Entity` to
-            already exist in the session or it shall raise an exception instead
-            of creating a first instance.
+            If False, raises ``FactoryError`` if cash asset doesn't exist. If True
+            (default), creates cash asset if missing. Default is True.
+        **kwargs
+            Additional keyword arguments.
 
-        Return
-        ------
-        asset_base.Cash
+        Returns
+        -------
+        Cash
             The single instance that is in the session.
 
-        See also
+        Raises
+        ------
+        FactoryError
+            If cash not found when create=False, or if specified currency
+            doesn't exist.
+
+        See Also
         --------
-        .Asset.factory,
+        Currency.factory : Called in retrieval mode to get currency
 
         """
         # Check if entity exists in the session and if not then add it.
@@ -805,6 +909,38 @@ class Forex(Cash):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
+        Factory Method Behavior
+        ------------------------
+        This factory operates in two modes controlled by the ``create`` parameter:
+
+        **Retrieval Mode** (create=False):
+            Retrieves an existing Forex pair by base and price tickers. Raises
+            ``FactoryError`` if not found.
+
+            Example::
+
+                # Must already exist in database
+                forex = Forex.factory(
+                    session, base_ticker="USD", price_ticker="EUR",
+                    create=False
+                )
+
+        **Creation Mode** (create=True, default):
+            Retrieves existing Forex or creates new one if missing. **Important**:
+            Both currencies must already exist or ``FactoryError`` is raised.
+
+            Example::
+
+                # Both "USD" and "EUR" currencies must already exist
+                forex = Forex.factory(
+                    session, base_ticker="USD", price_ticker="EUR"
+                )
+
+        **Dependency Enforcement**:
+            This factory calls ``Currency.factory(session, ticker)`` in retrieval
+            mode for both base and price currencies, ensuring both must pre-exist.
+            This prevents accidental creation of Currency records.
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -814,18 +950,25 @@ class Forex(Cash):
         price_ticker : str(3)
             ISO 4217 3-letter currency code. The price currency.
         create : bool, optional
-            If `False` then the factory shall expect the specified `Entity` to
-            already exist in the session or it shall raise an exception instead
-            of creating a first instance.
+            If False, raises ``FactoryError`` if forex pair doesn't exist. If True
+            (default), creates forex pair if missing. Default is True.
+        **kwargs
+            Additional keyword arguments.
 
-        Return
-        ------
-        asset_base.Cash
+        Returns
+        -------
+        Forex
             The single instance that is in the session.
 
-        See also
+        Raises
+        ------
+        FactoryError
+            If forex not found when create=False, or if either specified currency
+            doesn't exist.
+
+        See Also
         --------
-        .Asset.factory,
+        Currency.factory : Called in retrieval mode for both currencies
 
         """
         # Get the ``base_currency`` if it exits
@@ -1376,62 +1519,109 @@ class Listed(Share):
         shall first attempt retrieval. Failing that if the other parameters are
         sufficient then a new instance shall be committed to the session.
 
-        Note
-        ----
-        An instances may be retrieved by either an ``isin`` argument or by the
-        pair of ``mic`` and ``ticker`` arguments. If none of these is provided
-        then a ``ValueError`` exception shall be raised.
+        Factory Method Behavior
+        ------------------------
+        This factory operates in two modes controlled by the ``create`` parameter:
+
+        **Retrieval Mode** (create=False or minimal identifiers):
+            Retrieves an existing Listed by ISIN or by (MIC, ticker) pair.
+            Raises ``FactoryError`` if not found.
+
+            Examples::
+
+                # Retrieve by ISIN
+                listed = Listed.factory(
+                    session, isin="US0378331005", create=False
+                )
+
+                # Retrieve by exchange MIC and ticker
+                listed = Listed.factory(
+                    session, mic="XNYS", ticker="AAPL", create=False
+                )
+
+        **Creation Mode** (create=True with full parameters):
+            Retrieves existing Listed or creates new one if missing.
+            **Important**: The issuer, exchange, and their domiciles must already
+            exist or ``FactoryError`` is raised.
+
+            Example::
+
+                # Issuer domicile and exchange must already exist
+                listed = Listed.factory(
+                    session, isin="US0378331005",
+                    listed_name="Apple Inc", ticker="AAPL",
+                    issuer_name="Apple Inc",
+                    issuer_domicile_code="US",
+                    mic="XNYS", status="listed"
+                )
+
+        **Dependency Enforcement**:
+            This factory calls ``Issuer.factory()`` and ``Exchange.factory()`` which
+            in turn call ``Domicile.factory()`` in retrieval mode, ensuring all
+            dependencies must pre-exist. This prevents accidental creation of
+            foundational Entity/Domicile/Currency records.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        isin : str, Optional
+        isin : str, optional
             An International Securities Identification Number (ISIN) uniquely
-            identifies a security.
-        mic : str, Optional
-            ISO 10383 MIC (Market Identifier Code) of the exchange.
-        ticker : str, Optional
+            identifies a security. Required for creation, or can be used alone
+            for retrieval.
+        mic : str, optional
+            ISO 10383 MIC (Market Identifier Code) of the exchange. Required for
+            creation, or can be used with ticker for retrieval.
+        ticker : str, optional
             The ticker assigned to the asset by the exchange listing process.
-        listed_name : str, Optional
-            Entity full name of the listed security as it was issued.
-        issuer_domicile_code : str(2), Optional
+            Required for creation, or can be used with mic for retrieval.
+        listed_name : str, optional
+            Entity full name of the listed security as it was issued. Required
+            for creation.
+        issuer_domicile_code : str(2), optional
             ISO 3166-1 Alpha-2 two letter country code. The domicile code of the
-            issuer.
-        issuer_name : str, Optional
-            The name of the issuer institution that issued the share.
-        status : str
+            issuer. Required for creation. The domicile must already exist.
+        issuer_name : str, optional
+            The name of the issuer institution that issued the share. Required
+            for creation.
+        status : str, optional
             Flag of listing status ('listed', 'delisted').
-        create : bool, Optional
-            If `False` then the factory shall expect the specified `Entity` to
-            exist in the session or it shall raise an exception.
+        create : bool, optional
+            If False, raises ``FactoryError`` if listed security doesn't exist.
+            If True (default), creates security if missing. Default is True.
+        **kwargs
+            Additional keyword arguments (e.g., quote_units, shares_in_issue).
 
-        The listed security's domicile (and by implication the related currency)
-        must already exist in the session or an exception shall be raised.
+        Returns
+        -------
+        Listed
+            The single instance that is in the session.
 
-        The listed security's exchange must already exist in the session or an
-        exception shall be raised.
+        Raises
+        ------
+        FactoryError
+            If listed not found when create=False, if required parameters missing
+            for creation, or if issuer/exchange dependencies don't exist.
+        ValueError
+            If neither isin nor (mic, ticker) pair provided for retrieval.
 
-        Note
-        ----
+        See Also
+        --------
+        Issuer.factory : Called to get or validate issuer
+        Exchange.factory : Called to get or validate exchange
+
+        Notes
+        -----
+        An instance may be retrieved by either:
+            * The ``isin`` parameter alone.
+            * The ``ticker`` and ``mic`` pair.
+
         The exchange domicile is considered to be the domicile of the listed
-        share. If the parameters don't reflect that an exception shall be
-        raised.
+        share. If the parameters don't reflect that an exception shall be raised.
 
         To add a new listing to the session all the parameters except ``mic``
-        are required. However if ``mic`` is specified then  ``exchange_name``
+        are required. However if ``mic`` is specified then ``exchange_name``
         and ``exchange_domicile_code`` are not required.
-
-        To only retrieve a listing from the session one the following
-        combinations are required to be specified:
-
-            * The ``isin`` parameter alone.
-            * The ``ticker`` and ``mic``.
-
-        Return
-        ------
-        .Listed
-            The single instance that is in the session.
 
         """
         if isin is not None:
@@ -2357,25 +2547,73 @@ class Index(AssetBase):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
+        Factory Method Behavior
+        ------------------------
+        This factory operates in two modes controlled by the ``create`` parameter:
+
+        **Retrieval Mode** (create=False):
+            Retrieves an existing Index by ticker. Raises ``FactoryError`` if not
+            found.
+
+            Example::
+
+                # Must already exist in database
+                index = Index.factory(
+                    session, index_name="S&P 500", ticker="^GSPC",
+                    currency_code="USD", create=False
+                )
+
+        **Creation Mode** (create=True, default):
+            Retrieves existing Index or creates new one if missing. **Important**:
+            The specified currency must already exist or ``FactoryError`` is raised.
+
+            Example::
+
+                # Currency "USD" must already exist
+                index = Index.factory(
+                    session, index_name="S&P 500", ticker="^GSPC",
+                    currency_code="USD"
+                )
+
+        **Dependency Enforcement**:
+            This factory calls ``Currency.factory(session, currency_code)`` in
+            retrieval mode (without name or country_code_list), ensuring the
+            currency must pre-exist. This prevents accidental creation of Currency
+            records.
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         index_name : str
-            Entity full name. If the instance does not exist in the session then
-            this parameter must be provided to create the instance otherwise an
-            exception shall be raised.
+            Entity full name. Required for both retrieval and creation.
         ticker : str
-            A short mnemonic code (often derived from the name) used to identity
+            A short mnemonic code (often derived from the name) used to identify
             the index. This may be used in conjunction with the issuer to
-            uniquely identity the index in the world.
+            uniquely identify the index in the world.
         currency_code : str(3)
-            ISO 4217 3-letter currency codes.
+            ISO 4217 3-letter currency code. The currency must already exist in
+            the database.
+        create : bool, optional
+            If False, raises ``FactoryError`` if index doesn't exist. If True
+            (default), creates index if missing. Default is True.
+        **kwargs
+            Additional keyword arguments.
 
-        Return
-        ------
+        Returns
+        -------
         Index
             The single instance that is in the session.
+
+        Raises
+        ------
+        FactoryError
+            If index not found when create=False, or if specified currency
+            doesn't exist.
+
+        See Also
+        --------
+        Currency.factory : Called in retrieval mode to get currency
 
         """
         # Some indices such as "Crypto Volatility Index" have unknown currency
