@@ -11,15 +11,11 @@ from src.asset_base.financial_data import History, Static
 from src.asset_base.exceptions import FactoryError, BadISIN, ReconcileError
 from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
 from src.asset_base.asset import (
-    Asset,
-    AssetBase,
     Cash,
-    ExchangeTradeFund,
     Forex,
-    Index,
-    Listed,
     ListedEquity,
-    Share,
+    Index,
+    ExchangeTradeFund,
 )
 from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
 
@@ -56,6 +52,10 @@ class TestBase(unittest.TestCase):
         # Add an Exchange object to asset_base
         Exchange.update_all(self.session, get_method=Static().get_exchange)
         self.exchange = Exchange.factory(self.session, self.exchange_ticker)
+
+    def tearDown(self) -> None:
+        """Tear down test case fixtures."""
+        self.test_session.close()
 
 
 class TestCash(TestBase):
