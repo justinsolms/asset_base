@@ -324,7 +324,7 @@ class Asset(AssetBase):
             Cash as in notes or bank balance.
         'money':
             Short term fixed-interest securities.
-        'bonds':
+        'bond':
             Debt instruments where the owner of the debts is owed by the issuer.
         'property':
             Investments into real-estate. Your home or investment property, plus
@@ -332,7 +332,7 @@ class Asset(AssetBase):
         'equity':
             Also called stocks. Shares in publicly held companies or company
             legal vehicles.
-        'commodities':
+        'commodity':
             Physical goods such as gold, copper, crude oil, natural gas, wheat,
             corn, and even electricity.
 

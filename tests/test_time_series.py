@@ -37,6 +37,15 @@ class TestBase(unittest.TestCase):
         cls.ticker_symbol = "TEST"
         cls.status = "listed"
 
+        # Common test data for EOD instances
+        cls.test_date = datetime.date(2020, 12, 1)
+        cls.test_open = 100.0
+        cls.test_close = 105.0
+        cls.test_high = 110.0
+        cls.test_low = 95.0
+        cls.test_adjusted_close = 105.0
+        cls.test_volume = 1000000
+
         # Trade EOD data fixture
         trade_eod_csv = (
             "date_stamp,adjusted_close,close,high,low,open,volume,isin\n"
@@ -99,9 +108,18 @@ class TestBase(unittest.TestCase):
         self.exchange = Exchange.factory(self.session, self.exchange_ticker)
 
         # -------------------- Asset Classes --------------------
-        self.cash = Cash(self.name, self.currency)
-        self.forex = Forex(self.base_currency_ticker, self.price_currency_ticker)
-        self.index = Index(self.name, self.currency)
+        # Cash: requires Currency object
+        self.cash = Cash(self.currency)
+
+        # Forex: requires Currency objects for base and price currencies
+        self.base_currency = Currency.factory(self.session, self.base_currency_ticker)
+        self.price_currency = Currency.factory(self.session, self.price_currency_ticker)
+        self.forex = Forex(self.base_currency, self.price_currency)
+
+        # Index: requires name, ticker, and Currency object
+        self.index = Index(self.name, "TESTIDX", self.currency)
+
+        # ListedEquity: the main asset for ListedEquityEOD tests
         self.listed_equity = ListedEquity(
             self.listed_name, self.issuer, self.isin, self.exchange,
             self.ticker_symbol, self.status
@@ -112,7 +130,411 @@ class TestBase(unittest.TestCase):
         self.test_session.close()
 
 
+class TestListedEquityEOD(TestBase):
+    """Test ListedEquityEOD time series functionality."""
 
+    def test_create_listed_equity_eod_instance(self):
+        """Test creating a ListedEquityEOD instance."""
+        # Add the listed equity to the session
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Create a ListedEquityEOD instance using fixtures
+        equity_eod = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        self.session.add(equity_eod)
+        self.session.commit()
+
+        # Verify instance was created
+        self.assertIsNotNone(equity_eod._id)
+        self.assertEqual(equity_eod.date_stamp, self.test_date)
+        self.assertEqual(equity_eod.open, self.test_open)
+        self.assertEqual(equity_eod.close, self.test_close)
+        self.assertEqual(equity_eod.high, self.test_high)
+        self.assertEqual(equity_eod.low, self.test_low)
+        self.assertEqual(equity_eod.adjusted_close, self.test_adjusted_close)
+        self.assertEqual(equity_eod.volume, self.test_volume)
+        self.assertEqual(equity_eod.price, self.test_close)  # price convention = close
+
+    def test_listed_equity_eod_str_repr(self):
+        """Test __str__ and __repr__ methods."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        equity_eod = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        # Test __str__
+        str_output = str(equity_eod)
+        self.assertIn("ListedEquityEOD", str_output)
+        self.assertIn(self.isin, str_output)
+        self.assertIn("2020-12-01", str_output)
+        self.assertIn(str(self.test_close), str_output)
+
+        # Test __repr__
+        repr_output = repr(equity_eod)
+        self.assertIn("ListedEquityEOD", repr_output)
+        self.assertIn("date_stamp", repr_output)
+        self.assertIn("open=", repr_output)
+        self.assertIn("close=", repr_output)
+
+    def test_listed_equity_eod_to_dict_units(self):
+        """Test to_dict method with units quote."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        equity_eod = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        result_dict = equity_eod.to_dict()
+
+        self.assertEqual(result_dict['date_stamp'], self.test_date)
+        self.assertEqual(result_dict['open'], self.test_open)
+        self.assertEqual(result_dict['close'], self.test_close)
+        self.assertEqual(result_dict['high'], self.test_high)
+        self.assertEqual(result_dict['low'], self.test_low)
+        self.assertEqual(result_dict['adjusted_close'], self.test_adjusted_close)
+        self.assertEqual(result_dict['volume'], self.test_volume)
+
+    def test_listed_equity_eod_to_dict_cents(self):
+        """Test to_dict method with cents quote conversion."""
+        # Create a listed equity with cents quote_units
+        # Use a valid US ISIN: US5949181045 (Microsoft)
+        equity_cents = ListedEquity(
+            self.listed_name + " Cents",
+            self.issuer,
+            "US5949181045",
+            self.exchange,
+            "TSTC",
+            self.status,
+            quote_units="cents"
+        )
+        self.session.add(equity_cents)
+        self.session.commit()
+
+        equity_eod = ListedEquityEOD(
+            base_obj=equity_cents,
+            date_stamp=self.test_date,
+            open=self.test_open * 100,  # Convert units to cents
+            close=self.test_close * 100,
+            high=self.test_high * 100,
+            low=self.test_low * 100,
+            adjusted_close=self.test_adjusted_close * 100,
+            volume=self.test_volume
+        )
+
+        result_dict = equity_eod.to_dict()
+
+        # Values should be converted from cents to units
+        self.assertEqual(result_dict['open'], self.test_open)
+        self.assertEqual(result_dict['close'], self.test_close)
+        self.assertEqual(result_dict['high'], self.test_high)
+        self.assertEqual(result_dict['low'], self.test_low)
+        self.assertEqual(result_dict['adjusted_close'], self.test_adjusted_close)
+        self.assertEqual(result_dict['volume'], self.test_volume)
+
+    def test_asset_class_validation_success(self):
+        """Test that ListedEquityEOD accepts ListedEquity instance."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Should not raise any exception
+        equity_eod = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        self.assertEqual(equity_eod._base_obj, self.listed_equity)
+
+    def test_asset_class_validation_failure(self):
+        """Test that ListedEquityEOD rejects non-ListedEquity instances."""
+        # Use the Index fixture from setUp
+        self.session.add(self.index)
+        self.session.commit()
+
+        # Should raise TypeError when trying to use Index with ListedEquityEOD
+        with self.assertRaises(TypeError) as context:
+            equity_eod = ListedEquityEOD(
+                base_obj=self.index,  # Wrong type!
+                date_stamp=self.test_date,
+                open=self.test_open,
+                close=self.test_close,
+                high=self.test_high,
+                low=self.test_low,
+                adjusted_close=self.test_adjusted_close,
+                volume=self.test_volume
+            )
+
+        self.assertIn("ListedEquityEOD", str(context.exception))
+        self.assertIn("ListedEquity", str(context.exception))
+
+    def test_from_data_frame(self):
+        """Test creating ListedEquityEOD instances from DataFrame."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Use the test fixture data
+        ListedEquityEOD.from_data_frame(
+            self.session, ListedEquity, self.test_trade_eod_df
+        )
+        self.session.commit()
+
+        # Query all ListedEquityEOD instances
+        eod_list = self.session.query(ListedEquityEOD).all()
+
+        # Should have 10 records from the fixture
+        self.assertEqual(len(eod_list), 10)
+
+        # Verify first record
+        first_eod = eod_list[0]
+        self.assertEqual(first_eod.date_stamp, datetime.date(2020, 12, 1))
+        self.assertEqual(first_eod.adjusted_close, 123.0)
+        self.assertEqual(first_eod.close, 123.1)
+        self.assertEqual(first_eod.volume, 1000)
+
+    def test_from_data_frame_update_existing(self):
+        """Test updating existing ListedEquityEOD instances from DataFrame."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # First load - create records
+        ListedEquityEOD.from_data_frame(
+            self.session, ListedEquity, self.test_trade_eod_df
+        )
+        self.session.commit()
+
+        # Modify the DataFrame with updated values
+        updated_df = self.test_trade_eod_df.copy()
+        updated_df.loc[
+            updated_df['date_stamp'] == pd.Timestamp('2020-12-01'), 'close'
+        ] = 999.9
+
+        # Second load - update records
+        ListedEquityEOD.from_data_frame(
+            self.session, ListedEquity, updated_df
+        )
+        self.session.commit()
+
+        # Query the updated record
+        eod = self.session.query(ListedEquityEOD).filter(
+            ListedEquityEOD.date_stamp == datetime.date(2020, 12, 1)
+        ).one()
+
+        # Should have updated value
+        self.assertEqual(eod.close, 999.9)
+
+        # Should still have 10 records (no duplicates)
+        eod_count = self.session.query(ListedEquityEOD).count()
+        self.assertEqual(eod_count, 10)
+
+    def test_from_data_frame_empty(self):
+        """Test from_data_frame with empty DataFrame."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Create empty DataFrame with correct columns
+        empty_df = pd.DataFrame(columns=self.test_trade_eod_df.columns)
+
+        # Should not raise an error
+        ListedEquityEOD.from_data_frame(
+            self.session, ListedEquity, empty_df
+        )
+        self.session.commit()
+
+        # Should have no records
+        eod_count = self.session.query(ListedEquityEOD).count()
+        self.assertEqual(eod_count, 0)
+
+    def test_to_data_frame(self):
+        """Test converting ListedEquityEOD instances to DataFrame."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Load data
+        ListedEquityEOD.from_data_frame(
+            self.session, ListedEquity, self.test_trade_eod_df
+        )
+        self.session.commit()
+
+        # Convert back to DataFrame
+        result_df = ListedEquityEOD.to_data_frame(self.session, ListedEquity)
+
+        # Should have same number of rows
+        self.assertEqual(len(result_df), len(self.test_trade_eod_df))
+
+        # Should have the ISIN column
+        self.assertIn('isin', result_df.columns)
+        self.assertTrue((result_df['isin'] == self.isin).all())
+
+        # Check date_stamp is pandas.Timestamp
+        self.assertTrue(pd.api.types.is_datetime64_any_dtype(result_df['date_stamp']))
+
+        # Verify data values
+        first_row = result_df.iloc[0]
+        self.assertAlmostEqual(first_row['close'], 123.1, places=5)
+        self.assertEqual(first_row['volume'], 1000)
+
+    def test_to_data_frame_empty(self):
+        """Test to_data_frame with no records."""
+        # Don't add any data
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        result_df = ListedEquityEOD.to_data_frame(self.session, ListedEquity)
+
+        # Should return empty DataFrame with proper columns
+        self.assertTrue(result_df.empty)
+        self.assertIn('isin', result_df.columns)
+        self.assertIn('date_stamp', result_df.columns)
+
+    def test_date_stamp_type_validation(self):
+        """Test that date_stamp must be datetime.date, not pandas.Timestamp."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Try to create with pandas.Timestamp (should fail)
+        with self.assertRaises(TypeError) as context:
+            equity_eod = ListedEquityEOD(
+                base_obj=self.listed_equity,
+                date_stamp=pd.Timestamp('2020-12-01'),  # Wrong type
+                open=self.test_open,
+                close=self.test_close,
+                high=self.test_high,
+                low=self.test_low,
+                adjusted_close=self.test_adjusted_close,
+                volume=self.test_volume
+            )
+
+        self.assertIn("datetime.date", str(context.exception))
+        self.assertIn("date()", str(context.exception))
+
+    def test_unique_constraint(self):
+        """Test that duplicate date_stamp for same asset raises error."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Create first instance
+        eod1 = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(eod1)
+        self.session.commit()
+
+        # Try to create duplicate (should fail on commit)
+        eod2 = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open + 1.0,
+            close=self.test_close + 1.0,
+            high=self.test_high + 1.0,
+            low=self.test_low + 1.0,
+            adjusted_close=self.test_adjusted_close + 1.0,
+            volume=self.test_volume * 2
+        )
+        self.session.add(eod2)
+
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_relationship_to_asset(self):
+        """Test that ListedEquityEOD properly relates to ListedEquity."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        equity_eod = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(equity_eod)
+        self.session.commit()
+
+        # Access through relationship
+        self.assertEqual(equity_eod._base_obj, self.listed_equity)
+        self.assertIn(equity_eod, self.listed_equity._series)
+
+        # Test typed _eod_series property
+        self.assertIn(equity_eod, self.listed_equity._eod_series)
+
+    def test_polymorphic_inheritance(self):
+        """Test that ListedEquityEOD is part of TradeEOD hierarchy."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        equity_eod = ListedEquityEOD(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(equity_eod)
+        self.session.commit()
+
+        # Verify it's queryable via parent classes
+        self.assertEqual(
+            self.session.query(TradeEOD).filter(
+                TradeEOD._id == equity_eod._id
+            ).count(),
+            1
+        )
+        self.assertEqual(
+            self.session.query(ListedEOD).filter(
+                ListedEOD._id == equity_eod._id
+            ).count(),
+            1
+        )
+
+    def test_asset_class_attribute(self):
+        """Test that ASSET_CLASS attribute is properly set."""
+        self.assertEqual(ListedEquityEOD.ASSET_CLASS, ListedEquity)
+        self.assertIsNotNone(ListedEquityEOD.ASSET_CLASS)
 
 
 def suite():
@@ -122,6 +544,7 @@ def suite():
 
     # Add all test classes
     test_classes = [
+        TestListedEquityEOD,
     ]
 
     for test_class in test_classes:
