@@ -156,7 +156,7 @@ class TestCash(TestBase):
     def test_factory_create_false_raises_error(self):
         """Test factory with create=False raises error for non-existent cash."""
         with self.assertRaises(FactoryError):
-            Cash.factory(self.session, "XXX", create=False)
+            Cash.factory(self.session, "XXX", create=False)  # Non-existent currency
 
     def test_get_locality_domestic(self):
         """Test get_locality returns 'domestic' for same domicile."""
@@ -362,7 +362,7 @@ class TestForex(TestBase):
             Forex.factory(
                 self.session,
                 self.base_currency_ticker,
-                "XXX",  # Non-existent currency
+                "XXX",  # Non-existent currency to trigger error
                 create=False
             )
 
@@ -495,10 +495,10 @@ class TestListedEquity(TestBase):
         listed2 = ListedEquity(
             name="Another Company",
             issuer=self.issuer,
-            isin=self.isin,
+            isin=self.isin,  # Deliberately use same ISIN to test constraint
             exchange=self.exchange,
             ticker="OTHER",
-            status="listed"
+            status=self.status
         )
         self.session.add(listed2)
 
@@ -641,13 +641,13 @@ class TestListedEquity(TestBase):
         with self.assertRaises(FactoryError):
             ListedEquity.factory(
                 self.session,
-                isin="GB0002374006",  # Valid ISIN for Diageo (but not in our test db)
+                isin="GB0002374006",  # Different ISIN (not in test db)
                 mic=self.exchange.mic,
                 ticker="NONE",
                 listed_name="Non-existent",
                 issuer_name="Non-existent Issuer",
-                issuer_domicile_code="US",
-                status="listed",
+                issuer_domicile_code=self.issuer_domicile_code,
+                status=self.status,
                 create=False
             )
 
@@ -661,14 +661,13 @@ class TestListedEquity(TestBase):
 
     def test_status_delisted(self):
         """Test status can be 'delisted'."""
-        # Use valid ISIN: US0378331006 (similar to Apple but different checksum)
         delisted = ListedEquity(
             name="Delisted Company",
             issuer=self.issuer,
-            isin="US88160R1014",  # Valid ISIN for Tesla
+            isin="US88160R1014",  # Different ISIN than default
             exchange=self.exchange,
             ticker="DLIST",
-            status="delisted"
+            status="delisted"  # Different status to test
         )
         self.assertEqual(delisted.status, "delisted")
 
@@ -861,8 +860,8 @@ class TestIndex(TestBase):
             Index.factory(
                 self.session,
                 index_name="Non-existent Index",
-                ticker="NOEX",
-                currency_code="USD",
+                ticker="NOEX",  # Non-existent ticker to trigger error
+                currency_code=self.currency_ticker,
                 create=False
             )
 
@@ -872,7 +871,7 @@ class TestIndex(TestBase):
             self.session,
             index_name="Unknown Currency Index",
             ticker="UNKIDX",
-            currency_code="Unknown"
+            currency_code="Unknown"  # Special case to test conversion
         )
         # Should be converted to ZZZ
         zzz_currency = Currency.factory(self.session, "ZZZ")
@@ -987,7 +986,7 @@ class TestExchangeTradeFund(TestBase):
         etf_no_ter = ExchangeTradeFund(
             name="ETF No TER",
             issuer=self.issuer,
-            isin="US4642872000",
+            isin="US46434V6478",  # Different ISIN than default
             exchange=self.exchange,
             ticker="NOTER",
             status="listed"
@@ -1000,7 +999,7 @@ class TestExchangeTradeFund(TestBase):
         etf_empty_ter = ExchangeTradeFund(
             name="ETF Empty TER",
             issuer=self.issuer,
-            isin="US0378331005",  # Valid ISIN
+            isin="US78462F1030",  # Different ISIN than default
             exchange=self.exchange,
             ticker="EMPTY",
             status="listed",
@@ -1079,10 +1078,10 @@ class TestExchangeTradeFund(TestBase):
         etf2 = ExchangeTradeFund(
             name="Another ETF",
             issuer=self.issuer,
-            isin=self.etf_isin,
+            isin=self.etf_isin,  # Deliberately use same ISIN to test constraint
             exchange=self.exchange,
             ticker="OTHER",
-            status="listed"
+            status=self.etf_status
         )
         self.session.add(etf2)
 
@@ -1092,8 +1091,8 @@ class TestExchangeTradeFund(TestBase):
 
     def test_get_locality_domestic(self):
         """Test get_locality returns 'domestic' when locality matches."""
-        # ETF locality is set to 'US' in setUp
-        locality = self.etf.get_locality("US")
+        # ETF locality is set to etf_locality in setUp
+        locality = self.etf.get_locality(self.etf_locality)
         self.assertEqual(locality, "domestic")
 
     def test_get_locality_foreign(self):
@@ -1115,24 +1114,23 @@ class TestExchangeTradeFund(TestBase):
         etf_delisted = ExchangeTradeFund(
             name="Delisted ETF",
             issuer=self.issuer,
-            isin="US46428Q1094",  # Valid ISIN
+            isin="US46428Q1094",  # Different ISIN than default
             exchange=self.exchange,
             ticker="DLIST",
-            status="delisted"
+            status="delisted"  # Different status to test
         )
         self.assertEqual(etf_delisted.status, "delisted")
 
     def test_initialization_with_index(self):
         """Test initialization with an index reference."""
-        # Skip - Index class also needs __str__ implementation
         # Just test that index parameter can be passed
         etf_with_index = ExchangeTradeFund(
             name="ETF with Index",
             issuer=self.issuer,
-            isin="US9311421039",  # Valid ISIN
+            isin="US9311421039",  # Different ISIN than default
             exchange=self.exchange,
             ticker="WIDX",
-            status="listed",
+            status=self.etf_status,
             index=1  # Just pass an integer ID
         )
         self.assertEqual(etf_with_index.index, 1)
@@ -1146,11 +1144,11 @@ class TestExchangeTradeFund(TestBase):
         etf_bond = ExchangeTradeFund(
             name="Bond ETF",
             issuer=self.issuer,
-            isin="US46434V6478",  # Valid ISIN (iShares Core Agg Bond)
+            isin="US46434V6478",  # Different ISIN than default
             exchange=self.exchange,
             ticker="BOND",
-            status="listed",
-            asset_class="bond"
+            status=self.etf_status,
+            asset_class="bond"  # Different asset_class to test
         )
         self.assertEqual(etf_bond._asset_class, "bond")
 
@@ -1159,11 +1157,11 @@ class TestExchangeTradeFund(TestBase):
         etf_commodity = ExchangeTradeFund(
             name="Commodity ETF",
             issuer=self.issuer,
-            isin="US88160R1014",  # Valid ISIN (Tesla, reused)
+            isin="US88160R1014",  # Different ISIN than default
             exchange=self.exchange,
             ticker="COMD",
-            status="listed",
-            asset_class="commodity"
+            status=self.etf_status,
+            asset_class="commodity"  # Different asset_class to test
         )
         self.assertEqual(etf_commodity._asset_class, "commodity")
 
@@ -1172,11 +1170,11 @@ class TestExchangeTradeFund(TestBase):
         etf_domestic = ExchangeTradeFund(
             name="Domestic ETF",
             issuer=self.issuer,
-            isin="US78462F1030",  # Valid ISIN (SPY)
+            isin="US78462F1030",  # Different ISIN than default
             exchange=self.exchange,
             ticker="DOM",
-            status="listed",
-            locality="domestic"
+            status=self.etf_status,
+            locality="domestic"  # Different locality to test
         )
         self.assertEqual(etf_domestic._locality, "domestic")
 
@@ -1185,11 +1183,11 @@ class TestExchangeTradeFund(TestBase):
         etf_foreign = ExchangeTradeFund(
             name="Foreign ETF",
             issuer=self.issuer,
-            isin="US4642874576",  # Valid ISIN (EFA)
+            isin="US4642874576",  # Different ISIN than default
             exchange=self.exchange,
             ticker="FOR",
-            status="listed",
-            locality="foreign"
+            status=self.etf_status,
+            locality="foreign"  # Different locality to test
         )
         self.assertEqual(etf_foreign._locality, "foreign")
 
