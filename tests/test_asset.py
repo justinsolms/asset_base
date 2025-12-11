@@ -1192,31 +1192,27 @@ class TestExchangeTradeFund(TestBase):
         self.assertEqual(etf_foreign._locality, "foreign")
 
 
-class Suite(object):
-    """Test suite"""
+def suite():
+    """Create and return test suite with all test classes."""
+    test_suite = unittest.TestSuite()
+    loader = unittest.TestLoader()
 
-    def __init__(self):
-        """Initialization."""
-        suite = unittest.TestSuite()
+    # Add all test classes
+    test_classes = [
+        TestCash,
+        TestForex,
+        TestListedEquity,
+        TestIndex,
+        TestExchangeTradeFund,
+    ]
 
-        # Classes that are passing. Add the others later when they too work.
-        test_classes = [
-        ]
+    for test_class in test_classes:
+        tests = loader.loadTestsFromTestCase(test_class)
+        test_suite.addTests(tests)
 
-        suites_list = list()
-        loader = unittest.TestLoader()
-        for test_class in test_classes:
-            suites_list.append(loader.loadTestsFromTestCase(test_class))
-
-        suite.addTests(suites_list)
-
-        self.suite = suite
-
-    def run(self):
-        runner = unittest.TextTestRunner()
-        runner.run(self.suite)
+    return test_suite
 
 
 if __name__ == "__main__":
-    suite = Suite()
-    suite.run()
+    runner = unittest.TextTestRunner(verbosity=2)
+    runner.run(suite())
