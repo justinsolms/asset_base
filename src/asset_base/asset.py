@@ -2319,6 +2319,12 @@ class Index(AssetBase):
 
         super().__init__(name, currency, **kwargs)
 
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return '{}(name="{}", ticker="{}")'.format(
+            self.__class__.__name__, self.name, self.ticker
+        )
+
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", ticker="{}", currency={!r}, total_return={!r}, static={!r})'.format(

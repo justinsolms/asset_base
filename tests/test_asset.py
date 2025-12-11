@@ -673,6 +673,262 @@ class TestListedEquity(TestBase):
         self.assertEqual(delisted.status, "delisted")
 
 
+class TestIndex(TestBase):
+    """Test suite for Index class."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class-wide test fixtures."""
+        super().setUpClass()
+        cls.index_name = "Test Market Index"
+        cls.index_ticker = "TIDX"
+        cls.total_return_flag = False
+        cls.static_flag = False
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        # Create an Index instance for testing
+        self.index = Index(
+            name=self.index_name,
+            ticker=self.index_ticker,
+            currency=self.currency,
+            total_return=self.total_return_flag,
+            static=self.static_flag
+        )
+
+    def test_class_initialization(self):
+        """Test class initialization."""
+        self.assertIsInstance(self.index, Index)
+        self.assertEqual(self.index.name, self.index_name)
+        self.assertEqual(self.index.ticker, self.index_ticker)
+        self.assertEqual(self.index.currency, self.currency)
+        self.assertEqual(self.index.total_return, self.total_return_flag)
+        self.assertEqual(self.index.static, self.static_flag)
+
+    def test_initialization_with_total_return_true(self):
+        """Test initialization with total_return=True."""
+        index_tr = Index(
+            name="Total Return Index",
+            ticker="TRIDX",
+            currency=self.currency,
+            total_return=True,
+            static=False
+        )
+        self.assertTrue(index_tr.total_return)
+
+    def test_initialization_with_static_true(self):
+        """Test initialization with static=True."""
+        index_static = Index(
+            name="Static Index",
+            ticker="STIDX",
+            currency=self.currency,
+            total_return=False,
+            static=True
+        )
+        self.assertTrue(index_static.static)
+
+    def test_default_total_return_false(self):
+        """Test that total_return defaults to False."""
+        index_default = Index(
+            name="Default Index",
+            ticker="DIDX",
+            currency=self.currency
+        )
+        self.assertFalse(index_default.total_return)
+
+    def test_default_static_false(self):
+        """Test that static defaults to False."""
+        index_default = Index(
+            name="Default Index",
+            ticker="DIDX2",
+            currency=self.currency
+        )
+        self.assertFalse(index_default.static)
+
+    def test_str_method(self):
+        """Test __str__ method returns correct format."""
+        result = str(self.index)
+        expected = f'Index(name="{self.index_name}", ticker="{self.index_ticker}")'
+        self.assertEqual(result, expected)
+
+    def test_repr_method(self):
+        """Test __repr__ method returns correct format."""
+        result = repr(self.index)
+        self.assertIn("Index", result)
+        self.assertIn(f'name="{self.index_name}"', result)
+        self.assertIn(f'ticker="{self.index_ticker}"', result)
+        self.assertIn("currency=", result)
+        self.assertIn("total_return=", result)
+        self.assertIn("static=", result)
+
+    def test_key_code_label(self):
+        """Test KEY_CODE_LABEL class attribute."""
+        self.assertEqual(Index.KEY_CODE_LABEL, "ticker")
+
+    def test_key_code_property(self):
+        """Test key_code property returns ticker."""
+        self.assertEqual(self.index.key_code, self.index_ticker)
+
+    def test_identity_code_property(self):
+        """Test identity_code property returns ticker."""
+        self.assertEqual(self.index.identity_code, self.index_ticker)
+
+    def test_long_name_property(self):
+        """Test long_name property returns descriptive string."""
+        result = self.index.long_name
+        self.assertIsInstance(result, str)
+        self.assertIn(self.index_name, result)
+        self.assertIn("Index", result)
+        self.assertIn(self.currency.ticker, result)
+
+    def test_name_appendix(self):
+        """Test _name_appendix class attribute."""
+        self.assertEqual(Index._name_appendix, "Index")
+
+    def test_database_persistence(self):
+        """Test that Index instance can be persisted to database."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        # Query back from database by ticker
+        retrieved = self.session.query(Index).filter(Index.ticker == self.index_ticker).first()
+        self.assertIsNotNone(retrieved)
+        self.assertEqual(retrieved.ticker, self.index_ticker)
+        self.assertEqual(retrieved.name, self.index_name)
+        self.assertEqual(retrieved.total_return, self.total_return_flag)
+        self.assertEqual(retrieved.static, self.static_flag)
+
+    def test_unique_ticker_constraint(self):
+        """Test that ticker uniqueness is enforced."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        # Try to add another with same ticker
+        index2 = Index(
+            name="Another Index",
+            ticker=self.index_ticker,
+            currency=self.currency,
+            total_return=False,
+            static=False
+        )
+        self.session.add(index2)
+
+        from sqlalchemy.exc import IntegrityError
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_factory_creates_instance(self):
+        """Test factory method creates Index instance."""
+        index_instance = Index.factory(
+            self.session,
+            index_name=self.index_name,
+            ticker=self.index_ticker,
+            currency_code=self.currency_ticker
+        )
+        self.assertIsInstance(index_instance, Index)
+        self.assertEqual(index_instance.ticker, self.index_ticker)
+        self.assertEqual(index_instance.name, self.index_name)
+
+    def test_factory_retrieves_existing_instance(self):
+        """Test factory method with existing instance in database."""
+        # Create and commit first instance through factory
+        index1 = Index.factory(
+            self.session,
+            index_name=self.index_name,
+            ticker=self.index_ticker,
+            currency_code=self.currency_ticker
+        )
+        self.session.commit()
+
+        # Verify it was saved
+        count = self.session.query(Index).filter(Index.ticker == self.index_ticker).count()
+        self.assertEqual(count, 1)
+
+        # Factory call again should find existing
+        index2 = Index.factory(
+            self.session,
+            index_name=self.index_name,
+            ticker=self.index_ticker,
+            currency_code=self.currency_ticker
+        )
+        self.assertIsInstance(index2, Index)
+        self.assertEqual(index2.ticker, index1.ticker)
+
+    def test_factory_create_false_raises_error(self):
+        """Test factory with create=False raises error for non-existent index."""
+        with self.assertRaises(FactoryError):
+            Index.factory(
+                self.session,
+                index_name="Non-existent Index",
+                ticker="NOEX",
+                currency_code="USD",
+                create=False
+            )
+
+    def test_factory_handles_unknown_currency(self):
+        """Test factory converts 'Unknown' currency to 'ZZZ'."""
+        index_unknown = Index.factory(
+            self.session,
+            index_name="Unknown Currency Index",
+            ticker="UNKIDX",
+            currency_code="Unknown"
+        )
+        # Should be converted to ZZZ
+        zzz_currency = Currency.factory(self.session, "ZZZ")
+        self.assertEqual(index_unknown.currency, zzz_currency)
+
+    def test_class_name_property(self):
+        """Test class_name property returns correct value."""
+        self.assertEqual(self.index.class_name, "Index")
+
+    def test_currency_property(self):
+        """Test currency property returns Currency object."""
+        self.assertIsInstance(self.index.currency, Currency)
+        self.assertEqual(self.index.currency.ticker, self.currency_ticker)
+
+    def test_currency_ticker_property(self):
+        """Test currency_ticker property returns currency ticker."""
+        self.assertEqual(self.index.currency_ticker, self.currency_ticker)
+
+    def test_total_return_price_index(self):
+        """Test creating a total return price index."""
+        tr_index = Index(
+            name="S&P 500 Total Return",
+            ticker="SP500TR",
+            currency=self.currency,
+            total_return=True,
+            static=False
+        )
+        self.assertTrue(tr_index.total_return)
+        self.assertFalse(tr_index.static)
+
+    def test_static_index(self):
+        """Test creating a static index (not updated)."""
+        static_index = Index(
+            name="Historical Static Index",
+            ticker="HISTIDX",
+            currency=self.currency,
+            total_return=False,
+            static=True
+        )
+        self.assertFalse(static_index.total_return)
+        self.assertTrue(static_index.static)
+
+    def test_both_total_return_and_static(self):
+        """Test index can be both total return and static."""
+        both_index = Index(
+            name="Total Return Static Index",
+            ticker="TRSTIDX",
+            currency=self.currency,
+            total_return=True,
+            static=True
+        )
+        self.assertTrue(both_index.total_return)
+        self.assertTrue(both_index.static)
+
+
+
 class TestExchangeTradeFund(TestBase):
     """Test suite for ExchangeTradeFund class."""
 
