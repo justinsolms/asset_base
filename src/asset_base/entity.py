@@ -587,41 +587,20 @@ class Entity(Common):
     _domicile_id = Column(Integer, ForeignKey("domicile._id"), nullable=False)
     domicile = relationship("Domicile", backref="entity_list")
 
-    def __init__(self, name, domicile, **kwargs):
+    def __init__(self, name, domicile):
         """Instance initialization."""
-        super().__init__(name, **kwargs)
         self.domicile = domicile
 
         # Record the current date as the system entry date of the model.
         self.date_create = datetime.date.today()
         self.date_mod_stamp = None  # Never been modified
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return "{} is an {} in {}".format(
-            self.name, self.__class__.__name__, self.domicile.country_name
-        )
-
-    def __repr__(self):
-        """Return the official string output."""
-        return '{}(name="{}", domicile={!r})'.format(
-            self.__class__.__name__, self.name, self.domicile
-        )
+        super().__init__(name)
 
     @property
     def currency(self):
         """Currency : ``Currency`` of the ``Entity`` ``Domicile``."""
         return self.domicile.currency
-
-    @property
-    def key_code(self):
-        """A key string unique to the class instance."""
-        return self.domicile.key_code + "." + self.name
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
-        return self.domicile.identity_code + "." + self.name
 
     def to_dict(self):
         """Convert class data attributes into a factory compatible dictionary.
@@ -765,9 +744,9 @@ class Institution(Entity):
     _id = Column(Integer, ForeignKey("entity._id"), primary_key=True)
     """ Primary key."""
 
-    def __init__(self, name, domicile, **kwargs):
+    def __init__(self, name, domicile):
         """Instance initialization."""
-        super().__init__(name=name, domicile=domicile, **kwargs)
+        super().__init__(name=name, domicile=domicile)
 
 
 class Issuer(Institution):
@@ -801,10 +780,32 @@ class Issuer(Institution):
         """Instance initialization."""
         super().__init__(name=name, domicile=domicile, **kwargs)
 
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return "{} is an {} in {}".format(
+            self.name, self.__class__.__name__, self.domicile.country_name
+        )
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '{}(name="{}", domicile={!r})'.format(
+            self.__class__.__name__, self.name, self.domicile
+        )
+
+    @property
+    def key_code(self):
+        """A key string unique to the class instance."""
+        return f"{self.name}:{self.domicile.country_code}"
+
+    @property
+    def identity_code(self):
+        """A human readable string unique to the class instance."""
+        return f"{self.name}:{self.domicile.country_code}"
+
     @property
     def long_name(self):
         """Return the long name of the issuer."""
-        return f"{self.name} ({self.domicile.country_name})"
+        return f"{self.name} ({self.domicile.country_code})"
 
 
 class Exchange(Institution):
@@ -873,7 +874,7 @@ class Exchange(Institution):
         if "eod_code" in kwargs:
             self.eod_code = kwargs.pop("eod_code")
 
-        super().__init__(name, domicile, **kwargs)
+        super().__init__(name, domicile)
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
@@ -883,8 +884,8 @@ class Exchange(Institution):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", domicile={!r}, mic="{}")'.format(
-            self.__class__.__name__, self.name, self.domicile, self.mic
+        return '{}(name="{}", domicile={!r}, mic="{}", eod_code="{}")'.format(
+            self.__class__.__name__, self.name, self.domicile, self.mic, self.eod_code,
         )
 
     @property
