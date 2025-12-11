@@ -413,6 +413,10 @@ class ConcreteCommon(Common):
     def identity_code(self):
         return f"identity_{self.name}"
 
+    @property
+    def long_name(self):
+        return f"Concrete Common: {self.name}"
+
     @classmethod
     def factory(cls, session, **kwargs):
         instance = cls(**kwargs)
