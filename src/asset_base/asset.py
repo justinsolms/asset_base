@@ -2196,63 +2196,53 @@ class ListedEquity(Listed):
         else:
             return self._split_series[-1]
 
-    def time_series(
-        self,
-        series="price",
-        price_item="close",
-        return_type="price",
-        identifier="asset",
-    ):
-        """Retrieve historic time-series for this instance.
-
-        TODO: Remove `series` argument and use to get price series only
+    def time_series(self, series="price", item=None,  identifier='identifier'):
+        """Retrieve (and compute) historic time-series for this instance.
 
         Parameters
         ----------
-        series : str
-            Which security series:
-
-            'price':
-                The security's periodic trade price.
-            'dividend':
-                The annualized dividend yield.
-            'volume':
-                The volume of trade (total units of trade) in the period.
-        price_item : str
+        series : str, optional
+            The type of time series to retrieve. The valid values are:
+                'price':
+                    The original price series.
+                'dividend':
+                    The annualized dividend yield.
+                'split':
+                    The stock split ratio.
+                'volume':
+                    The volume of trade (total units of trade) in the period.
+                'return':
+                    The price period-on-period return series.
+                'total_return':
+                    The period-on-period return series inclusive of the extra
+                    yield due to dividends paid (Dividend adjusted values are
+                    used).
+                'total_returns_index':
+                    The period-on-period return series inclusive of the extra
+                    yield due to dividends paid (Dividend adjusted values are
+                    used) as a total returns index (starting at unity at the
+                    first date).
+        item : str, optional
+            FIXME: This has changed to the item of any of the series.
             The specific item of price such as 'close', 'open', `high`, or
             `low`. Only valid when the ``series`` argument is set to 'price'.
-        return_type : str
-            The specific view of the price series:
-
-            'price':
-                The original price series.
-            'return':
-                The price period-on-period return series.
-            'total_return':
-                The period-on-period return series inclusive of the extra
-                yield due to dividends paid.
-            'total_price':
-                The price period-on-period price series inclusive of the extra
-                yield due to dividends paid. The total_price series start value
-                is the same as the price start value.
         identifier : str, optional
             By default the column labels of the returned ``pandas.DataFrame``
             are ``asset.Asset`` (or polymorph child instances) provided by in
             the ``asset_list`` argument. With the `identifier` argument one can
             specify if these column labels are to be substituted:
-
-            'asset':
-                The default ``asset.Asset`` (or polymorph child instances)
-                provided by in the `asset_list` argument.
-            'id':
-                The database table `id` column entry.
-            'isin':
-                The standard security ISO 6166 ISIN number.
-            'ticker':
-                The exchange ticker
-            'identify_code':
-                That which will be returned by the
-                ``asset.ListedEquity.identity_code`` attribute.
+                'identify_code' or None (Default):
+                    That which will be returned by the
+                    ``asset.ListedEquity.identity_code`` attribute.
+                'asset':
+                    The default ``asset.Asset`` (or polymorph child instances)
+                    provided by in the `asset_list` argument.
+                'id':
+                    The database table `id` column entry.
+                'isin':
+                    The standard security ISO 6166 ISIN number.
+                'ticker':
+                    The exchange ticker
         tidy : bool
             When ``True`` then prices are tidied up by removing outliers.
 
@@ -2268,12 +2258,12 @@ class ListedEquity(Listed):
 
         """
 
-        def get_prices(price_item):
+        def get_prices(item):
             eod = self.get_eod()
             try:
-                price_series = eod[price_item]
+                price_series = eod[item]
             except KeyError:
-                raise ValueError("Unexpected `price_item` argument {price_item}.")
+                raise ValueError(f"Unexpected `price_item` argument {item}.")
             return price_series
 
         def get_volumes():
@@ -2281,17 +2271,31 @@ class ListedEquity(Listed):
             volume_series = eod["volume"]
             return volume_series
 
-        def get_dividends():
+        def get_dividends(item):
             dividends = self.get_dividend_series()
-            dividend_series = dividends["unadjusted_value"]
+            try:
+                dividend_series = dividends[item]
+            except KeyError:
+                raise ValueError(f"Unexpected `dividend_item` argument {item}.")
             return dividend_series
 
-        def get_total_returns(price_item):
-            price = get_prices(price_item)
+        def get_splits(item):
+            splits = self.get_split_series()
+            try:
+                split_series = splits[item]
+            except KeyError:
+                raise ValueError(f"Unexpected `split_item` argument {item}.")
+            return split_series
+
+        def get_total_returns(item):
+            # FIXME: Address NaN returns on dividend days.
+            # FIXME: Address multiple dividends on the same day.
+            # FIXME: Address preprocessing of price data to address NaNs
+            price = get_prices(item)
             price_shift = price.shift(1)
             # Try to get dividends if any
             try:
-                dividend = get_dividends()
+                dividend = get_dividends(item='adjusted_value')
             except DividendSeriesNoData:
                 if self.distributions is True:
                     raise DividendSeriesNoData(f"Expected dividend data for {self}.")
@@ -2366,50 +2370,51 @@ class ListedEquity(Listed):
 
             return price
 
-        if series == "price":
-            # Get the price view.
-            if return_type == "price":
-                result = get_prices(price_item)
-            elif return_type == "return":
-                price = get_prices(price_item)
+        match series:
+            case "price" :
+                result = get_prices(item)
+            case "dividend":
+                result = get_dividends()
+            case "split":
+                result = get_splits()
+            case "volume":
+                # Get the volume series.
+                result = get_volumes()
+            case "return":
+                price = get_prices(item)
+                # Geometric returns
                 returns = price / price.shift(1)
-                # Remove leading and any other NaN with no-returns=1.0.
+                # Replace NaN with no-returns -> 1.0.
                 result = returns.fillna(1.0)
-            elif return_type == "total_price":
+            case "total_return":
                 # FIXME: What about multiple dividends on the same day?
-                total_returns, price = get_total_returns(price_item)
-                total_returns.iloc[0] = price.iloc[0]  # Normalise to start price
+                total_returns, price = get_total_returns(item)
+                # Replace NaN with no-returns -> 1.0.
+                result = total_returns.fillna(1.0)
+            case "total_returns_index":
+                # FIXME: What about multiple dividends on the same day?
+                total_returns, price = get_total_returns(item)
+                # Replace NaN with no-returns -> 1.0.
+                total_returns = total_returns.fillna(1.0)
                 result = total_returns.cumprod()
-            elif return_type == "total_return":
-                total_returns, price = get_total_returns(price_item)
-                result = total_returns
-            else:
-                raise ValueError(
-                    f"Unexpected return_type argument value `{return_type}`."
-                )
-        elif series == "dividend":
-            result = get_dividends()
-        elif series == "volume":
-            # Get the volume series.
-            result = get_volumes()
-        else:
-            raise ValueError(f"Unexpected series argument value `{series}`.")
+            case _:
+                raise ValueError(f"Unexpected series argument value `{series}`.")
 
         # Add the entity (ListedEquity) as the Series name for later use as
         # column a label in concatenation into a DataFrame
-        # TODO: Replace with a match statement
-        if identifier == "asset":
-            result.name = self
-        elif identifier == "id":
-            result.name = self._id
-        elif identifier == "ticker":
-            result.name = self.ticker
-        elif identifier == "isin":
-            result.name = self.isin
-        elif identifier == "identity_code":
-            result.name = self.identity_code
-        else:
-            raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
+        match identifier:
+            case "identity_code":
+                result.name = self.identity_code
+            case "id":
+                result.name = self._id
+            case "ticker":
+                result.name = self.ticker
+            case "isin":
+                result.name = self.isin
+            case "asset":
+                result.name = self
+            case _:
+                raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
 
         return result
 

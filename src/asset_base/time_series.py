@@ -1269,12 +1269,16 @@ class Split(TimeSeriesBase):
         -------
         dict
             date_stamp : datetime.date
-            ratio : float (split ratio)
+            numerator : float
+            denominator : float
+            ratio : float
         """
         return {
             "date_stamp": self.date_stamp,
             "numerator": self.numerator,
             "denominator": self.denominator,
+            # TODO: Add unittest for this new field
+            "ratio": self.numerator / self.denominator,
         }
 
     @classmethod
