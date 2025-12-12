@@ -35,6 +35,7 @@ class TestBase(unittest.TestCase):
         cls.listed_name = "Test Listed Company"
         cls.isin = "US0378331005"  # Apple Inc. ISIN as example
         cls.ticker_symbol = "TEST"
+        cls.index_ticker = "TESTIDX"
         cls.status = "listed"
 
         # Common test data for EOD instances
@@ -45,6 +46,20 @@ class TestBase(unittest.TestCase):
         cls.test_low = 95.0
         cls.test_adjusted_close = 105.0
         cls.test_volume = 1000000
+
+        # Dividend test data fixtures
+        cls.test_dividend_currency = "USD"
+        cls.test_dividend_declaration_date = datetime.date(2020, 1, 29)
+        cls.test_dividend_payment_date = datetime.date(2020, 3, 16)
+        cls.test_dividend_period = "Quarterly"
+        cls.test_dividend_record_date = datetime.date(2020, 3, 2)
+        cls.test_dividend_unadjusted_value = 1.25
+        cls.test_dividend_adjusted_value = 1.25
+
+        # Split test data fixtures
+        cls.test_split_numerator = 2.0
+        cls.test_split_denominator = 1.0
+        cls.test_split_date_2 = datetime.date(2020, 12, 2)
 
         # Trade EOD data fixture
         trade_eod_csv = (
@@ -117,7 +132,7 @@ class TestBase(unittest.TestCase):
         self.forex = Forex(self.base_currency, self.price_currency)
 
         # Index: requires name, ticker, and Currency object
-        self.index = Index(self.name, "TESTIDX", self.currency)
+        self.index = Index(self.name, self.index_ticker, self.currency)
 
         # ListedEquity: the main asset for ListedEquityEOD tests
         self.listed_equity = ListedEquity(
@@ -185,7 +200,7 @@ class TestListedEquityEOD(TestBase):
         str_output = str(equity_eod)
         self.assertIn("ListedEquityEOD", str_output)
         self.assertIn(self.isin, str_output)
-        self.assertIn("2020-12-01", str_output)
+        self.assertIn(str(self.test_date), str_output)
         self.assertIn(str(self.test_close), str_output)
 
         # Test __repr__
@@ -585,8 +600,8 @@ class TestIndexEOD(TestBase):
         # IndexEOD inherits __str__ from TradeEOD
         str_output = str(index_eod)
         self.assertIn("TradeEOD", str_output)
-        self.assertIn("TESTIDX", str_output)
-        self.assertIn("2020-12-01", str_output)
+        self.assertIn(self.index_ticker, str_output)
+        self.assertIn(str(self.test_date), str_output)
 
         # But __repr__ shows the full representation
         repr_output = repr(index_eod)
@@ -726,8 +741,8 @@ class TestForexEOD(TestBase):
         # ForexEOD inherits __str__ from TradeEOD
         str_output = str(forex_eod)
         self.assertIn("TradeEOD", str_output)
-        self.assertIn("USDEUR", str_output)
-        self.assertIn("2020-12-01", str_output)
+        self.assertIn(f"{self.base_currency_ticker}{self.price_currency_ticker}", str_output)
+        self.assertIn(str(self.test_date), str_output)
 
         # But __repr__ shows the full representation
         repr_output = repr(forex_eod)
@@ -844,10 +859,10 @@ class TestDividend(TestBase):
         # Verify instance was created
         self.assertIsNotNone(dividend._id)
         self.assertEqual(dividend.date_stamp, self.test_date)
-        self.assertEqual(dividend.currency, self.currency_ticker)
-        self.assertEqual(dividend.unadjusted_value, 1.25)
-        self.assertEqual(dividend.adjusted_value, 1.25)
-        self.assertEqual(dividend.period, "Quarterly")
+        self.assertEqual(dividend.currency, self.test_dividend_currency)
+        self.assertEqual(dividend.unadjusted_value, self.test_dividend_unadjusted_value)
+        self.assertEqual(dividend.adjusted_value, self.test_dividend_adjusted_value)
+        self.assertEqual(dividend.period, self.test_dividend_period)
 
     def test_dividend_str_repr(self):
         """Test __str__ and __repr__ methods."""
@@ -857,19 +872,19 @@ class TestDividend(TestBase):
         dividend = Dividend(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            currency=self.currency_ticker,
-            declaration_date=datetime.date(2020, 1, 29),
-            payment_date=datetime.date(2020, 3, 16),
-            period="Quarterly",
-            record_date=datetime.date(2020, 3, 2),
-            unadjusted_value=1.25,
-            adjusted_value=1.25
+            currency=self.test_dividend_currency,
+            declaration_date=self.test_dividend_declaration_date,
+            payment_date=self.test_dividend_payment_date,
+            period=self.test_dividend_period,
+            record_date=self.test_dividend_record_date,
+            unadjusted_value=self.test_dividend_unadjusted_value,
+            adjusted_value=self.test_dividend_adjusted_value
         )
 
         str_output = str(dividend)
         self.assertIn("Dividend", str_output)
         self.assertIn(self.isin, str_output)
-        self.assertIn("1.25", str_output)
+        self.assertIn(str(self.test_dividend_adjusted_value), str_output)
 
         repr_output = repr(dividend)
         self.assertIn("Dividend", repr_output)
@@ -884,21 +899,21 @@ class TestDividend(TestBase):
         dividend = Dividend(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            currency=self.currency_ticker,
-            declaration_date=datetime.date(2020, 1, 29),
-            payment_date=datetime.date(2020, 3, 16),
-            period="Quarterly",
-            record_date=datetime.date(2020, 3, 2),
-            unadjusted_value=1.25,
-            adjusted_value=1.25
+            currency=self.test_dividend_currency,
+            declaration_date=self.test_dividend_declaration_date,
+            payment_date=self.test_dividend_payment_date,
+            period=self.test_dividend_period,
+            record_date=self.test_dividend_record_date,
+            unadjusted_value=self.test_dividend_unadjusted_value,
+            adjusted_value=self.test_dividend_adjusted_value
         )
 
         result_dict = dividend.to_dict()
 
         self.assertEqual(result_dict['date_stamp'], self.test_date)
-        self.assertEqual(result_dict['currency'], self.currency_ticker)
-        self.assertEqual(result_dict['unadjusted_value'], 1.25)
-        self.assertEqual(result_dict['adjusted_value'], 1.25)
+        self.assertEqual(result_dict['currency'], self.test_dividend_currency)
+        self.assertEqual(result_dict['unadjusted_value'], self.test_dividend_unadjusted_value)
+        self.assertEqual(result_dict['adjusted_value'], self.test_dividend_adjusted_value)
 
     def test_dividend_asset_class_validation(self):
         """Test that Dividend validates asset type."""
@@ -910,13 +925,13 @@ class TestDividend(TestBase):
             Dividend(
                 base_obj=self.index,  # Wrong: Index not ListedEquity
                 date_stamp=self.test_date,
-                currency=self.currency_ticker,
-                declaration_date=datetime.date(2020, 1, 29),
-                payment_date=datetime.date(2020, 3, 16),
-                period="Quarterly",
-                record_date=datetime.date(2020, 3, 2),
-                unadjusted_value=1.25,
-                adjusted_value=1.25
+                currency=self.test_dividend_currency,
+                declaration_date=self.test_dividend_declaration_date,
+                payment_date=self.test_dividend_payment_date,
+                period=self.test_dividend_period,
+                record_date=self.test_dividend_record_date,
+                unadjusted_value=self.test_dividend_unadjusted_value,
+                adjusted_value=self.test_dividend_adjusted_value
             )
 
         self.assertIn("ListedEquity", str(context.exception))
@@ -929,13 +944,13 @@ class TestDividend(TestBase):
         div1 = Dividend(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            currency=self.currency_ticker,
-            declaration_date=datetime.date(2020, 1, 29),
-            payment_date=datetime.date(2020, 3, 16),
-            period="Quarterly",
-            record_date=datetime.date(2020, 3, 2),
-            unadjusted_value=1.25,
-            adjusted_value=1.25
+            currency=self.test_dividend_currency,
+            declaration_date=self.test_dividend_declaration_date,
+            payment_date=self.test_dividend_payment_date,
+            period=self.test_dividend_period,
+            record_date=self.test_dividend_record_date,
+            unadjusted_value=self.test_dividend_unadjusted_value,
+            adjusted_value=self.test_dividend_adjusted_value
         )
         self.session.add(div1)
         self.session.commit()
@@ -944,11 +959,11 @@ class TestDividend(TestBase):
         div2 = Dividend(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            currency=self.currency_ticker,
-            declaration_date=datetime.date(2020, 1, 29),
-            payment_date=datetime.date(2020, 3, 16),
-            period="Quarterly",
-            record_date=datetime.date(2020, 3, 2),
+            currency=self.test_dividend_currency,
+            declaration_date=self.test_dividend_declaration_date,
+            payment_date=self.test_dividend_payment_date,
+            period=self.test_dividend_period,
+            record_date=self.test_dividend_record_date,
             unadjusted_value=2.50,
             adjusted_value=2.50
         )
@@ -965,13 +980,13 @@ class TestDividend(TestBase):
         dividend = Dividend(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            currency=self.currency_ticker,
-            declaration_date=datetime.date(2020, 1, 29),
-            payment_date=datetime.date(2020, 3, 16),
-            period="Quarterly",
-            record_date=datetime.date(2020, 3, 2),
-            unadjusted_value=1.25,
-            adjusted_value=1.25
+            currency=self.test_dividend_currency,
+            declaration_date=self.test_dividend_declaration_date,
+            payment_date=self.test_dividend_payment_date,
+            period=self.test_dividend_period,
+            record_date=self.test_dividend_record_date,
+            unadjusted_value=self.test_dividend_unadjusted_value,
+            adjusted_value=self.test_dividend_adjusted_value
         )
         self.session.add(dividend)
         self.session.commit()
@@ -996,8 +1011,8 @@ class TestSplit(TestBase):
         split = Split(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            numerator=2.0,
-            denominator=1.0
+            numerator=self.test_split_numerator,
+            denominator=self.test_split_denominator
         )
 
         self.session.add(split)
@@ -1006,8 +1021,8 @@ class TestSplit(TestBase):
         # Verify instance was created
         self.assertIsNotNone(split._id)
         self.assertEqual(split.date_stamp, self.test_date)
-        self.assertEqual(split.numerator, 2.0)
-        self.assertEqual(split.denominator, 1.0)
+        self.assertEqual(split.numerator, self.test_split_numerator)
+        self.assertEqual(split.denominator, self.test_split_denominator)
 
     def test_split_str_repr(self):
         """Test __str__ and __repr__ methods."""
@@ -1017,14 +1032,14 @@ class TestSplit(TestBase):
         split = Split(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            numerator=2.0,
-            denominator=1.0
+            numerator=self.test_split_numerator,
+            denominator=self.test_split_denominator
         )
 
         str_output = str(split)
         self.assertIn("Split", str_output)
         self.assertIn(self.isin, str_output)
-        self.assertIn("2.0:1.0", str_output)
+        self.assertIn(f"{self.test_split_numerator}:{self.test_split_denominator}", str_output)
 
         repr_output = repr(split)
         self.assertIn("Split", repr_output)
@@ -1040,15 +1055,15 @@ class TestSplit(TestBase):
         split = Split(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            numerator=2.0,
-            denominator=1.0
+            numerator=self.test_split_numerator,
+            denominator=self.test_split_denominator
         )
 
         result_dict = split.to_dict()
 
         self.assertEqual(result_dict['date_stamp'], self.test_date)
-        self.assertEqual(result_dict['numerator'], 2.0)
-        self.assertEqual(result_dict['denominator'], 1.0)
+        self.assertEqual(result_dict['numerator'], self.test_split_numerator)
+        self.assertEqual(result_dict['denominator'], self.test_split_denominator)
 
     def test_split_asset_class_validation(self):
         """Test that Split validates asset type."""
@@ -1060,8 +1075,8 @@ class TestSplit(TestBase):
             Split(
                 base_obj=self.index,  # Wrong: Index not ListedEquity
                 date_stamp=self.test_date,
-                numerator=2.0,
-                denominator=1.0
+                numerator=self.test_split_numerator,
+                denominator=self.test_split_denominator
             )
 
         self.assertIn("ListedEquity", str(context.exception))
@@ -1074,8 +1089,8 @@ class TestSplit(TestBase):
         split1 = Split(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            numerator=2.0,
-            denominator=1.0
+            numerator=self.test_split_numerator,
+            denominator=self.test_split_denominator
         )
         self.session.add(split1)
         self.session.commit()
@@ -1085,7 +1100,7 @@ class TestSplit(TestBase):
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
             numerator=4.0,
-            denominator=1.0
+            denominator=self.test_split_denominator
         )
         self.session.add(split2)
 
@@ -1100,8 +1115,8 @@ class TestSplit(TestBase):
         split = Split(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            numerator=2.0,
-            denominator=1.0
+            numerator=self.test_split_numerator,
+            denominator=self.test_split_denominator
         )
         self.session.add(split)
         self.session.commit()
@@ -1119,19 +1134,19 @@ class TestSplit(TestBase):
         split_2_1 = Split(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
-            numerator=2.0,
-            denominator=1.0
+            numerator=self.test_split_numerator,
+            denominator=self.test_split_denominator
         )
         self.session.add(split_2_1)
         self.session.commit()
 
         ratio = split_2_1.numerator / split_2_1.denominator
-        self.assertEqual(ratio, 2.0)
+        self.assertEqual(ratio, self.test_split_numerator / self.test_split_denominator)
 
         # 3-for-2 split
         split_3_2 = Split(
             base_obj=self.listed_equity,
-            date_stamp=datetime.date(2020, 12, 2),
+            date_stamp=self.test_split_date_2,
             numerator=3.0,
             denominator=2.0
         )
