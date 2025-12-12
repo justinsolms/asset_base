@@ -537,6 +537,615 @@ class TestListedEquityEOD(TestBase):
         self.assertIsNotNone(ListedEquityEOD.ASSET_CLASS)
 
 
+class TestIndexEOD(TestBase):
+    """Test IndexEOD time series functionality."""
+
+    def test_create_index_eod_instance(self):
+        """Test creating an IndexEOD instance."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        index_eod = IndexEOD(
+            base_obj=self.index,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        self.session.add(index_eod)
+        self.session.commit()
+
+        # Verify instance was created
+        self.assertIsNotNone(index_eod._id)
+        self.assertEqual(index_eod.date_stamp, self.test_date)
+        self.assertEqual(index_eod.open, self.test_open)
+        self.assertEqual(index_eod.close, self.test_close)
+        self.assertEqual(index_eod.price, self.test_close)
+
+    def test_index_eod_str_repr(self):
+        """Test __str__ and __repr__ methods."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        index_eod = IndexEOD(
+            base_obj=self.index,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        # IndexEOD inherits __str__ from TradeEOD
+        str_output = str(index_eod)
+        self.assertIn("TradeEOD", str_output)
+        self.assertIn("TESTIDX", str_output)
+        self.assertIn("2020-12-01", str_output)
+
+        # But __repr__ shows the full representation
+        repr_output = repr(index_eod)
+        self.assertIn("TradeEOD", repr_output)
+        self.assertIn("date_stamp", repr_output)
+
+    def test_index_eod_to_dict(self):
+        """Test to_dict method."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        index_eod = IndexEOD(
+            base_obj=self.index,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(index_eod)
+        self.session.commit()
+
+        result_dict = index_eod.to_dict()
+
+        # Index inherits from AssetBase not Asset, so no quote_units attribute
+        # TradeEOD.to_dict will error, so we just verify basic attributes
+        self.assertEqual(result_dict['date_stamp'], self.test_date)
+        self.assertEqual(result_dict['open'], self.test_open)
+        self.assertEqual(result_dict['close'], self.test_close)
+
+    def test_index_eod_asset_class_validation(self):
+        """Test that IndexEOD validates asset type."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Should raise TypeError when using wrong asset type
+        with self.assertRaises(TypeError) as context:
+            IndexEOD(
+                base_obj=self.listed_equity,  # Wrong: ListedEquity not Index
+                date_stamp=self.test_date,
+                open=self.test_open,
+                close=self.test_close,
+                high=self.test_high,
+                low=self.test_low,
+                adjusted_close=self.test_adjusted_close,
+                volume=self.test_volume
+            )
+
+        self.assertIn("Index", str(context.exception))
+
+    def test_index_eod_unique_constraint(self):
+        """Test unique constraint on (asset_id, date_stamp)."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        eod1 = IndexEOD(
+            base_obj=self.index,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(eod1)
+        self.session.commit()
+
+        # Try to create duplicate
+        eod2 = IndexEOD(
+            base_obj=self.index,
+            date_stamp=self.test_date,
+            open=self.test_open + 1.0,
+            close=self.test_close + 1.0,
+            high=self.test_high + 1.0,
+            low=self.test_low + 1.0,
+            adjusted_close=self.test_adjusted_close + 1.0,
+            volume=self.test_volume * 2
+        )
+        self.session.add(eod2)
+
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_index_eod_asset_class_attribute(self):
+        """Test that ASSET_CLASS attribute is properly set."""
+        self.assertEqual(IndexEOD.ASSET_CLASS, Index)
+
+
+class TestForexEOD(TestBase):
+    """Test ForexEOD time series functionality."""
+
+    def test_create_forex_eod_instance(self):
+        """Test creating a ForexEOD instance."""
+        self.session.add(self.forex)
+        self.session.commit()
+
+        forex_eod = ForexEOD(
+            base_obj=self.forex,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        self.session.add(forex_eod)
+        self.session.commit()
+
+        # Verify instance was created
+        self.assertIsNotNone(forex_eod._id)
+        self.assertEqual(forex_eod.date_stamp, self.test_date)
+        self.assertEqual(forex_eod.open, self.test_open)
+        self.assertEqual(forex_eod.close, self.test_close)
+        self.assertEqual(forex_eod.price, self.test_close)
+
+    def test_forex_eod_str_repr(self):
+        """Test __str__ and __repr__ methods."""
+        self.session.add(self.forex)
+        self.session.commit()
+
+        forex_eod = ForexEOD(
+            base_obj=self.forex,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+
+        # ForexEOD inherits __str__ from TradeEOD
+        str_output = str(forex_eod)
+        self.assertIn("TradeEOD", str_output)
+        self.assertIn("USDEUR", str_output)
+        self.assertIn("2020-12-01", str_output)
+
+        # But __repr__ shows the full representation
+        repr_output = repr(forex_eod)
+        self.assertIn("TradeEOD", repr_output)
+        self.assertIn("date_stamp", repr_output)
+
+    def test_forex_eod_to_dict(self):
+        """Test to_dict method."""
+        self.session.add(self.forex)
+        self.session.commit()
+
+        forex_eod = ForexEOD(
+            base_obj=self.forex,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(forex_eod)
+        self.session.commit()
+
+        result_dict = forex_eod.to_dict()
+
+        # Forex has quote_units, verify conversion works
+        self.assertEqual(result_dict['date_stamp'], self.test_date)
+        self.assertEqual(result_dict['open'], self.test_open)
+        self.assertEqual(result_dict['close'], self.test_close)
+
+    def test_forex_eod_asset_class_validation(self):
+        """Test that ForexEOD validates asset type."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        # Should raise TypeError when using wrong asset type
+        with self.assertRaises(TypeError) as context:
+            ForexEOD(
+                base_obj=self.index,  # Wrong: Index not Forex
+                date_stamp=self.test_date,
+                open=self.test_open,
+                close=self.test_close,
+                high=self.test_high,
+                low=self.test_low,
+                adjusted_close=self.test_adjusted_close,
+                volume=self.test_volume
+            )
+
+        self.assertIn("Forex", str(context.exception))
+
+    def test_forex_eod_unique_constraint(self):
+        """Test unique constraint on (asset_id, date_stamp)."""
+        self.session.add(self.forex)
+        self.session.commit()
+
+        eod1 = ForexEOD(
+            base_obj=self.forex,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(eod1)
+        self.session.commit()
+
+        # Try to create duplicate
+        eod2 = ForexEOD(
+            base_obj=self.forex,
+            date_stamp=self.test_date,
+            open=self.test_open + 1.0,
+            close=self.test_close + 1.0,
+            high=self.test_high + 1.0,
+            low=self.test_low + 1.0,
+            adjusted_close=self.test_adjusted_close + 1.0,
+            volume=self.test_volume * 2
+        )
+        self.session.add(eod2)
+
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_forex_eod_asset_class_attribute(self):
+        """Test that ASSET_CLASS attribute is properly set."""
+        self.assertEqual(ForexEOD.ASSET_CLASS, Forex)
+
+
+class TestDividend(TestBase):
+    """Test Dividend time series functionality."""
+
+    def test_create_dividend_instance(self):
+        """Test creating a Dividend instance."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        dividend = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            currency=self.currency_ticker,
+            declaration_date=datetime.date(2020, 1, 29),
+            payment_date=datetime.date(2020, 3, 16),
+            period="Quarterly",
+            record_date=datetime.date(2020, 3, 2),
+            unadjusted_value=1.25,
+            adjusted_value=1.25
+        )
+
+        self.session.add(dividend)
+        self.session.commit()
+
+        # Verify instance was created
+        self.assertIsNotNone(dividend._id)
+        self.assertEqual(dividend.date_stamp, self.test_date)
+        self.assertEqual(dividend.currency, self.currency_ticker)
+        self.assertEqual(dividend.unadjusted_value, 1.25)
+        self.assertEqual(dividend.adjusted_value, 1.25)
+        self.assertEqual(dividend.period, "Quarterly")
+
+    def test_dividend_str_repr(self):
+        """Test __str__ and __repr__ methods."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        dividend = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            currency=self.currency_ticker,
+            declaration_date=datetime.date(2020, 1, 29),
+            payment_date=datetime.date(2020, 3, 16),
+            period="Quarterly",
+            record_date=datetime.date(2020, 3, 2),
+            unadjusted_value=1.25,
+            adjusted_value=1.25
+        )
+
+        str_output = str(dividend)
+        self.assertIn("Dividend", str_output)
+        self.assertIn(self.isin, str_output)
+        self.assertIn("1.25", str_output)
+
+        repr_output = repr(dividend)
+        self.assertIn("Dividend", repr_output)
+        self.assertIn("date_stamp", repr_output)
+        self.assertIn("currency", repr_output)
+
+    def test_dividend_to_dict(self):
+        """Test to_dict method."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        dividend = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            currency=self.currency_ticker,
+            declaration_date=datetime.date(2020, 1, 29),
+            payment_date=datetime.date(2020, 3, 16),
+            period="Quarterly",
+            record_date=datetime.date(2020, 3, 2),
+            unadjusted_value=1.25,
+            adjusted_value=1.25
+        )
+
+        result_dict = dividend.to_dict()
+
+        self.assertEqual(result_dict['date_stamp'], self.test_date)
+        self.assertEqual(result_dict['currency'], self.currency_ticker)
+        self.assertEqual(result_dict['unadjusted_value'], 1.25)
+        self.assertEqual(result_dict['adjusted_value'], 1.25)
+
+    def test_dividend_asset_class_validation(self):
+        """Test that Dividend validates asset type."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        # Should raise TypeError when using wrong asset type
+        with self.assertRaises(TypeError) as context:
+            Dividend(
+                base_obj=self.index,  # Wrong: Index not ListedEquity
+                date_stamp=self.test_date,
+                currency=self.currency_ticker,
+                declaration_date=datetime.date(2020, 1, 29),
+                payment_date=datetime.date(2020, 3, 16),
+                period="Quarterly",
+                record_date=datetime.date(2020, 3, 2),
+                unadjusted_value=1.25,
+                adjusted_value=1.25
+            )
+
+        self.assertIn("ListedEquity", str(context.exception))
+
+    def test_dividend_unique_constraint(self):
+        """Test unique constraint on (asset_id, date_stamp)."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        div1 = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            currency=self.currency_ticker,
+            declaration_date=datetime.date(2020, 1, 29),
+            payment_date=datetime.date(2020, 3, 16),
+            period="Quarterly",
+            record_date=datetime.date(2020, 3, 2),
+            unadjusted_value=1.25,
+            adjusted_value=1.25
+        )
+        self.session.add(div1)
+        self.session.commit()
+
+        # Try to create duplicate
+        div2 = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            currency=self.currency_ticker,
+            declaration_date=datetime.date(2020, 1, 29),
+            payment_date=datetime.date(2020, 3, 16),
+            period="Quarterly",
+            record_date=datetime.date(2020, 3, 2),
+            unadjusted_value=2.50,
+            adjusted_value=2.50
+        )
+        self.session.add(div2)
+
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_dividend_relationship_to_asset(self):
+        """Test that Dividend properly relates to ListedEquity."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        dividend = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            currency=self.currency_ticker,
+            declaration_date=datetime.date(2020, 1, 29),
+            payment_date=datetime.date(2020, 3, 16),
+            period="Quarterly",
+            record_date=datetime.date(2020, 3, 2),
+            unadjusted_value=1.25,
+            adjusted_value=1.25
+        )
+        self.session.add(dividend)
+        self.session.commit()
+
+        # Access through relationship
+        self.assertEqual(dividend._base_obj, self.listed_equity)
+        self.assertIn(dividend, self.listed_equity._series)
+
+    def test_dividend_asset_class_attribute(self):
+        """Test that ASSET_CLASS attribute is properly set."""
+        self.assertEqual(Dividend.ASSET_CLASS, ListedEquity)
+
+
+class TestSplit(TestBase):
+    """Test Split time series functionality."""
+
+    def test_create_split_instance(self):
+        """Test creating a Split instance."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        split = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=2.0,
+            denominator=1.0
+        )
+
+        self.session.add(split)
+        self.session.commit()
+
+        # Verify instance was created
+        self.assertIsNotNone(split._id)
+        self.assertEqual(split.date_stamp, self.test_date)
+        self.assertEqual(split.numerator, 2.0)
+        self.assertEqual(split.denominator, 1.0)
+
+    def test_split_str_repr(self):
+        """Test __str__ and __repr__ methods."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        split = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=2.0,
+            denominator=1.0
+        )
+
+        str_output = str(split)
+        self.assertIn("Split", str_output)
+        self.assertIn(self.isin, str_output)
+        self.assertIn("2.0:1.0", str_output)
+
+        repr_output = repr(split)
+        self.assertIn("Split", repr_output)
+        self.assertIn("date_stamp", repr_output)
+        self.assertIn("numerator", repr_output)
+        self.assertIn("denominator", repr_output)
+
+    def test_split_to_dict(self):
+        """Test to_dict method."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        split = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=2.0,
+            denominator=1.0
+        )
+
+        result_dict = split.to_dict()
+
+        self.assertEqual(result_dict['date_stamp'], self.test_date)
+        self.assertEqual(result_dict['numerator'], 2.0)
+        self.assertEqual(result_dict['denominator'], 1.0)
+
+    def test_split_asset_class_validation(self):
+        """Test that Split validates asset type."""
+        self.session.add(self.index)
+        self.session.commit()
+
+        # Should raise TypeError when using wrong asset type
+        with self.assertRaises(TypeError) as context:
+            Split(
+                base_obj=self.index,  # Wrong: Index not ListedEquity
+                date_stamp=self.test_date,
+                numerator=2.0,
+                denominator=1.0
+            )
+
+        self.assertIn("ListedEquity", str(context.exception))
+
+    def test_split_unique_constraint(self):
+        """Test unique constraint on (asset_id, date_stamp)."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        split1 = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=2.0,
+            denominator=1.0
+        )
+        self.session.add(split1)
+        self.session.commit()
+
+        # Try to create duplicate
+        split2 = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=4.0,
+            denominator=1.0
+        )
+        self.session.add(split2)
+
+        with self.assertRaises(IntegrityError):
+            self.session.commit()
+
+    def test_split_relationship_to_asset(self):
+        """Test that Split properly relates to ListedEquity."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        split = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=2.0,
+            denominator=1.0
+        )
+        self.session.add(split)
+        self.session.commit()
+
+        # Access through relationship
+        self.assertEqual(split._base_obj, self.listed_equity)
+        self.assertIn(split, self.listed_equity._series)
+
+    def test_split_ratio_calculation(self):
+        """Test different split ratios."""
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # 2-for-1 split
+        split_2_1 = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=2.0,
+            denominator=1.0
+        )
+        self.session.add(split_2_1)
+        self.session.commit()
+
+        ratio = split_2_1.numerator / split_2_1.denominator
+        self.assertEqual(ratio, 2.0)
+
+        # 3-for-2 split
+        split_3_2 = Split(
+            base_obj=self.listed_equity,
+            date_stamp=datetime.date(2020, 12, 2),
+            numerator=3.0,
+            denominator=2.0
+        )
+        self.session.add(split_3_2)
+        self.session.commit()
+
+        ratio = split_3_2.numerator / split_3_2.denominator
+        self.assertEqual(ratio, 1.5)
+
+    def test_split_asset_class_attribute(self):
+        """Test that ASSET_CLASS attribute is properly set."""
+        self.assertEqual(Split.ASSET_CLASS, ListedEquity)
+
+
 def suite():
     """Create and return test suite with all test classes."""
     test_suite = unittest.TestSuite()
@@ -545,6 +1154,10 @@ def suite():
     # Add all test classes
     test_classes = [
         TestListedEquityEOD,
+        TestIndexEOD,
+        TestForexEOD,
+        TestDividend,
+        TestSplit,
     ]
 
     for test_class in test_classes:
