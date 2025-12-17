@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 
@@ -14,10 +15,37 @@ class TimeSeriesProcessor():
     ----------------
     The following operations are applied in a well-defined order:
 
-    1. **Sampling frequency validation**
+    1. **Price validity checks**
+    Ensures all prices are strictly positive. Non-positive prices are removed,
+    as they invalidate geometric return calculations.
+
+    2. **Sampling frequency validation**
     Ensures the input price series is sampled at *trade-daily* frequency.
     Lower-frequency inputs (e.g., weekly or monthly) are rejected with a
     ``ValueError``.
+
+    3. **Date handling and ordering**
+    - Ensures the ``date_stamp`` column is of pandas datetime type.
+    - Sorts observations in ascending date order.
+    - Removes duplicate dates, keeping the first occurrence.
+
+    4. **Outlier removal**
+    - Identify price transients such that outliers are removed whilst preserving
+      genuine market jumps thereby preserving overall prices over time.
+    - Return outliers are identified using a Z-score filter and replaced via
+      linear interpolation.
+    - Outliers are identified using z-scores. A typical outlier is identified
+      when the z-score exceeds 3 standard deviations.
+
+    4. **Missing data treatment**
+    Missing price observations (e.g., due to holidays or incomplete source
+    data) are filled using linear interpolation. Forward-filling is explicitly
+    avoided, as it introduces artificial flat price segments followed by
+    discrete jumps, which induce spurious auto- and cross-correlations in
+    returns.
+    After returns are computed, observations derived from interpolated prices
+    are discarded to ensure that only returns based on observed market prices
+    are retained.
 
     2. **Optional downsampling**
     If a resampling period is specified (e.g., weekly or monthly), prices are
@@ -28,36 +56,11 @@ class TimeSeriesProcessor():
     3. **Sample size adequacy check**
     Verifies that the final return series has sufficient observations for
     reliable estimation of the correlation matrix. As a rule of thumb, at
-    least 10× as many observations as assets are required. Insufficient data
+    least 10x as many observations as assets are required. Insufficient data
     results in a ``ValueError``.
-
-    4. **Date handling and ordering**
-    - Ensures the ``date_stamp`` column is of pandas datetime type.
-    - Sorts observations in ascending date order.
-    - Removes duplicate dates, keeping the first occurrence.
-
-    5. **Price validity checks**
-    Ensures all prices are strictly positive. Non-positive prices are removed,
-    as they invalidate geometric return calculations.
-
-    6. **Missing data treatment**
-    Missing price observations (e.g., due to holidays or incomplete source
-    data) are filled using linear interpolation. Forward-filling is explicitly
-    avoided, as it introduces artificial flat price segments followed by
-    discrete jumps, which induce spurious auto- and cross-correlations in
-    returns.
-    After returns are computed, observations derived from interpolated prices
-    are discarded to ensure that only returns based on observed market prices
-    are retained.
 
     7. **Return computation**
     Computes geometric (log-compatible) returns from the cleaned price series.
-
-    8. **Outlier handling**
-    Identifies extreme returns using a Z-score filter. Returns with absolute
-    Z-scores greater than 3 are treated as outliers and replaced via linear
-    interpolation between neighbouring non-outlier observations. In price
-    space, this corresponds to averaging adjacent valid returns.
 
     9. **Corporate action adjustments**
     - When dividend data are supplied, produces geometric *total return*
@@ -90,6 +93,11 @@ class TimeSeriesProcessor():
     clean_outliers : bool, optional
         If ``True``, the processor will clean the data by removing outliers.
         Default is ``True``.
+
+    The internal processing steps are executed upon each individual price series
+    to maintain independence across series and avoid cross-asset contamination
+    of data artifacts which cold arise when all series are processed jointly as
+    columns of single DataFrame.
 
     Notes
     -----
@@ -184,13 +192,88 @@ class TimeSeriesProcessor():
             except Exception:
                 raise TypeError("splits_df.date_stamp must be convertible to pandas datetime")
 
+    def _validate_prices(self) -> None:
+        """Validate that prices are strictly positive and numeric. """
+        # Check for non-numeric prices
+        if not pd.api.types.is_numeric_dtype(self.prices_df['price']):
+            raise TypeError("prices_df.price must be numeric")
+
+        # Remove non-positive prices
+        invalid_prices = self.prices_df[self.prices_df['price'] <= 0]
+        if not invalid_prices.empty:
+            raise ValueError(
+                f"Found non-positive prices in prices_df for identity_codes: "
+                f"{invalid_prices['identity_code'].unique().tolist()}"
+            )
+
     # Private processing step stubs (one per documented processing step)
     def _validate_sampling_frequency(self) -> None:
-        """Step 1: Validate that input price series is trade-daily frequency.
+        """Validate that input price series is trade-daily frequency. """
+        # Validate pandas.Dataframe sampling frequency for each identity_code
+        # Group by identity_code and check sampling frequency for each group
+        for identity_code, group in self.prices_df.groupby('identity_code'):
+            # Sort by date to ensure proper frequency inference
+            group = group.sort_values('date_stamp')
 
-        """
+            # Infer the frequency of the date_stamp column
+            inferred_freq = pd.infer_freq(group['date_stamp'])
 
+            # Check if frequency is daily (business day 'B' or calendar day 'D')
+            if inferred_freq not in ['B', 'D']:
+                raise ValueError(
+                    f"identity_code '{identity_code}' has non-daily sampling frequency: "
+                    f"{inferred_freq}. Expected trade-daily ('B') or calendar-daily ('D') frequency."
+                )
 
+    def _normalize_and_order_dates(self) -> None:
+        """Normalize `date_stamp` types, sort and deduplicate dates. """
+        # Ensure date_stamp is datetime type
+        self.prices_df['date_stamp'] = pd.to_datetime(self.prices_df['date_stamp'])
+
+        # Sort by identity_code and date_stamp
+        self.prices_df = self.prices_df.sort_values(by=['identity_code', 'date_stamp'])
+
+        # Remove duplicate dates, keeping the first occurrence
+        self.prices_df = self.prices_df.drop_duplicates(
+            subset=['identity_code', 'date_stamp'], keep='first'
+        )
+
+    def _outlier_removal(self, deviation:float=3.0, iterations:int|None=None) -> None:
+        """Remove outliers in prices and returns whilst preserving prices."""
+        # Test for outliers and return an outlier index
+        def test_for_outliers(price):
+            diff = price.diff()
+            # Zscore
+            mean = diff['price'].mean()
+            std = diff['price'].std()
+            diff.iloc[0] = mean  # Guarantees firsts price won't be rejected.
+            z_score = (group - mean) / std
+            # Outliers identification and rejection
+            outlier_index = z_score.abs() > deviation
+            return outlier_index
+
+        # Single pass price outlier removal
+        def remove_price_outliers(price, outlier_index):
+            price[outlier_index] = np.nan()  # Set outlier prices to NaN
+            # Prices linear interpolation getting rid of NaNs.
+            price.interpolate(method='linear')
+            # Note that first price will never be a NaN but the sequence of last
+            # prices could be if they were all outliers including the last price
+            price = price.ffill()
+
+        # Check for price outliers in each group
+        for identity_code, group in self.prices_df.groupby('identity_code'):
+            # Sort by date as proper sequence is critical
+            group = group.sort_values('date_stamp')
+            price = group['price']
+            # Iterate until outliers are removed.
+            outlier_index = test_for_outliers(price)
+            while outlier_index.any() == True:
+                # Remove outliers
+                price = remove_price_outliers(price, outlier_index)
+                # Test again for outliers
+                outlier_index = test_for_outliers(price)
+            self.prices_df[identity_code] = price
 
     def _apply_downsampling(self) -> None:
         """Step 2: Optionally downsample prices according to `downsample_period_str`.
@@ -204,21 +287,6 @@ class TimeSeriesProcessor():
 
         This method is a stub and should raise a ValueError when the sample
         size is insufficient.
-        """
-        pass
-
-    def _normalize_and_order_dates(self) -> None:
-        """Step 4: Normalize `date_stamp` types, sort and deduplicate dates.
-
-        This method is a stub; when implemented it will ensure proper date
-        ordering and types in `self.prices_df`.
-        """
-        pass
-
-    def _validate_prices(self) -> None:
-        """Step 5: Validate that prices are strictly positive and numeric.
-
-        This method is a stub and should remove or raise on invalid prices.
         """
         pass
 
@@ -237,14 +305,6 @@ class TimeSeriesProcessor():
         -------
         pandas.DataFrame
             DataFrame with columns ['identity_code', 'date_stamp', 'return'].
-        """
-        pass
-
-    def _handle_outliers(self) -> None:
-        """Step 8: Identify and handle outlier returns (e.g., Z-score filtering).
-
-        This method is a stub and should modify the computed returns in place
-        or mark replacements for interpolation.
         """
         pass
 
