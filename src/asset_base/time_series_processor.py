@@ -1,6 +1,8 @@
+from flask import g
 import numpy as np
 import pandas as pd
 
+import scipy.stats as sp_stats
 
 class TimeSeriesProcessor():
     """ Clean and transform raw trade-daily price series into statistically
@@ -115,22 +117,7 @@ class TimeSeriesProcessor():
         downsample_period_str: str = "",
         clean_outliers: bool = True,
     ) -> None:
-        """Initialize the TimeSeriesProcessor with type checking.
-
-        Parameters
-        ----------
-        prices_df : pandas.DataFrame
-            Raw trade-daily price data with required columns
-            ``['identity_code', 'date_stamp', 'price']``.
-        dividends_df : pandas.DataFrame | None
-            Optional dividend data with columns ``['identity_code', 'date_stamp', 'adjusted_value']``.
-        splits_df : pandas.DataFrame | None
-            Optional split data with columns ``['identity_code', 'date_stamp', 'numerator', 'denominator']``.
-        downsample_period_str : str
-            Pandas resampling string (e.g. 'W', 'M'). Empty string disables downsampling.
-        clean_outliers : bool
-            Whether to run outlier cleaning steps.
-        """
+        """Initialize the TimeSeriesProcessor with type checking."""
 
         # Basic type checks
         if not isinstance(prices_df, pd.DataFrame):
@@ -192,6 +179,12 @@ class TimeSeriesProcessor():
             except Exception:
                 raise TypeError("splits_df.date_stamp must be convertible to pandas datetime")
 
+    # TODO: Implement all processing steps using the private method stubs below
+    # TODO: _dropna_prices should be called before outlier detection
+    # TODO: The order matters
+    # TODO: Have a great holiday!
+
+
     def _validate_prices(self) -> None:
         """Validate that prices are strictly positive and numeric. """
         # Check for non-numeric prices
@@ -208,22 +201,63 @@ class TimeSeriesProcessor():
 
     # Private processing step stubs (one per documented processing step)
     def _validate_sampling_frequency(self) -> None:
-        """Validate that input price series is trade-daily frequency. """
+        """Validate price frequency is trade or daily then set to daily. """
         # Validate pandas.Dataframe sampling frequency for each identity_code
         # Group by identity_code and check sampling frequency for each group
         for identity_code, group in self.prices_df.groupby('identity_code'):
             # Sort by date to ensure proper frequency inference
             group = group.sort_values('date_stamp')
 
-            # Infer the frequency of the date_stamp column
-            inferred_freq = pd.infer_freq(group['date_stamp'])
-
-            # Check if frequency is daily (business day 'B' or calendar day 'D')
-            if inferred_freq not in ['B', 'D']:
+            # Infer frequency from date_stamp and process accordingly
+            frequency = pd.infer_freq(group['date_stamp'])
+            if frequency == 'D':
+                pass
+            elif frequency in ['B', 'C']:
+                pass
+            elif frequency is not None and pd.to_timedelta(frequency) < pd.Timedelta(days=1):
                 raise ValueError(
-                    f"identity_code '{identity_code}' has non-daily sampling frequency: "
-                    f"{inferred_freq}. Expected trade-daily ('B') or calendar-daily ('D') frequency."
+                    f"Prices for identity_code {identity_code} are sampled at "
+                    f"higher than daily frequency ({frequency}). Please downsample "
+                    f"to daily frequency."
                 )
+            elif frequency is not None and pd.to_timedelta(frequency) > pd.Timedelta(days=1):
+                raise ValueError(
+                    f"Prices for identity_code {identity_code} are sampled at "
+                    f"lower than daily frequency ({frequency}). Please provide "
+                    f"daily frequency data."
+                )
+            elif frequency is None:
+                # Here the time series may be almost daily and have some missing
+                # days such as weekends and holidays. We check the median
+                # difference between dates to infer frequency.
+                # Find the median difference between consecutive dates as median
+                # is more robust to outliers than mean
+                date_diffs = group['date_stamp'].diff().dropna()
+                if date_diffs.empty:
+                    raise ValueError(
+                        f"Insufficient data to determine sampling frequency for "
+                        f"identity_code: {identity_code}"
+                    )
+                median_diff = date_diffs.median()
+                # Check if median_diff corresponds to daily frequency
+                if median_diff > pd.Timedelta(days=1):
+                    raise ValueError(
+                        f"Prices for identity_code {identity_code} are not "
+                        f"sampled at daily frequency. Found median difference of "
+                        f"{median_diff}. You may need longer price series or higher "
+                        f"frequency data."
+                    )
+                pass
+
+    def _dropna_prices(self) -> None:
+        """Drop samples with NaN prices."""
+        group_list = []
+        for identity_code, group in self.prices_df.groupby('identity_code'):
+            group = group.dropna(subset=['price'])
+            # Do not use update as it will not remove rows from the main DataFrame.
+            # Instead create a brand new DataFrame without NaNs and assign it back.
+            group_list.append(group)
+        self.prices_df = pd.concat(group_list, ignore_index=True)
 
     def _normalize_and_order_dates(self) -> None:
         """Normalize `date_stamp` types, sort and deduplicate dates. """
@@ -238,42 +272,79 @@ class TimeSeriesProcessor():
             subset=['identity_code', 'date_stamp'], keep='first'
         )
 
-    def _outlier_removal(self, deviation:float=3.0, iterations:int|None=None) -> None:
-        """Remove outliers in prices and returns whilst preserving prices."""
-        # Test for outliers and return an outlier index
-        def test_for_outliers(price):
-            diff = price.diff()
-            # Zscore
-            mean = diff['price'].mean()
-            std = diff['price'].std()
-            diff.iloc[0] = mean  # Guarantees firsts price won't be rejected.
-            z_score = (group - mean) / std
-            # Outliers identification and rejection
-            outlier_index = z_score.abs() > deviation
-            return outlier_index
+    @staticmethod
+    def _median_absolute_price_deviation(price_diff:pd.Series) -> tuple[float, float]:
+        """Median Absolute Deviation (MAD) of price changes.
 
-        # Single pass price outlier removal
-        def remove_price_outliers(price, outlier_index):
-            price[outlier_index] = np.nan()  # Set outlier prices to NaN
-            # Prices linear interpolation getting rid of NaNs.
-            price.interpolate(method='linear')
-            # Note that first price will never be a NaN but the sequence of last
-            # prices could be if they were all outliers including the last price
-            price = price.ffill()
+        Parameters
+        ----------
+        price_diff : pandas.Series
+            Series of price differences.
 
-        # Check for price outliers in each group
+        Returns
+        -------
+        float
+            Median of price differences.
+        float
+            Adjusted Median Absolute Deviation of price differences scaled by
+            1.4826 or (1/0.6745) to be comparable to standard deviation.
+        """
+        # Check that prices is a pandas Series
+        if not isinstance(price_diff, pd.Series):
+            raise TypeError("price_diff must be a pandas.Series")
+        median = price_diff.median()
+        mad = (price_diff - median).abs().median()
+        return median, 1.4826 * mad  # Scale MAD to be comparable to std deviation
+
+    @staticmethod
+    def _modified_z_score(prices:pd.Series) -> pd.Series:
+        """Compute modified Z-scores for price changes using Median/MAD.
+
+        Parameters
+        ----------
+        prices : pandas.Series
+            Series of prices.
+
+        Returns
+        -------
+        modified_z_score : pandas.Series
+            Series of modified Z-scores for price differences.
+
+        Notes
+        -----
+        The modified Z-score is computed as:
+            Z_i = (X_i - median) / MAD
+        where MAD is the Median Absolute Deviation scaled by 1.4826 to be
+        comparable to standard deviation.
+        """
+        # Check that prices is a pandas Series
+        if not isinstance(prices, pd.Series):
+            raise TypeError("prices must be a pandas.Series")
+        price_diff = prices.diff()
+        median, mad = TimeSeriesProcessor._median_absolute_price_deviation(price_diff)
+        modified_z_score = (price_diff - median) / mad
+        return modified_z_score
+
+    def _identify_outliers(self, deviation:float=3.0) -> pd.DataFrame:
+        """Identify outliers.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame with an additional boolean column 'is_outlier' indicating
+            whether each price is an outlier based on the modified Z-score.
+        """
+        # Check for price outliers in each group and create an outlier index
+        group_list = []
         for identity_code, group in self.prices_df.groupby('identity_code'):
             # Sort by date as proper sequence is critical
             group = group.sort_values('date_stamp')
-            price = group['price']
-            # Iterate until outliers are removed.
-            outlier_index = test_for_outliers(price)
-            while outlier_index.any() == True:
-                # Remove outliers
-                price = remove_price_outliers(price, outlier_index)
-                # Test again for outliers
-                outlier_index = test_for_outliers(price)
-            self.prices_df[identity_code] = price
+            prices = group['price'].copy()
+            outlier_index = TimeSeriesProcessor._modified_z_score(prices).abs() > deviation
+            group['is_outlier'] = outlier_index
+            # Drop the price column as it's no longer needed
+            group_list.append(group)
+        return pd.concat(group_list, ignore_index=True)
 
     def _apply_downsampling(self) -> None:
         """Step 2: Optionally downsample prices according to `downsample_period_str`.
@@ -287,14 +358,6 @@ class TimeSeriesProcessor():
 
         This method is a stub and should raise a ValueError when the sample
         size is insufficient.
-        """
-        pass
-
-    def _handle_missing_data(self) -> None:
-        """Step 6: Handle missing price observations (interpolation strategy).
-
-        This method is a stub; when implemented it will perform interpolation
-        and mark interpolated rows for removal after return computation.
         """
         pass
 
