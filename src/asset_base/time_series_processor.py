@@ -179,6 +179,9 @@ class TimeSeriesProcessor():
             except Exception:
                 raise TypeError("splits_df.date_stamp must be convertible to pandas datetime")
 
+        # Downsampling flag. Used to implement once-only downsampling
+        self.is_downsampled = False
+
     # TODO: Implement all processing steps using the private method stubs below
     # TODO: _dropna_prices should be called before outlier detection
     # TODO: The order matters
@@ -347,29 +350,101 @@ class TimeSeriesProcessor():
         return pd.concat(group_list, ignore_index=True)
 
     def _apply_downsampling(self) -> None:
-        """Step 2: Optionally downsample prices according to `downsample_period_str`.
+        """Downsample prices according to `downsample_period_str` if set. """
+        if self.is_downsampled:
+            raise RuntimeError(
+                "Downsampling has already been applied once an is now disallowed.")
 
-        This method is a stub; when implemented it will modify `self.prices_df`.
+        if self.downsample_period_str == "":
+            return  # No downsampling requested
+
+        group_list = []
+        for identity_code, group in self.prices_df.groupby('identity_code'):
+            # Set date_stamp as index for resampling
+            group = group.set_index('date_stamp')
+            # Resample by taking the last available price in each period
+            downsampled = group.resample(self.downsample_period_str).last().dropna(subset=['price'])
+            # Reset index to restore date_stamp as a column
+            downsampled = downsampled.reset_index()
+            downsampled['identity_code'] = identity_code  # Re-add identity_code column
+            group_list.append(downsampled)
+        self.prices_df = pd.concat(group_list, ignore_index=True)
+
+        # Block multiple downsampling
+        self.is_downsampled = True
+
+    def _check_sample_size_adequacy(self, min_samples_factor:int = 10) -> None:
+        """Ensure sample size is adequate for downstream analysis.
+
+        Check that there are enough observations for reliable correlation
+        matrix estimation. A rule of thumb is at least 10x as many
+        observations as assets.
         """
-        pass
+        num_assets = self.prices_df['identity_code'].nunique()
+        num_observations = self.prices_df['date_stamp'].nunique()
 
-    def _check_sample_size_adequacy(self) -> None:
-        """Step 3: Ensure sample size is adequate for downstream analysis.
+        if num_observations < min_samples_factor * num_assets:
+            raise ValueError(
+                f"Insufficient data: {num_observations} observations for "
+                f"{num_assets} assets. At least {min_samples_factor * num_assets} "
+                f"observations are required for reliable correlation estimation."
+            )
 
-        This method is a stub and should raise a ValueError when the sample
-        size is insufficient.
-        """
-        pass
+    def _apply_splits(self) -> None:
+        """Apply splits to prices to adjust historical prices consistently.
 
-    def _compute_returns(self) -> pd.DataFrame:
-        """Step 7: Compute geometric (log) returns from cleaned prices.
-
-        Returns
+        Warning
         -------
-        pandas.DataFrame
-            DataFrame with columns ['identity_code', 'date_stamp', 'return'].
+        Apply only to original prices before outlier cleaning and resampling.
+
         """
-        pass
+        if self.is_downsampled:
+            raise RuntimeError(
+                "Cannot apply splits after downsampling. Splits must be applied "
+                "to original price series."
+            )
+        
+        if self.splits_df is None:
+            return  # No splits to apply
+
+        for identity_code, group in self.splits_df.groupby('identity_code'):
+            splits = group.sort_values('date_stamp')
+            price_mask = self.prices_df['identity_code'] == identity_code
+            prices = self.prices_df.loc[price_mask].sort_values('date_stamp')
+            for _, split in splits.iterrows():
+                split_date = split['date_stamp']
+                numerator = split['numerator']
+                denominator = split['denominator']
+                # Adjust historical prices before the split date
+                adjust_mask = (prices['date_stamp'] < split_date)
+                prices.loc[adjust_mask, 'price'] *= (denominator / numerator)
+            # Update the main prices_df with adjusted prices
+            self.prices_df.loc[price_mask, 'price'] = prices['price'].values
+
+    def _apply_dividends(self) -> None:
+        """Incorporate dividends into price series to compute total returns.
+        
+        Warning
+        -------
+        Apply only to original prices before outlier cleaning and resampling.
+        
+        Warning
+        -------
+        Apply only to returns after splits have been applied.
+
+        """
+        if self.is_downsampled:
+            raise RuntimeError(
+                "Cannot apply dividends after downsampling. Dividends must be applied "
+                "to original price series."
+            )
+
+        if self.dividends_df is None:
+            return  # No dividends to apply
+        
+        # Can only 
+        
+
 
     def _apply_corporate_actions(self) -> None:
         """Step 9: Apply dividends and splits to compute total returns.

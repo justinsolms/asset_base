@@ -66,9 +66,11 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         price_df = pd.read_csv(StringIO(price_csv))
         price_df['date_stamp'] = pd.to_datetime(price_df['date_stamp'])
         cls.test_price_df = price_df.copy()
+
+        # Create clean price DataFrame without anomalies
         cls.clean_test_price_df = price_df[['identity_code', 'date_stamp', 'price']]
 
-        # Need an index for applying anomalies
+        # Create dirty price DataFrame with anomalies applied
         price_df = price_df.set_index(['identity_code', 'date_stamp'])
         # Apply price spikes on the day they occur
         spike_df = price_df.loc[price_df['anomaly'] == 'spike', 'anomaly_value']
@@ -80,9 +82,15 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         price_df['price'] += jump_df
         # Reset index
         price_df = price_df.reset_index()
+        # Dirty price DataFrame with anomalies applied
         cls.dirty_test_price_df = price_df[['identity_code', 'date_stamp', 'price']]
 
-        # Assert that days with holiday names are NaN in price
+        # Create a tsp with insufficient rows to meet sample size adequacy
+        # for multiple assets test later
+        cls.insufficient_test_price_df = price_df[['identity_code', 'date_stamp', 'price']].iloc[:5]
+
+        # Assert that days with holiday names are NaN in price as there would be
+        # no trading on those days
         assert price_df.loc[price_df['holiday'].notna(), 'price'].isna().all(), "Holiday prices should be NaN."
 
         # Price holidays bool index series
@@ -125,6 +133,11 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             self.test_split_df.copy(),
             self.downsample_period_str, self.clean_outliers)
 
+        self.tsp_insufficient = TimeSeriesProcessor(
+            self.insufficient_test_price_df.copy(),
+            self.test_dividend_df.copy(),
+            self.test_split_df.copy(),
+            self.downsample_period_str, self.clean_outliers)
 
     def tearDown(self):
         """Clean up after each test method."""
@@ -293,3 +306,32 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         known_outliers = clean_test_df.set_index(['identity_code', 'date_stamp'])['is_outlier'].reset_index()
         # Test that the outlier bool series matches known outliers
         pd.testing.assert_frame_equal(outlier_df, known_outliers)
+
+    def test_apply_downsampling(self):
+        """Test downsampling method."""
+        # Downsample dirty prices
+        self.tsp_dirty._apply_downsampling()
+        # Test that the resulting DataFrame has weekly frequency
+        self.assertEqual(pd.infer_freq(self.tsp_dirty.prices_df['date_stamp']), 'W-SUN')
+        # Test that there are no NaNs after downsampling
+        self.assertFalse(self.tsp_dirty.prices_df['price'].isna().any())
+        # Downsample clean prices
+        self.tsp_clean._apply_downsampling()
+        # Test that the resulting DataFrame has weekly frequency
+        self.assertEqual(pd.infer_freq(self.tsp_clean.prices_df['date_stamp']), 'W-SUN')
+        # Test that there are no NaNs after downsampling
+        self.assertFalse(self.tsp_clean.prices_df['price'].isna().any())
+        # Test second attempt to downsample fails.
+        with self.assertRaises(RuntimeError):
+            self.tsp_clean._apply_downsampling()
+
+    def test_check_sample_size_adequacy(self):
+        """Test sample size adequacy check method."""
+        # Test with single asset and sufficient observations (should pass)
+        self.tsp_clean._check_sample_size_adequacy(min_samples_factor=10)
+
+        # Test with insufficient observations using the fixture (should raise ValueError)
+        # The insufficient fixture has only 5 price observations for 1 asset
+        with self.assertRaises(ValueError) as context:
+            self.tsp_insufficient._check_sample_size_adequacy(min_samples_factor=10)
+        self.assertIn("Insufficient data", str(context.exception))
