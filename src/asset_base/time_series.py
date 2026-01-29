@@ -1033,7 +1033,7 @@ class Dividend(TimeSeriesBase):
     date_stamp : datetime.date
         The end-of-day (EOD) data date stamp.
     currency : str(3)
-        ISO 4217 3-letter currency codes.
+        The indicated currency, a ISO 4217 3-letter currency code.
     declaration_date : datetime.date
         The date the dividend was declared.
     payment_date : datetime.date
@@ -1043,7 +1043,8 @@ class Dividend(TimeSeriesBase):
     record_date : datetime.date
         The date the dividend was recorded.
     unadjusted_value : float
-        The unadjusted value of the dividend in indicated currency.
+        The unadjusted value of the dividend per actual share in indicated
+        currency.
     adjusted_value : float
         The adjusted value of the dividend in indicated currency.
 
@@ -1077,10 +1078,10 @@ class Dividend(TimeSeriesBase):
     """datetime: The date the dividend was recorded. """
 
     unadjusted_value = Column(Float, nullable=True)
-    """float: The unadjusted value of the dividend in indicated currency. """
+    """float: The dividend per actual share. This is not adjusted for splits."""
 
     adjusted_value = Column(Float, nullable=True)
-    """float: The adjusted value of the dividend in indicated currency. """
+    """float: The split-adjusted value of the dividend. """
 
     _date_column_names = [
         "date_stamp",
@@ -1221,6 +1222,16 @@ class Split(TimeSeriesBase):
         The numerator of the split ratio, e.g., 2 for a 2-for-1 split.
     denominator : float
         The denominator of the split ratio, e.g., 1 for a 2-for-1 split.
+
+    Note
+    ----
+    The numerator and denominator together define the split ratio. For example,
+    a 2-for-1 split would have a numerator of 2 and a denominator of 1,
+    indicating that for every 1 share held before the split, the shareholder
+    will now hold 2 shares after the split. In a reverse split, such as a
+    1-for-5 split, the numerator would be 1 and the denominator would be 5,
+    meaning that for every 5 shares held before the split, the shareholder will
+    now hold 1 share after the split.
 
     """
 

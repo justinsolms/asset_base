@@ -1,3 +1,4 @@
+from operator import is_
 from flask import g
 import numpy as np
 import pandas as pd
@@ -76,25 +77,25 @@ class TimeSeriesProcessor():
     prices_df : pandas.DataFrame
         Raw trade-daily price data with columns:
         ``['identity_code', 'date_stamp', 'price']``.
-
     dividends_df : pandas.DataFrame, optional
         Dividend data with columns:
         ``['identity_code', 'date_stamp', 'adjusted_value']``.
         If provided, total returns are computed. Default is ``None``.
-
     splits_df : pandas.DataFrame, optional
         Share split data with columns:
         ``['identity_code', 'date_stamp', 'numerator', 'denominator']``.
         Default is ``None``.
-
     downsample_period_str : str, optional
         Pandas resampling frequency string (e.g., ``'W'`` for weekly,
         ``'M'`` for monthly). An empty string disables downsampling.
         Default is ``""``.
-
     clean_outliers : bool, optional
         If ``True``, the processor will clean the data by removing outliers.
         Default is ``True``.
+    adj_price_anchor : str, optional
+        Anchor for adjusted price series when corporate actions are applied.
+        Options are ``'first'`` (adjusted price starts at first raw close) or
+        ``'last'`` (adjusted price ends at last raw close). Default is ``'first'``.
 
     The internal processing steps are executed upon each individual price series
     to maintain independence across series and avoid cross-asset contamination
@@ -116,6 +117,7 @@ class TimeSeriesProcessor():
         splits_df: pd.DataFrame | None = None,
         downsample_period_str: str = "",
         clean_outliers: bool = True,
+        adj_price_anchor: str = "first",
     ) -> None:
         """Initialize the TimeSeriesProcessor with type checking."""
 
@@ -160,6 +162,11 @@ class TimeSeriesProcessor():
         )
         self.downsample_period_str: str = downsample_period_str
         self.clean_outliers: bool = clean_outliers
+        self.adj_price_anchor: str = adj_price_anchor
+
+        # Check adj_price_anchor validity
+        if self.adj_price_anchor not in {"first", "last"}:
+            raise ValueError("adj_price_anchor must be 'first' or 'last'")
 
         # Normalize date column types where possible
         try:
@@ -390,69 +397,181 @@ class TimeSeriesProcessor():
                 f"observations are required for reliable correlation estimation."
             )
 
-    def _apply_splits(self) -> None:
-        """Apply splits to prices to adjust historical prices consistently.
-
-        Warning
-        -------
-        Apply only to original prices before outlier cleaning and resampling.
-
-        """
-        if self.is_downsampled:
-            raise RuntimeError(
-                "Cannot apply splits after downsampling. Splits must be applied "
-                "to original price series."
-            )
-        
-        if self.splits_df is None:
-            return  # No splits to apply
-
-        for identity_code, group in self.splits_df.groupby('identity_code'):
-            splits = group.sort_values('date_stamp')
-            price_mask = self.prices_df['identity_code'] == identity_code
-            prices = self.prices_df.loc[price_mask].sort_values('date_stamp')
-            for _, split in splits.iterrows():
-                split_date = split['date_stamp']
-                numerator = split['numerator']
-                denominator = split['denominator']
-                # Adjust historical prices before the split date
-                adjust_mask = (prices['date_stamp'] < split_date)
-                prices.loc[adjust_mask, 'price'] *= (denominator / numerator)
-            # Update the main prices_df with adjusted prices
-            self.prices_df.loc[price_mask, 'price'] = prices['price'].values
-
-    def _apply_dividends(self) -> None:
-        """Incorporate dividends into price series to compute total returns.
-        
-        Warning
-        -------
-        Apply only to original prices before outlier cleaning and resampling.
-        
-        Warning
-        -------
-        Apply only to returns after splits have been applied.
-
-        """
-        if self.is_downsampled:
-            raise RuntimeError(
-                "Cannot apply dividends after downsampling. Dividends must be applied "
-                "to original price series."
-            )
-
-        if self.dividends_df is None:
-            return  # No dividends to apply
-        
-        # Can only 
-        
-
-
     def _apply_corporate_actions(self) -> None:
-        """Step 9: Apply dividends and splits to compute total returns.
+        """Apply corporate actions (dividends & splits) to compute total returns.
 
-        This method is a stub and should adjust historical prices/returns
-        when dividends_df or splits_df are provided.
+        Notes / conventions
+        -------------------
+        - `self.prices_df['price']` is assumed to be the raw exchange-listed close.
+        - Dividends are assumed to be *cash per share* with ex-date == date_stamp.
+        (EODHD's "unadjusted" dividend is typically this.)
+        - Splits are given as numerator/denominator and interpreted as:
+            s_t = numerator / denominator  (new shares per old share)
+        So a 2-for-1 split => s_t = 2/1 = 2, and a 1-for-5 reverse split => 1/5.
+
+        The per-share wealth recursion from t-1 close to t close is:
+            G_t = s_t * (P_t + D_t) / P_{t-1}
+            R_t = G_t - 1
+
+        This handles dividends and splits on the same day without any ordering rules.
+
+        Adds the following columns to `self.prices_df`:
+        - 'dividend': cash dividend per share on date_stamp
+        - 'split_ratio': share split ratio on date_stamp
+        - 'gross_factor': gross total return factor G_t
+        - 'total_return': net total return R_t
+        - 'tri': total return index (dimensionless wealth index)
+        - 'adj_price': adjusted total-return price series scaled to raw prices based
+            on `adj_price_anchor` setting.
+
         """
-        pass
+
+        # Lock out corporate action adjustments after downsampling
+        if self.is_downsampled:
+            raise RuntimeError(
+                "Cannot apply corporate actions after downsampling. Corporate "
+                "actions must be applied to original price series."
+            )
+
+        # Ensure canonical ordering
+        self.prices_df = self.prices_df.sort_values(["identity_code", "date_stamp"]).copy()
+
+        # -----------------------
+        # Build dividend series
+        # -----------------------
+        if self.dividends_df is not None and not self.dividends_df.empty:
+            div = self.dividends_df.copy()
+
+            # Ensure expected column exists (constructor enforces it)
+            # Aggregate in case multiple dividends on one date (rare but possible)
+            div = (
+                div.groupby(["identity_code", "date_stamp"], as_index=False)["unadjusted_value"]
+                .sum()
+                .rename(columns={"unadjusted_value": "dividend"})
+            )
+        else:
+            div = None
+
+        # -----------------------
+        # Build split ratio series
+        # -----------------------
+        if self.splits_df is not None and not self.splits_df.empty:
+            spl = self.splits_df.copy()
+
+            # Basic validation / safety
+            for col in ("numerator", "denominator"):
+                if not pd.api.types.is_numeric_dtype(spl[col]):
+                    raise TypeError(f"splits_df.{col} must be numeric")
+
+            if (spl["numerator"] <= 0).any() or (spl["denominator"] <= 0).any():
+                bad = spl[(spl["numerator"] <= 0) | (spl["denominator"] <= 0)][
+                    ["identity_code", "date_stamp", "numerator", "denominator"]
+                ]
+                raise ValueError(
+                    "Found non-positive split numerator/denominator. "
+                    f"Bad rows:\n{bad.to_string(index=False)}"
+                )
+
+            spl["split_ratio"] = spl["numerator"] / spl["denominator"]
+
+            # Aggregate in case multiple split-like events on same date:
+            # multiply ratios (e.g., sequential actions posted same day)
+            spl = (
+                spl.groupby(["identity_code", "date_stamp"], as_index=False)["split_ratio"]
+                .prod()
+            )
+        else:
+            spl = None
+
+        # -----------------------
+        # Merge corporate actions onto prices
+        # -----------------------
+        df = self.prices_df.copy()
+
+        if div is not None:
+            df = df.merge(div, on=["identity_code", "date_stamp"], how="left")
+        else:
+            df["dividend"] = np.nan
+
+        if spl is not None:
+            df = df.merge(spl, on=["identity_code", "date_stamp"], how="left")
+        else:
+            df["split_ratio"] = np.nan
+
+        # Defaults: no dividend => 0, no split => 1
+        df["dividend"] = df["dividend"].fillna(0.0)
+        df["split_ratio"] = df["split_ratio"].fillna(1.0)
+
+        # -----------------------
+        # Compute total return factor per identity_code
+        # -----------------------
+        out_groups = []
+        for identity_code, group in df.groupby("identity_code", sort=False):
+            group = group.sort_values("date_stamp").copy()
+
+            # Prior close (raw)
+            group["prev_price"] = group["price"].shift(1)
+
+            # If prev_price missing (first obs), factor/return undefined
+            # Protect against divide-by-zero just in case
+            if (group["prev_price"] <= 0).any():
+                bad = group[group["prev_price"] <= 0][["identity_code", "date_stamp", "prev_price"]]
+                raise ValueError(
+                    "Found non-positive prev_price after shifting (unexpected). "
+                    f"Bad rows:\n{bad.to_string(index=False)}"
+                )
+
+            # Gross total return factor:
+            #   G_t = s_t * (P_t + D_t) / P_{t-1}
+            # Works whether or not a split and dividend occur on same day.
+            group["gross_factor"] = np.where(
+                group["prev_price"].notna(),
+                (group["split_ratio"] * (group["price"] + group["dividend"])) / group["prev_price"],
+                np.nan,
+            )
+
+            # Net return
+            group["total_return"] = group["gross_factor"] - 1.0
+
+            # ---- Total Return Index (dimensionless wealth index) ----
+            gross_factor = group["gross_factor"].fillna(1.0)
+            group["tri"] = gross_factor.cumprod()
+
+            # ---- Adjusted total-return price (scaled TRI) ----
+            anchor = getattr(self, "adj_price_anchor", "first")
+
+            if anchor == "first":
+                # adj_price starts at first raw close
+                first_price = group["price"].iloc[0]
+                group["adj_price"] = first_price * group["tri"]
+
+            elif anchor == "last":
+                # adj_price ends at last raw close
+                last_price = group["price"].iloc[-1]
+                last_tri = group["tri"].iloc[-1]
+
+                if last_tri == 0 or not np.isfinite(last_tri):
+                    raise ValueError(
+                        f"Invalid TRI terminal value for {identity_code}: {last_tri}"
+                    )
+
+                scale = last_price / last_tri
+                group["adj_price"] = scale * group["tri"]
+
+            else:
+                raise ValueError(
+                    f"adj_price_anchor must be 'first' or 'last', got '{anchor}'"
+                )
+
+            out_groups.append(group)
+
+        df_out = pd.concat(out_groups, ignore_index=True)
+
+        # NOTE: Drop helper column if you don't want it hanging around
+        # (I keep it because it's useful for debugging and validation.)
+        # df_out = df_out.drop(columns=["prev_price"])
+
+        self.prices_df = df_out
 
     def get_returns(self) -> pd.DataFrame:
         """Get processed returns DataFrame.
