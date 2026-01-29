@@ -133,7 +133,7 @@ class TimeSeriesProcessor():
         if dividends_df is not None:
             if not isinstance(dividends_df, pd.DataFrame):
                 raise TypeError("dividends_df must be a pandas.DataFrame or None")
-            required_div_cols = {"identity_code", "date_stamp", "adjusted_value"}
+            required_div_cols = {"identity_code", "date_stamp", "unadjusted_value"}
             if not required_div_cols.issubset(set(dividends_df.columns)):
                 missing = required_div_cols - set(dividends_df.columns)
                 raise ValueError(f"dividends_df is missing required columns: {missing}")

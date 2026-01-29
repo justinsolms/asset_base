@@ -335,3 +335,158 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         with self.assertRaises(ValueError) as context:
             self.tsp_insufficient._check_sample_size_adequacy(min_samples_factor=10)
         self.assertIn("Insufficient data", str(context.exception))
+
+    def test_apply_corporate_actions(self):
+        """Test corporate actions application (dividends and splits)."""
+        # Use clean prices and ensure they're normalized and ordered
+        self.tsp_clean._dropna_prices()
+        self.tsp_clean._normalize_and_order_dates()
+
+        # Apply corporate actions
+        self.tsp_clean._apply_corporate_actions()
+
+        #  Set pandas to print all columns
+        pd.set_option('display.max_columns', None)
+        # Print the resulting prices DataFrame for visual inspection
+        print()
+        print(self.tsp_clean.prices_df)
+        print(self.test_price_df)
+
+        # Get result DataFrame
+        result_df = self.tsp_clean.prices_df
+
+        # Check that required columns exist
+        required_cols = ['dividend', 'split_ratio', 'gross_factor', 'total_return', 'tri', 'adj_price']
+        for col in required_cols:
+            self.assertIn(col, result_df.columns, f"Missing column: {col}")
+
+        # Check dividend values
+        # According to fixtures, dividends occur on 2020-12-03 (1.25) and 2020-12-04 (1.25)
+        div_date1 = pd.Timestamp('2020-12-03')
+        div_date2 = pd.Timestamp('2020-12-04')
+
+        div_row1 = result_df[result_df['date_stamp'] == div_date1].iloc[0]
+        div_row2 = result_df[result_df['date_stamp'] == div_date2].iloc[0]
+
+        self.assertEqual(div_row1['dividend'], 1.25, "Dividend on 2020-12-03 should be 1.25")
+        self.assertEqual(div_row2['dividend'], 1.25, "Dividend on 2020-12-04 should be 1.25")
+
+        # Check split values
+        # According to fixtures, splits occur on 2020-12-07 (2:1) and 2020-12-09 (4:1)
+        split_date1 = pd.Timestamp('2020-12-07')
+        split_date2 = pd.Timestamp('2020-12-09')
+
+        split_row1 = result_df[result_df['date_stamp'] == split_date1].iloc[0]
+        split_row2 = result_df[result_df['date_stamp'] == split_date2].iloc[0]
+
+        self.assertEqual(split_row1['split_ratio'], 2.0, "Split ratio on 2020-12-07 should be 2.0")
+        self.assertEqual(split_row2['split_ratio'], 4.0, "Split ratio on 2020-12-09 should be 4.0")
+
+        # Check gross factor calculation
+        # First observation should have NaN gross_factor (no previous price)
+        self.assertTrue(pd.isna(result_df.iloc[0]['gross_factor']),
+                        "First observation should have NaN gross_factor")
+
+        # For other observations, gross_factor should be positive and finite
+        gross_factors = result_df['gross_factor'].dropna()
+        self.assertTrue((gross_factors > 0).all(), "All gross factors should be positive")
+        self.assertTrue(np.isfinite(gross_factors).all(), "All gross factors should be finite")
+
+        # Check total return calculation
+        # total_return = gross_factor - 1
+        for idx in result_df.index[1:]:  # Skip first row
+            if pd.notna(result_df.loc[idx, 'gross_factor']):
+                expected_return = result_df.loc[idx, 'gross_factor'] - 1.0
+                self.assertAlmostEqual(result_df.loc[idx, 'total_return'], expected_return, places=10,
+                                       msg=f"Total return mismatch at index {idx}")
+
+        # Check TRI (Total Return Index)
+        tri = result_df['tri']
+        self.assertTrue((tri > 0).all(), "All TRI values should be positive")
+        self.assertTrue(np.isfinite(tri).all(), "All TRI values should be finite")
+        # TRI should be monotonically increasing in general (can decrease with negative returns)
+        self.assertGreater(tri.iloc[-1], 0, "Final TRI should be positive")
+
+        # Check adjusted price with default anchor ('first')
+        adj_price = result_df['adj_price']
+        first_price = result_df.iloc[0]['price']
+        first_adj_price = result_df.iloc[0]['adj_price']
+
+        self.assertAlmostEqual(first_adj_price, first_price, places=10,
+                               msg="With 'first' anchor, adj_price should equal raw price at start")
+
+        # All adjusted prices should be positive and finite
+        self.assertTrue((adj_price > 0).all(), "All adjusted prices should be positive")
+        self.assertTrue(np.isfinite(adj_price).all(), "All adjusted prices should be finite")
+
+        # Test with 'last' anchor
+        tsp_last_anchor = TimeSeriesProcessor(
+            self.clean_test_price_df.copy(),
+            self.test_dividend_df.copy(),
+            self.test_split_df.copy(),
+            "",
+            True,
+            adj_price_anchor='last'
+        )
+        tsp_last_anchor._dropna_prices()
+        tsp_last_anchor._normalize_and_order_dates()
+        tsp_last_anchor._apply_corporate_actions()
+
+        result_last = tsp_last_anchor.prices_df
+        last_price = result_last.iloc[-1]['price']
+        last_adj_price = result_last.iloc[-1]['adj_price']
+
+        self.assertAlmostEqual(last_adj_price, last_price, places=10,
+                               msg="With 'last' anchor, adj_price should equal raw price at end")
+
+        # Test that corporate actions cannot be applied after downsampling
+        tsp_downsample = TimeSeriesProcessor(
+            self.clean_test_price_df.copy(),
+            self.test_dividend_df.copy(),
+            self.test_split_df.copy(),
+            "W",  # Weekly downsampling
+            True
+        )
+        tsp_downsample._dropna_prices()
+        tsp_downsample._normalize_and_order_dates()
+        tsp_downsample._apply_downsampling()
+
+        with self.assertRaises(RuntimeError) as context:
+            tsp_downsample._apply_corporate_actions()
+        self.assertIn("Cannot apply corporate actions after downsampling", str(context.exception))
+
+        # Test with no dividends
+        tsp_no_div = TimeSeriesProcessor(
+            self.clean_test_price_df.copy(),
+            None,  # No dividends
+            self.test_split_df.copy(),
+            "",
+            True
+        )
+        tsp_no_div._dropna_prices()
+        tsp_no_div._normalize_and_order_dates()
+        tsp_no_div._apply_corporate_actions()
+
+        result_no_div = tsp_no_div.prices_df
+        # All dividends should be 0 when no dividend data provided
+        self.assertTrue((result_no_div['dividend'] == 0.0).all(),
+                        "All dividends should be 0 when no dividend data provided")
+
+        # Test with no splits
+        tsp_no_split = TimeSeriesProcessor(
+            self.clean_test_price_df.copy(),
+            self.test_dividend_df.copy(),
+            None,  # No splits
+            "",
+            True
+        )
+        tsp_no_split._dropna_prices()
+        tsp_no_split._normalize_and_order_dates()
+        tsp_no_split._apply_corporate_actions()
+
+        result_no_split = tsp_no_split.prices_df
+        # All split ratios should be 1.0 when no split data provided
+        self.assertTrue((result_no_split['split_ratio'] == 1.0).all(),
+                        "All split ratios should be 1.0 when no split data provided")
+
+
