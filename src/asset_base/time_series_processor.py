@@ -108,6 +108,30 @@ class TimeSeriesProcessor():
     Depending on the database schema, this may also correspond to an ``isin``,
     an ``asset.Asset`` instance, or any other unique asset identifier used within
     the system.
+
+    Note
+    ----
+    No code has been developed for outlier removal, only identification.
+    There are three completely different species that gets mixed up:
+
+    +--------------+--------------------------+-----------+----------------+
+    | Type         | Example                  | Remove?   | Why            |
+    +==============+==========================+===========+================+
+    | Data error   | Bad tick, 1000% jump,    | YES       | Not economic   |
+    |              | missing split adj.       |           | reality        |
+    +--------------+--------------------------+-----------+----------------+
+    | Liquidity    | Microcap gap, stale then | Usually   | Tradability    |
+    | artifact     | catch-up                 | NO        | risk           |
+    +--------------+--------------------------+-----------+----------------+
+    | Market shock | 2008, COVID, flash crash | NEVER     | Is the risk    |
+    |              |                          |           | being modelled |
+    +--------------+--------------------------+-----------+----------------+
+
+    Most “outlier removal” accidentally deletes the third category — which is
+    exactly something we wish to model. It would be best to identify outliers
+    and judiciously remove only the first category by hand in, say, by entering
+    them into a special outlier file TBDL.
+
     """
 
     def __init__(

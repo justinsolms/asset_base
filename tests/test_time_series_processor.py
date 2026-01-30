@@ -14,6 +14,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         """Set up class-wide test fixtures."""
         cls.identity_code = "XNYS:ABC"  # ABC Inc. identity code as example
 
+        # TODO: Make all fixtures a single CSV string for easier modification. Include test outcomes.
         # Price data fixture - days of trade data with holidays and anomalies In
         # prices spikes cause twin outliers on the spike day and on the
         # following day unless there are twin spikes. Twin spikes may not look
@@ -64,6 +65,12 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             f"{cls.identity_code},2021-01-10,,,,Sunday,False\n"
         )
         price_df = pd.read_csv(StringIO(price_csv))
+
+        # Alternatively read from the Excel fixture file
+        # TODO: Make the Excel fixture file a CSV file for git friendliness
+        # TODO: Get rid of inline CSV fixtures once all tests are converted
+        fixture_df = pd.read_excel("tests/fixtures/time_series_processor_price_fixture.xlsx")
+        price_df = fixture_df[['identity_code', 'date_stamp', 'price', 'anomaly', 'anomaly_value', 'holiday', 'is_outlier']]
         price_df['date_stamp'] = pd.to_datetime(price_df['date_stamp'])
         cls.test_price_df = price_df.copy()
 
@@ -98,11 +105,15 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Dividend data fixture - 2 dividend events
         dividend_csv = (
-            "identity_code,date_stamp,adjusted_value\n"
-            f"{cls.identity_code},2020-12-03,1.25\n"
+            "identity_code,date_stamp,unadjusted_value\n"
+            f"{cls.identity_code},2020-12-29,1.25\n"
             f"{cls.identity_code},2020-12-04,1.25\n"
         )
         dividend_df = pd.read_csv(StringIO(dividend_csv))
+
+        # Alternatively use the Excel price fixture file
+        dividend_df = fixture_df[['identity_code', 'date_stamp', 'dividend']]
+        dividend_df.rename(columns={'dividend': 'unadjusted_value'}, inplace=True)
         dividend_df['date_stamp'] = pd.to_datetime(dividend_df['date_stamp'])
         cls.test_dividend_df = dividend_df
 
@@ -113,6 +124,9 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             f"{cls.identity_code},2020-12-09,4.0,1.0\n"
         )
         split_df = pd.read_csv(StringIO(split_csv))
+
+        # Alternatively use the Excel price fixture file
+        split_df = fixture_df[['identity_code', 'date_stamp', 'numerator', 'denominator']]
         split_df['date_stamp'] = pd.to_datetime(split_df['date_stamp'])
         cls.test_split_df = split_df
 
@@ -362,25 +376,25 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Check dividend values
         # According to fixtures, dividends occur on 2020-12-03 (1.25) and 2020-12-04 (1.25)
-        div_date1 = pd.Timestamp('2020-12-03')
-        div_date2 = pd.Timestamp('2020-12-04')
+        div_date1 = pd.Timestamp('2020-12-29')
+        div_date2 = pd.Timestamp('2021-01-06')
 
         div_row1 = result_df[result_df['date_stamp'] == div_date1].iloc[0]
         div_row2 = result_df[result_df['date_stamp'] == div_date2].iloc[0]
 
-        self.assertEqual(div_row1['dividend'], 1.25, "Dividend on 2020-12-03 should be 1.25")
-        self.assertEqual(div_row2['dividend'], 1.25, "Dividend on 2020-12-04 should be 1.25")
+        self.assertEqual(div_row1['dividend'], 2.2, "Dividend on 2020-12-29 should be 2.2")
+        self.assertEqual(div_row2['dividend'], 0.55, "Dividend on 2021-01-06 should be 0.55")
 
         # Check split values
         # According to fixtures, splits occur on 2020-12-07 (2:1) and 2020-12-09 (4:1)
-        split_date1 = pd.Timestamp('2020-12-07')
-        split_date2 = pd.Timestamp('2020-12-09')
+        split_date1 = pd.Timestamp('2021-01-04')
+        split_date2 = pd.Timestamp('2021-01-06')
 
         split_row1 = result_df[result_df['date_stamp'] == split_date1].iloc[0]
         split_row2 = result_df[result_df['date_stamp'] == split_date2].iloc[0]
 
-        self.assertEqual(split_row1['split_ratio'], 2.0, "Split ratio on 2020-12-07 should be 2.0")
-        self.assertEqual(split_row2['split_ratio'], 4.0, "Split ratio on 2020-12-09 should be 4.0")
+        self.assertEqual(split_row1['split_ratio'], 2.0, "Split ratio on 2021-01-04 should be 2.0")
+        self.assertEqual(split_row2['split_ratio'], 2.0, "Split ratio on 2021-01-06 should be 2.0")
 
         # Check gross factor calculation
         # First observation should have NaN gross_factor (no previous price)
