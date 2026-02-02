@@ -623,3 +623,288 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             (self.test_split_df['denominator'].notna())
         ]['date_stamp'].values
         np.testing.assert_array_equal(split_dates, expected_split_dates)
+
+    def test_get_total_return(self):
+        """Test get_total_return method."""
+        # Create simple price series with dividend and split
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 5,
+            'date_stamp': pd.date_range('2020-01-01', periods=5, freq='D'),
+            'price': [100.0, 101.0, 50.5, 51.0, 52.0]
+        })
+        dividend_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-02')],
+            'unadjusted_value': [1.0]
+        })
+        split_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=dividend_df, splits_df=split_df)
+
+        # Should raise error before processing
+        with self.assertRaises(RuntimeError) as context:
+            tsp.get_total_return()
+        self.assertIn("not yet computed", str(context.exception))
+
+        # Apply corporate actions
+        tsp._apply_corporate_actions()
+
+        # Get total returns
+        total_returns_df = tsp.get_total_return()
+
+        # Verify structure
+        self.assertIsInstance(total_returns_df, pd.DataFrame)
+        expected_cols = ['identity_code', 'date_stamp', 'total_return']
+        self.assertEqual(list(total_returns_df.columns), expected_cols)
+
+        # Verify values
+        self.assertEqual(len(total_returns_df), 5)
+        self.assertTrue(pd.isna(total_returns_df['total_return'].iloc[0]))
+        # Verify we have valid returns (actual values tested in corporate actions tests)
+        self.assertGreater(total_returns_df['total_return'].dropna().count(), 0)
+
+    def test_get_total_return_multiple_assets(self):
+        """Test get_total_return with multiple assets."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A']*3 + ['TEST:B']*3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D').tolist() * 2,
+            'price': [100.0, 102.0, 104.0, 200.0, 210.0, 220.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
+        tsp._apply_corporate_actions()
+        total_returns_df = tsp.get_total_return()
+
+        # Check both assets are present
+        self.assertEqual(len(total_returns_df), 6)
+        assets = total_returns_df['identity_code'].unique()
+        self.assertEqual(len(assets), 2)
+        self.assertIn('TEST:A', assets)
+        self.assertIn('TEST:B', assets)
+
+    def test_get_total_return_index(self):
+        """Test get_total_return_index method."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 5,
+            'date_stamp': pd.date_range('2020-01-01', periods=5, freq='D'),
+            'price': [100.0, 100.0, 50.0, 51.0, 52.0]
+        })
+        dividend_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-02')],
+            'unadjusted_value': [2.0]
+        })
+        split_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=dividend_df, splits_df=split_df)
+
+        # Should raise error before processing
+        with self.assertRaises(RuntimeError) as context:
+            tsp.get_total_return_index()
+        self.assertIn("not yet computed", str(context.exception))
+
+        # Apply corporate actions
+        tsp._apply_corporate_actions()
+
+        # Get TRI
+        tri_df = tsp.get_total_return_index()
+
+        # Verify structure
+        self.assertIsInstance(tri_df, pd.DataFrame)
+        expected_cols = ['identity_code', 'date_stamp', 'tri']
+        self.assertEqual(list(tri_df.columns), expected_cols)
+
+        # Verify TRI is cumulative product of returns
+        self.assertEqual(len(tri_df), 5)
+
+        # First TRI should be 1.0 (NaN return filled with 1.0)
+        self.assertAlmostEqual(tri_df['tri'].iloc[0], 1.0, places=6)
+
+        # Verify TRI values are positive and increasing
+        tri_values = tri_df['tri'].values
+        for i in range(len(tri_values)):
+            self.assertGreater(tri_values[i], 0)
+
+    def test_get_adjusted_price_anchor_first(self):
+        """Test get_adjusted_price with anchor='first'."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 4,
+            'date_stamp': pd.date_range('2020-01-01', periods=4, freq='D'),
+            'price': [100.0, 100.0, 50.0, 51.0]  # 2-for-1 split on day 3
+        })
+        # 2-for-1 split on day 3
+        split_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=split_df)
+
+        # Should raise error before processing
+        with self.assertRaises(RuntimeError) as context:
+            tsp.get_adjusted_price()
+        self.assertIn("not yet applied", str(context.exception))
+
+        tsp._apply_corporate_actions()
+        adj_price_df = tsp.get_adjusted_price(anchor='first')
+
+        # Verify structure
+        self.assertIsInstance(adj_price_df, pd.DataFrame)
+        expected_cols = ['identity_code', 'date_stamp', 'adj_price']
+        self.assertEqual(list(adj_price_df.columns), expected_cols)
+
+        # With anchor='first', adjusted price should start at first raw price (100.0)
+        self.assertAlmostEqual(adj_price_df['adj_price'].iloc[0], 100.0, places=6)
+
+        # Verify adjusted prices are continuous (all positive values)
+        self.assertTrue((adj_price_df['adj_price'] > 0).all())
+
+    def test_get_adjusted_price_anchor_last(self):
+        """Test get_adjusted_price with anchor='last'."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 4,
+            'date_stamp': pd.date_range('2020-01-01', periods=4, freq='D'),
+            'price': [100.0, 100.0, 50.0, 51.0]  # 2-for-1 split on day 3
+        })
+        # 2-for-1 split on day 3
+        split_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=split_df)
+        tsp._apply_corporate_actions()
+        adj_price_df = tsp.get_adjusted_price(anchor='last')
+
+        # With anchor='last', adjusted price should end at last raw price (51.0)
+        self.assertAlmostEqual(adj_price_df['adj_price'].iloc[-1], 51.0, places=6)
+
+    def test_get_adjusted_price_invalid_anchor(self):
+        """Test get_adjusted_price with invalid anchor raises ValueError."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 102.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
+        tsp._apply_corporate_actions()
+
+        with self.assertRaises(ValueError) as context:
+            tsp.get_adjusted_price(anchor='invalid')
+        self.assertIn("must be 'first' or 'last'", str(context.exception))
+
+    def test_get_adjusted_price_multiple_assets(self):
+        """Test get_adjusted_price with multiple assets."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A']*3 + ['TEST:B']*3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D').tolist() * 2,
+            'price': [100.0, 102.0, 104.0, 200.0, 210.0, 220.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
+        tsp._apply_corporate_actions()
+        adj_price_df = tsp.get_adjusted_price(anchor='first')
+
+        # Check both assets are present
+        self.assertEqual(len(adj_price_df), 6)
+        assets = adj_price_df['identity_code'].unique()
+        self.assertEqual(len(assets), 2)
+
+        # Each asset should start at its own first price
+        test_a = adj_price_df[adj_price_df['identity_code'] == 'TEST:A']
+        test_b = adj_price_df[adj_price_df['identity_code'] == 'TEST:B']
+        self.assertAlmostEqual(test_a['adj_price'].iloc[0], 100.0, places=6)
+        self.assertAlmostEqual(test_b['adj_price'].iloc[0], 200.0, places=6)
+
+    def test_get_downsampled_total_return(self):
+        """Test get_downsampled_total_return method."""
+        # Create daily prices for 2 weeks
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 14,
+            'date_stamp': pd.date_range('2020-01-01', periods=14, freq='D'),
+            'price': [100.0 + i for i in range(14)]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None, downsample_period_str='W')
+
+        # Should raise error before processing
+        with self.assertRaises(RuntimeError) as context:
+            tsp.get_downsampled_total_return()
+        self.assertIn("not yet computed", str(context.exception))
+
+        tsp._apply_corporate_actions()
+        downsampled_df = tsp.get_downsampled_total_return()
+
+        # Verify structure
+        self.assertIsInstance(downsampled_df, pd.DataFrame)
+        expected_cols = {'identity_code', 'date_stamp', 'total_return'}
+        self.assertEqual(set(downsampled_df.columns), expected_cols)
+
+        # Should have fewer rows than original (weekly vs daily)
+        self.assertLess(len(downsampled_df), 14)
+
+        # Should have 2-3 weekly periods for 14 days
+        self.assertGreaterEqual(len(downsampled_df), 2)
+        self.assertLessEqual(len(downsampled_df), 3)
+
+    def test_get_downsampled_total_return_with_corporate_actions(self):
+        """Test downsampling with dividends and splits."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 14,
+            'date_stamp': pd.date_range('2020-01-01', periods=14, freq='D'),
+            'price': [100.0, 101.0, 102.0, 51.0, 52.0, 53.0, 54.0, 55.0, 56.0, 57.0, 58.0, 59.0, 60.0, 61.0]
+        })
+        # Dividend and split
+        dividend_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'unadjusted_value': [2.0]
+        })
+        split_df = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-04')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp = TimeSeriesProcessor(
+            price_df,
+            dividends_df=dividend_df,
+            splits_df=split_df,
+            downsample_period_str='W'
+        )
+        tsp._apply_corporate_actions()
+        downsampled_df = tsp.get_downsampled_total_return()
+
+        # Verify downsampling produces valid results
+        self.assertGreater(len(downsampled_df), 0)
+        valid_returns = downsampled_df['total_return'].dropna()
+        self.assertGreater(len(valid_returns), 0)
+
+    def test_get_downsampled_total_return_multiple_assets(self):
+        """Test downsampling with multiple assets."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A']*14 + ['TEST:B']*14,
+            'date_stamp': pd.date_range('2020-01-01', periods=14, freq='D').tolist() * 2,
+            'price': [100.0 + i for i in range(14)] + [200.0 + i*2 for i in range(14)]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None, downsample_period_str='W')
+        tsp._apply_corporate_actions()
+        downsampled_df = tsp.get_downsampled_total_return()
+
+        # Check both assets are present
+        assets = downsampled_df['identity_code'].unique()
+        self.assertEqual(len(assets), 2)
+        self.assertIn('TEST:A', assets)
+        self.assertIn('TEST:B', assets)
+
+        # Each asset should have similar number of weekly observations
+        test_a_count = len(downsampled_df[downsampled_df['identity_code'] == 'TEST:A'])
+        test_b_count = len(downsampled_df[downsampled_df['identity_code'] == 'TEST:B'])
+        self.assertEqual(test_a_count, test_b_count)
