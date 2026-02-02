@@ -908,3 +908,96 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         test_a_count = len(downsampled_df[downsampled_df['identity_code'] == 'TEST:A'])
         test_b_count = len(downsampled_df[downsampled_df['identity_code'] == 'TEST:B'])
         self.assertEqual(test_a_count, test_b_count)
+
+    def test_pivot_dataframes(self):
+        """Test pivot_dataframes static method."""
+        # Create a simple long-format DataFrame with multiple data columns
+        df = pd.DataFrame({
+            'identity_code': ['AAPL', 'AAPL', 'AAPL', 'MSFT', 'MSFT', 'MSFT'],
+            'date_stamp': pd.to_datetime(['2020-01-01', '2020-01-02', '2020-01-03'] * 2),
+            'price': [100.0, 101.0, 102.0, 200.0, 202.0, 204.0],
+            'total_return': [1.0, 1.01, 1.0099, 1.0, 1.01, 1.0099]
+        })
+
+        # Call the static method
+        pivoted = TimeSeriesProcessor.pivot_dataframes(df)
+
+        # Verify returns a dictionary
+        self.assertIsInstance(pivoted, dict)
+
+        # Verify it contains one DataFrame per data column
+        self.assertEqual(len(pivoted), 2)
+        self.assertIn('price', pivoted)
+        self.assertIn('total_return', pivoted)
+
+        # Verify price pivot structure
+        price_pivot = pivoted['price']
+        self.assertIsInstance(price_pivot, pd.DataFrame)
+        self.assertEqual(price_pivot.index.name, 'date_stamp')
+        self.assertEqual(list(price_pivot.columns), ['AAPL', 'MSFT'])
+        self.assertEqual(len(price_pivot), 3)  # 3 dates
+
+        # Verify price values
+        self.assertEqual(price_pivot.loc[pd.Timestamp('2020-01-01'), 'AAPL'], 100.0)
+        self.assertEqual(price_pivot.loc[pd.Timestamp('2020-01-02'), 'AAPL'], 101.0)
+        self.assertEqual(price_pivot.loc[pd.Timestamp('2020-01-01'), 'MSFT'], 200.0)
+
+        # Verify total_return pivot structure
+        tr_pivot = pivoted['total_return']
+        self.assertEqual(tr_pivot.index.name, 'date_stamp')
+        self.assertEqual(list(tr_pivot.columns), ['AAPL', 'MSFT'])
+
+    def test_pivot_dataframes_invalid_input(self):
+        """Test pivot_dataframes with invalid inputs."""
+        # Test with non-DataFrame
+        with self.assertRaises(TypeError) as context:
+            TimeSeriesProcessor.pivot_dataframes("not a dataframe")
+        self.assertIn("must be a pandas.DataFrame", str(context.exception))
+
+        # Test with missing required columns
+        df_missing = pd.DataFrame({
+            'identity_code': ['A', 'B'],
+            'price': [100.0, 200.0]
+        })
+        with self.assertRaises(ValueError) as context:
+            TimeSeriesProcessor.pivot_dataframes(df_missing)
+        self.assertIn("missing required columns", str(context.exception))
+        self.assertIn("date_stamp", str(context.exception))
+
+        # Test with only required columns (no data columns)
+        df_no_data = pd.DataFrame({
+            'identity_code': ['A', 'B'],
+            'date_stamp': pd.to_datetime(['2020-01-01', '2020-01-02'])
+        })
+        with self.assertRaises(ValueError) as context:
+            TimeSeriesProcessor.pivot_dataframes(df_no_data)
+        self.assertIn("at least one data column", str(context.exception))
+
+    def test_pivot_dataframes_with_get_methods(self):
+        """Test pivot_dataframes with output from get_* methods."""
+        # Set up minimal data
+        price_df = pd.DataFrame({
+            'identity_code': ['A'] * 3 + ['B'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D').tolist() * 2,
+            'price': [100.0, 102.0, 104.0, 200.0, 210.0, 220.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
+        tsp._apply_corporate_actions()
+
+        # Test with get_total_return output
+        tr_df = tsp.get_total_return()
+        pivoted_tr = TimeSeriesProcessor.pivot_dataframes(tr_df)
+        self.assertIn('total_return', pivoted_tr)
+        self.assertEqual(pivoted_tr['total_return'].shape, (3, 2))  # 3 dates, 2 assets
+
+        # Test with get_total_return_index output
+        tri_df = tsp.get_total_return_index()
+        pivoted_tri = TimeSeriesProcessor.pivot_dataframes(tri_df)
+        self.assertIn('tri', pivoted_tri)
+        self.assertEqual(pivoted_tri['tri'].shape, (3, 2))
+
+        # Test with get_adjusted_price output
+        adj_df = tsp.get_adjusted_price(anchor='first')
+        pivoted_adj = TimeSeriesProcessor.pivot_dataframes(adj_df)
+        self.assertIn('adj_price', pivoted_adj)
+        self.assertEqual(pivoted_adj['adj_price'].shape, (3, 2))

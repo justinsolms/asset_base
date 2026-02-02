@@ -670,3 +670,85 @@ class TimeSeriesProcessor():
 
         downsampled_total_returns_df: pd.DataFrame = pd.concat(group_list, ignore_index=True)
         return downsampled_total_returns_df
+
+    @staticmethod
+    def pivot_dataframes(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
+        """Pivot DataFrame by identity_code and date_stamp.
+
+        Takes a DataFrame with 'identity_code' and 'date_stamp' columns plus
+        additional data columns, and creates a separate pivoted DataFrame for
+        each data column. The pivoted DataFrames have 'date_stamp' as the index,
+        'identity_code' values as column labels, and the data column values
+        as the cell values.
+
+        This is useful for transforming long-format time series data (as produced
+        by the get_* methods) into wide-format matrices suitable for correlation
+        analysis, visualization, or other cross-sectional operations.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            DataFrame containing at least 'identity_code' and 'date_stamp' columns,
+            plus one or more additional data columns to pivot.
+
+        Returns
+        -------
+        dict[str, pd.DataFrame]
+            Dictionary mapping column names to pivoted DataFrames. Each pivoted
+            DataFrame has 'date_stamp' as index, 'identity_code' values as columns,
+            and the corresponding data column as values.
+
+        Raises
+        ------
+        TypeError
+            If df is not a pandas.DataFrame.
+        ValueError
+            If required columns are missing or no data columns are present.
+
+        Examples
+        --------
+        >>> df = pd.DataFrame({
+        ...     'identity_code': ['AAPL', 'AAPL', 'MSFT', 'MSFT'],
+        ...     'date_stamp': pd.to_datetime(['2020-01-01', '2020-01-02',
+        ...                                    '2020-01-01', '2020-01-02']),
+        ...     'price': [100.0, 101.0, 200.0, 202.0],
+        ...     'total_return': [1.0, 1.01, 1.0, 1.01]
+        ... })
+        >>> pivoted = TimeSeriesProcessor.pivot_dataframes(df)
+        >>> pivoted['price']
+        identity_code  AAPL   MSFT
+        date_stamp
+        2020-01-01     100.0  200.0
+        2020-01-02     101.0  202.0
+        """
+        # Validate input
+        if not isinstance(df, pd.DataFrame):
+            raise TypeError("df must be a pandas.DataFrame")
+
+        required_cols = {'identity_code', 'date_stamp'}
+        if not required_cols.issubset(set(df.columns)):
+            missing = required_cols - set(df.columns)
+            raise ValueError(f"DataFrame is missing required columns: {missing}")
+
+        # Identify data columns (everything except identity_code and date_stamp)
+        data_columns = [col for col in df.columns if col not in required_cols]
+
+        if not data_columns:
+            raise ValueError(
+                "DataFrame must have at least one data column beyond "
+                "'identity_code' and 'date_stamp'"
+            )
+
+        # Create a pivoted DataFrame for each data column
+        pivoted_dfs = {}
+        for col in data_columns:
+            pivoted = df.pivot(
+                index='date_stamp',
+                columns='identity_code',
+                values=col
+            )
+            pivoted_dfs[col] = pivoted
+
+        return pivoted_dfs
+
+
