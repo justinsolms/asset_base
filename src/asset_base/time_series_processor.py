@@ -10,67 +10,9 @@ class TimeSeriesProcessor():
     usable return series.
 
     This class prepares raw price data for downstream return and risk analysis.
-    Its primary purpose is to remove data artifacts that would otherwise bias
-    estimates of statistical quantities such as mean returns, volatility, and
-    cross-asset correlations.
-
-    Processing steps
-    ----------------
-    The following operations are applied in a well-defined order:
-
-    1. **Price validity checks**
-    Ensures all prices are strictly positive. Non-positive prices are removed,
-    as they invalidate geometric return calculations.
-
-    2. **Sampling frequency validation**
-    Ensures the input price series is sampled at *trade-daily* frequency.
-    Lower-frequency inputs (e.g., weekly or monthly) are rejected with a
-    ``ValueError``.
-
-    3. **Date handling and ordering**
-    - Ensures the ``date_stamp`` column is of pandas datetime type.
-    - Sorts observations in ascending date order.
-    - Removes duplicate dates, keeping the first occurrence.
-
-    4. **Outlier removal**
-    - Identify price transients such that outliers are removed whilst preserving
-      genuine market jumps thereby preserving overall prices over time.
-    - Return outliers are identified using a Z-score filter and replaced via
-      linear interpolation.
-    - Outliers are identified using z-scores. A typical outlier is identified
-      when the z-score exceeds 3 standard deviations.
-
-    4. **Missing data treatment**
-    Missing price observations (e.g., due to holidays or incomplete source
-    data) are filled using linear interpolation. Forward-filling is explicitly
-    avoided, as it introduces artificial flat price segments followed by
-    discrete jumps, which induce spurious auto- and cross-correlations in
-    returns.
-    After returns are computed, observations derived from interpolated prices
-    are discarded to ensure that only returns based on observed market prices
-    are retained.
-
-    2. **Optional downsampling**
-    If a resampling period is specified (e.g., weekly or monthly), prices are
-    downsampled by taking the last available price in each period. This is
-    equivalent to compounding geometric returns over the period and avoids
-    distortions associated with arithmetic averaging.
-
-    3. **Sample size adequacy check**
-    Verifies that the final return series has sufficient observations for
-    reliable estimation of the correlation matrix. As a rule of thumb, at
-    least 10x as many observations as assets are required. Insufficient data
-    results in a ``ValueError``.
-
-    7. **Return computation**
-    Computes geometric (log-compatible) returns from the cleaned price series.
-
-    9. **Corporate action adjustments**
-    - When dividend data are supplied, produces geometric *total return*
-        series.
-    - Otherwise, produces geometric price-only return series.
-    - Applies share splits, when present, to adjust historical prices
-        consistently.
+    Its primary purpose is to normalize the data such that there would otherwise
+    be biases in the estimates of statistical quantities such as mean returns,
+    volatility, and cross-asset correlations.
 
     Parameters
     ----------
@@ -97,7 +39,7 @@ class TimeSeriesProcessor():
         Options are ``'first'`` (adjusted price starts at first raw close) or
         ``'last'`` (adjusted price ends at last raw close). Default is ``'first'``.
 
-    The internal processing steps are executed upon each individual price series
+    Internal processing steps are executed upon each individual price series
     to maintain independence across series and avoid cross-asset contamination
     of data artifacts which cold arise when all series are processed jointly as
     columns of single DataFrame.
@@ -109,8 +51,64 @@ class TimeSeriesProcessor():
     an ``asset.Asset`` instance, or any other unique asset identifier used within
     the system.
 
-    Note
-    ----
+    Processing steps
+    ----------------
+    The following operations are applied in a well-defined order:
+
+    1. **Price validity checks**
+    Ensures all prices are strictly positive. Non-positive prices are removed,
+    as they invalidate geometric return calculations.
+
+    1. **Sampling frequency validation**
+    Ensures the input price series is sampled at *trade-daily* frequency.
+    Lower-frequency inputs (e.g., weekly or monthly) are rejected with a
+    ``ValueError``.
+
+    1. **Date handling and ordering**
+    - Ensures the ``date_stamp`` column is of pandas datetime type.
+    - Sorts observations in ascending date order.
+    - Removes duplicate dates, keeping the first occurrence.
+
+    1. **Drop NaN prices**
+    Removes any samples with NaN prices from the price DataFrame. Note that this
+    step is performed after validating the sampling frequency to ensure that
+    the frequency check is not affected by missing data,
+
+    1. **Sample size adequacy check**
+    Verifies that the each price series has sufficient observations for
+    reliable estimation of the correlation matrix. As a rule of thumb, at
+    least 10x as many observations as assets are required. Insufficient data
+    results in a ``ValueError``. This check is performed after NaN removal to
+    ensure that only valid data points are counted.
+
+    1. **Corporate action adjustments**
+    If dividend and/or split data are provided, total-return adjustments are
+    applied to compute a total-return price series. This involves merging
+    dividend and split data onto the price series, computing total return
+    factors, and constructing a total return index (TRI). An adjusted price
+    series is also computed, scaled to either the first or last raw price
+    based on the ``adj_price_anchor`` setting.
+
+    1. **Downsampling**
+    If a resampling period is specified (e.g., weekly or monthly), prices are
+    downsampled by taking the last available price in each period. This is
+    equivalent to compounding geometric returns over the period and avoids
+    distortions associated with arithmetic averaging.
+
+    Outlier identification
+    ----------------------
+    Outliers are not removed automatically. Instead, they are identified and
+    flagged in the output DataFrame for manual review. This is to avoid
+    inadvertent removal of genuine market jumps which are critical to risk
+    modelling. The outlier identification process is as follows:
+
+    - Identify price transients such that outliers are removed whilst preserving
+      genuine market jumps thereby preserving overall prices over time.
+    - Return outliers are identified using a Z-score filter and replaced via
+      linear interpolation.
+    - Outliers are identified using z-scores. A typical outlier is identified
+      when the z-score exceeds 3 standard deviations.
+
     No code has been developed for outlier removal, only identification.
     There are three completely different species that gets mixed up:
 
@@ -184,9 +182,11 @@ class TimeSeriesProcessor():
         self.splits_df: pd.DataFrame | None = (
             splits_df.copy() if splits_df is not None else None
         )
+        self.downsampled_total_returns_df: pd.DataFrame | None = None
         self.downsample_period_str: str = downsample_period_str
         self.clean_outliers: bool = clean_outliers
         self.adj_price_anchor: str = adj_price_anchor
+
 
         # Check adj_price_anchor validity
         if self.adj_price_anchor not in {"first", "last"}:
@@ -210,14 +210,25 @@ class TimeSeriesProcessor():
             except Exception:
                 raise TypeError("splits_df.date_stamp must be convertible to pandas datetime")
 
-        # Downsampling flag. Used to implement once-only downsampling
-        self.is_downsampled = False
+    def process(self) -> None:
+        """Execute all processing steps in order.
 
-    # TODO: Implement all processing steps using the private method stubs below
-    # TODO: _dropna_prices should be called before outlier detection
-    # TODO: The order matters
-    # TODO: Have a great holiday!
+        Steps:
+        1. Validate prices
+        2. Validate sampling frequency
+        3. Normalize and order dates
+        4. Drop NaN prices
+        5. Check sample size adequacy
+        6. Apply corporate actions
 
+        """
+        # Complete processing steps
+        self._validate_prices()
+        self._validate_sampling_frequency()
+        self._normalize_and_order_dates()
+        self._dropna_prices()
+        self._check_sample_size_adequacy()
+        self._apply_corporate_actions()
 
     def _validate_prices(self) -> None:
         """Validate that prices are strictly positive and numeric. """
@@ -380,30 +391,6 @@ class TimeSeriesProcessor():
             group_list.append(group)
         return pd.concat(group_list, ignore_index=True)
 
-    def _apply_downsampling(self) -> None:
-        """Downsample prices according to `downsample_period_str` if set. """
-        if self.is_downsampled:
-            raise RuntimeError(
-                "Downsampling has already been applied once an is now disallowed.")
-
-        if self.downsample_period_str == "":
-            return  # No downsampling requested
-
-        group_list = []
-        for identity_code, group in self.prices_df.groupby('identity_code'):
-            # Set date_stamp as index for resampling
-            group = group.set_index('date_stamp')
-            # Resample by taking the last available price in each period
-            downsampled = group.resample(self.downsample_period_str).last().dropna(subset=['price'])
-            # Reset index to restore date_stamp as a column
-            downsampled = downsampled.reset_index()
-            downsampled['identity_code'] = identity_code  # Re-add identity_code column
-            group_list.append(downsampled)
-        self.prices_df = pd.concat(group_list, ignore_index=True)
-
-        # Block multiple downsampling
-        self.is_downsampled = True
-
     def _check_sample_size_adequacy(self, min_samples_factor:int = 10) -> None:
         """Ensure sample size is adequate for downstream analysis.
 
@@ -412,14 +399,17 @@ class TimeSeriesProcessor():
         observations as assets.
         """
         num_assets = self.prices_df['identity_code'].nunique()
-        num_observations = self.prices_df['date_stamp'].nunique()
 
-        if num_observations < min_samples_factor * num_assets:
-            raise ValueError(
-                f"Insufficient data: {num_observations} observations for "
-                f"{num_assets} assets. At least {min_samples_factor * num_assets} "
-                f"observations are required for reliable correlation estimation."
-            )
+        # Check each series has enough observations
+        for identity_code, group in self.prices_df.groupby('identity_code'):
+            num_observations = group['date_stamp'].nunique()
+            if num_observations < min_samples_factor * num_assets:
+                raise ValueError(
+                    f"Insufficient data for {identity_code}: "
+                    f"{num_observations} observations for {num_assets} assets. "
+                    f"At least {min_samples_factor} times {num_assets} "
+                    "observations are required for reliable correlation estimation."
+                )
 
     def _apply_corporate_actions(self) -> None:
         """Apply corporate actions (dividends & splits) to compute total returns.
@@ -442,16 +432,15 @@ class TimeSeriesProcessor():
         Adds the following columns to `self.prices_df`:
         - 'dividend': cash dividend per share on date_stamp
         - 'split_ratio': share split ratio on date_stamp
-        - 'gross_factor': gross total return factor G_t
-        - 'total_return': net total return R_t
+        - 'total_return': Net total return factor G_t
         - 'tri': total return index (dimensionless wealth index)
-        - 'adj_price': adjusted total-return price series scaled to raw prices based
-            on `adj_price_anchor` setting.
+        - 'adj_price': adjusted total-return price series scaled to raw prices
+            based on `adj_price_anchor` setting.
 
         """
 
         # Lock out corporate action adjustments after downsampling
-        if self.is_downsampled:
+        if self.downsampled_total_returns_df is not None:
             raise RuntimeError(
                 "Cannot apply corporate actions after downsampling. Corporate "
                 "actions must be applied to original price series."
@@ -548,44 +537,11 @@ class TimeSeriesProcessor():
             # Gross total return factor:
             #   G_t = s_t * (P_t + D_t) / P_{t-1}
             # Works whether or not a split and dividend occur on same day.
-            group["gross_factor"] = np.where(
+            group["total_return"] = np.where(
                 group["prev_price"].notna(),
                 (group["split_ratio"] * (group["price"] + group["dividend"])) / group["prev_price"],
                 np.nan,
             )
-
-            # Net return
-            group["total_return"] = group["gross_factor"] - 1.0
-
-            # ---- Total Return Index (dimensionless wealth index) ----
-            gross_factor = group["gross_factor"].fillna(1.0)
-            group["tri"] = gross_factor.cumprod()
-
-            # ---- Adjusted total-return price (scaled TRI) ----
-            anchor = getattr(self, "adj_price_anchor", "first")
-
-            if anchor == "first":
-                # adj_price starts at first raw close
-                first_price = group["price"].iloc[0]
-                group["adj_price"] = first_price * group["tri"]
-
-            elif anchor == "last":
-                # adj_price ends at last raw close
-                last_price = group["price"].iloc[-1]
-                last_tri = group["tri"].iloc[-1]
-
-                if last_tri == 0 or not np.isfinite(last_tri):
-                    raise ValueError(
-                        f"Invalid TRI terminal value for {identity_code}: {last_tri}"
-                    )
-
-                scale = last_price / last_tri
-                group["adj_price"] = scale * group["tri"]
-
-            else:
-                raise ValueError(
-                    f"adj_price_anchor must be 'first' or 'last', got '{anchor}'"
-                )
 
             out_groups.append(group)
 
@@ -597,34 +553,120 @@ class TimeSeriesProcessor():
 
         self.prices_df = df_out
 
-    def get_returns(self) -> pd.DataFrame:
-        """Get processed returns DataFrame.
-
-        If `dividends_df` or `splits_df` are provided a total-return
-        implementation would be used. For now this method delegates to
-        `get_price_returns` and logs a warning when corporate-action
-        adjustments are requested but not implemented.
+    def get_total_return(self) -> pd.DataFrame:
+        """Get total return DataFrame.
 
         Returns
         -------
         pandas.DataFrame
-            DataFrame containing processed returns with columns:
-            ['identity_code', 'date_stamp', 'return'].
+            DataFrame with total returns with columns:
+            ``['identity_code', 'date_stamp', 'total_return']``.
         """
-        # The implementation of returns processing goes here
-        pass
+        # Verify that the processing step has been applied
+        if 'total_return' not in self.prices_df.columns:
+            raise RuntimeError(
+                "Total returns not yet computed. Please run process() to apply "
+                "corporate actions first."
+            )
+        total_returns_df: pd.DataFrame = self.prices_df[
+            ['identity_code', 'date_stamp', 'total_return']
+        ].copy()
+        return total_returns_df
 
-    def get_price_returns(self):
-        """Get the processed price returns DataFrame.
+    def get_total_return_index(self) -> pd.DataFrame:
+        """Get total return index DataFrame.
 
         Returns
         -------
         pandas.DataFrame
-            DataFrame containing processed price returns with columns:
-            ['identity_code', 'date_stamp', 'return'].
+            DataFrame with total return index with columns:
+            ``['identity_code', 'date_stamp', 'tri']``.
         """
-        # Implementation of price returns processing goes here
-        pass
+        # Verify that the processing step has been applied
+        if 'total_return' not in self.prices_df.columns:
+            raise RuntimeError(
+                "Total returns not yet computed. Please run process() to apply "
+                "corporate actions first."
+            )
+        group_list = []
+        for identity_code, group in self.prices_df.groupby('identity_code'):
+            group["tri"] = group["total_return"].fillna(1.0).cumprod()
+            group_list.append(group)
+        tri_df: pd.DataFrame = pd.concat(group_list, ignore_index=True)[
+            ['identity_code', 'date_stamp', 'tri']
+        ]
+        return tri_df
 
+    def get_adjusted_price(self, anchor="first") -> pd.DataFrame:
+        """Get adjusted prices DataFrame.
 
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame with adjusted prices with columns:
+            ``['identity_code', 'date_stamp', 'adj_price']``.
+        """
+        # Verify that the processing step has been applied
+        if 'total_return' not in self.prices_df.columns:
+            raise RuntimeError(
+                "Corporate actions not yet applied. Please run process() to apply "
+                "corporate actions first."
+            )
+        tri = self.get_total_return_index()
 
+        group_list = []
+        for identity_code, group in tri.groupby('identity_code'):
+            if anchor == "first":
+                first_price = self.prices_df[
+                    self.prices_df['identity_code'] == identity_code
+                ]['price'].iloc[0]
+                group['adj_price'] = group['tri'] * first_price
+            elif anchor == "last":
+                last_price = self.prices_df[
+                    self.prices_df['identity_code'] == identity_code
+                ]['price'].iloc[-1]
+                last_tri = group['tri'].iloc[-1]
+                group['adj_price'] = group['tri'] * (last_price / last_tri)
+            else:
+                raise ValueError("anchor must be 'first' or 'last'")
+            group_list.append(group)
+        adj_prices_df: pd.DataFrame = pd.concat(group_list, ignore_index=True)[
+            ['identity_code', 'date_stamp', 'adj_price']
+        ]
+        return adj_prices_df
+
+    def get_downsampled_total_return(self, frequency: str = "W") -> None:
+        """Downsample prices according to `downsample_period_str` if set.
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame with downsampled total returns with columns:
+            ``['identity_code', 'date_stamp', 'total_return']``.
+
+        Downsampling is performed by compounding total returns over the
+        specified period. This avoids distortions associated with arithmetic
+        averaging of prices.
+        """
+        # Verify that the processing step has been applied
+        if 'total_return' not in self.prices_df.columns:
+            raise RuntimeError(
+                "Total returns not yet computed. Please run process() to apply "
+                "corporate actions first."
+            )
+
+        group_list = []
+        for identity_code, group in self.prices_df.groupby('identity_code'):
+            # Set date_stamp as index for resampling
+            group = group.set_index('date_stamp')
+            # Resample total_returns
+            total_return = group[['total_return']]  # Double brackets to keep as DataFrame
+            # Compound total returns over the downsample period
+            downsampled = total_return.resample(self.downsample_period_str).prod()
+            # Reset index to restore date_stamp as a column
+            downsampled = downsampled.reset_index()
+            downsampled['identity_code'] = identity_code  # Re-add identity_code column
+            group_list.append(downsampled)
+
+        downsampled_total_returns_df: pd.DataFrame = pd.concat(group_list, ignore_index=True)
+        return downsampled_total_returns_df
