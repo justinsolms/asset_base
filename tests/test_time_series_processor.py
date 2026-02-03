@@ -64,28 +64,22 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         split_df['date_stamp'] = pd.to_datetime(split_df['date_stamp'])
         cls.test_split_df = split_df
 
-        cls.downsample_period_str = "W"
-        cls.clean_outliers = True
-
     def setUp(self):
         """Set up test fixtures for each test method."""
         # Create fresh copies of the test data for each test
         self.tsp_clean = TimeSeriesProcessor(
             self.clean_test_price_df.copy(),
             self.test_dividend_df.copy(),
-            self.test_split_df.copy(),
-            self.downsample_period_str, self.clean_outliers)
+            self.test_split_df.copy())
         self.tsp_dirty = TimeSeriesProcessor(
             self.dirty_test_price_df.copy(),
             self.test_dividend_df.copy(),
-            self.test_split_df.copy(),
-            self.downsample_period_str, self.clean_outliers)
+            self.test_split_df.copy())
 
         self.tsp_insufficient = TimeSeriesProcessor(
             self.insufficient_test_price_df.copy(),
             self.test_dividend_df.copy(),
-            self.test_split_df.copy(),
-            self.downsample_period_str, self.clean_outliers)
+            self.test_split_df.copy())
 
     def tearDown(self):
         """Clean up after each test method."""
@@ -114,8 +108,6 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             self.tsp_dirty.splits_df.reset_index(drop=True),
             self.test_split_df.reset_index(drop=True)
         )
-        self.assertEqual(self.tsp_dirty.downsample_period_str, self.downsample_period_str)
-        self.assertEqual(self.tsp_dirty.clean_outliers, self.clean_outliers)
 
     def test_validate_prices(self):
         """Test price validation method."""
@@ -832,7 +824,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             'date_stamp': pd.date_range('2020-01-01', periods=14, freq='D'),
             'price': [100.0 + i for i in range(14)]
         })
-        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None, downsample_period_str='W')
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
 
         # Should raise error before processing
         with self.assertRaises(RuntimeError) as context:
@@ -876,8 +868,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp = TimeSeriesProcessor(
             price_df,
             dividends_df=dividend_df,
-            splits_df=split_df,
-            downsample_period_str='W'
+            splits_df=split_df
         )
         tsp._apply_corporate_actions()
         downsampled_df = tsp.get_downsampled_total_return()
@@ -894,7 +885,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             'date_stamp': pd.date_range('2020-01-01', periods=14, freq='D').tolist() * 2,
             'price': [100.0 + i for i in range(14)] + [200.0 + i*2 for i in range(14)]
         })
-        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None, downsample_period_str='W')
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
         tsp._apply_corporate_actions()
         downsampled_df = tsp.get_downsampled_total_return()
 

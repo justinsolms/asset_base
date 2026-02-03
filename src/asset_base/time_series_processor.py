@@ -27,17 +27,6 @@ class TimeSeriesProcessor():
         Share split data with columns:
         ``['identity_code', 'date_stamp', 'numerator', 'denominator']``.
         Default is ``None``.
-    downsample_period_str : str, optional
-        Pandas resampling frequency string (e.g., ``'W'`` for weekly,
-        ``'M'`` for monthly). An empty string disables downsampling.
-        Default is ``""``.
-    clean_outliers : bool, optional
-        If ``True``, the processor will clean the data by removing outliers.
-        Default is ``True``.
-    adj_price_anchor : str, optional
-        Anchor for adjusted price series when corporate actions are applied.
-        Options are ``'first'`` (adjusted price starts at first raw close) or
-        ``'last'`` (adjusted price ends at last raw close). Default is ``'first'``.
 
     Internal processing steps are executed upon each individual price series
     to maintain independence across series and avoid cross-asset contamination
@@ -137,9 +126,6 @@ class TimeSeriesProcessor():
         prices_df: pd.DataFrame,
         dividends_df: pd.DataFrame | None = None,
         splits_df: pd.DataFrame | None = None,
-        downsample_period_str: str = "",
-        clean_outliers: bool = True,
-        adj_price_anchor: str = "first",
     ) -> None:
         """Initialize the TimeSeriesProcessor with type checking."""
 
@@ -168,12 +154,6 @@ class TimeSeriesProcessor():
                 missing = required_split_cols - set(splits_df.columns)
                 raise ValueError(f"splits_df is missing required columns: {missing}")
 
-        if not isinstance(downsample_period_str, str):
-            raise TypeError("downsample_period_str must be a str")
-
-        if not isinstance(clean_outliers, bool):
-            raise TypeError("clean_outliers must be a bool")
-
         # Assign attributes with explicit type hints
         self.prices_df: pd.DataFrame = prices_df.copy()
         self.dividends_df: pd.DataFrame | None = (
@@ -183,14 +163,6 @@ class TimeSeriesProcessor():
             splits_df.copy() if splits_df is not None else None
         )
         self.downsampled_total_returns_df: pd.DataFrame | None = None
-        self.downsample_period_str: str = downsample_period_str
-        self.clean_outliers: bool = clean_outliers
-        self.adj_price_anchor: str = adj_price_anchor
-
-
-        # Check adj_price_anchor validity
-        if self.adj_price_anchor not in {"first", "last"}:
-            raise ValueError("adj_price_anchor must be 'first' or 'last'")
 
         # Normalize date column types where possible
         try:
@@ -433,10 +405,7 @@ class TimeSeriesProcessor():
         - 'dividend': cash dividend per share on date_stamp
         - 'split_ratio': share split ratio on date_stamp
         - 'total_return': Net total return factor G_t
-        - 'tri': total return index (dimensionless wealth index)
-        - 'adj_price': adjusted total-return price series scaled to raw prices
-            based on `adj_price_anchor` setting.
-
+        - 'prev_price': prior day's raw close price P_{t-1} (for debugging)
         """
 
         # Lock out corporate action adjustments after downsampling
@@ -655,6 +624,10 @@ class TimeSeriesProcessor():
                 "corporate actions first."
             )
 
+        # Type check frequency is a pandas frequency string
+        if not isinstance(frequency, str):
+            raise TypeError("frequency must be a pandas frequency string.")
+
         group_list = []
         for identity_code, group in self.prices_df.groupby('identity_code'):
             # Set date_stamp as index for resampling
@@ -662,7 +635,7 @@ class TimeSeriesProcessor():
             # Resample total_returns
             total_return = group[['total_return']]  # Double brackets to keep as DataFrame
             # Compound total returns over the downsample period
-            downsampled = total_return.resample(self.downsample_period_str).prod()
+            downsampled = total_return.resample(frequency).prod()
             # Reset index to restore date_stamp as a column
             downsampled = downsampled.reset_index()
             downsampled['identity_code'] = identity_code  # Re-add identity_code column
