@@ -879,36 +879,6 @@ class IndexEOD(TradeEOD):
             base_obj, date_stamp, open, close, high, low, adjusted_close, volume
         )
 
-    def to_dict(self):
-        """Convert all class price attributes to a dictionary.
-
-        Returns
-        -------
-        dict
-            date_stamp : datetime.date
-            open: float
-            close : float
-            high : float
-            low : float
-            adjusted_close : float
-            volume : int (number of units traded)
-
-        Note
-        ----
-        Index objects don't have quote_units attribute, so values are always
-        returned as-is without conversion.
-
-        """
-        return {
-            "date_stamp": self.date_stamp,
-            "open": self.open,
-            "close": self.close,
-            "high": self.high,
-            "low": self.low,
-            "adjusted_close": self.adjusted_close,
-            "volume": self.volume,
-        }
-
     @classmethod
     def update_all(cls, session, get_method):
         """Update/create the eod trade data of all the Listed instances.
