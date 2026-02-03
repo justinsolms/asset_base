@@ -2316,60 +2316,6 @@ class ListedEquity(Listed):
             total_returns.iloc[0] = 1.0
             return total_returns, price
 
-        # The data tidy up method.
-        def remove_outliers(price):
-            """Tidy up the price series."""
-            # Get a numpy array of price values.
-            values = price.values
-            # Check data has minimum padding length for filtfilt to work
-            if values.shape[0] < 7:
-                return price
-            # Index used for interpolation.
-            index = np.arange(np.size(values, axis=0))
-            # Tidy up outliers y erasing them with NaN. Repeat until none.
-            untidy_columns = np.ones_like(price.columns, dtype=bool)
-            # While columns may still be untidy.
-            k = 0
-            while np.any(untidy_columns) and k < 10:
-                k += 1
-                # Work copy of untidy columns.
-                values_untidy = values[:, untidy_columns]
-                # Run a matching forward-backward filter over the price for
-                # untidy columns.
-                sig1 = filtfilt([1, -1], [1], values_untidy, axis=0)
-                # Index of z-scores excursions beyond 3-sigma to create a mask
-                # of untidy positions.
-                z_score = (sig1 - np.nanmean(sig1, axis=0)) / np.nanstd(sig1, axis=0)
-                untidy_mask = abs(z_score) > 3  # True at an untidy position.
-                # Detect isolated single tidy data points surrounded by untidy
-                # points. These data point are considered to be part of a wider
-                # outlier set and shall also to be considered untidy. Value 1.5
-                # to reject round-off issues.
-                s_test = filtfilt([1, -1], [1], untidy_mask, axis=0)
-                single = s_test < -1.5
-                untidy_mask |= single
-                # Erase data at untidy locations.
-                values_untidy[untidy_mask] = np.nan
-                # Interpolate each column separately as each has different x_in.
-                for i, column in enumerate(values_untidy.T):
-                    is_nan = untidy_mask[:, i]
-                    not_nan = ~untidy_mask[:, i]
-                    x_data = index[not_nan]
-                    y_data = column[not_nan]
-                    x_in = index[is_nan]
-                    y_out = np.interp(x_in, x_data, y_data)
-                    column[is_nan] = y_out
-                # Replace columns that were tidied up.
-                values[:, untidy_columns] = values_untidy
-                # Identity and mark columns with all rows that were not untidy.
-                # These columns need no further work.
-                untidy_columns[untidy_columns] = np.any(untidy_mask, axis=0)
-
-            # Construct a new DataFrame with the tidy time-series.
-            price = pd.DataFrame(values, index=price.index, columns=price.columns)
-
-            return price
-
         match series:
             case "price" :
                 result = get_prices(item)
