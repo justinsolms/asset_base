@@ -63,6 +63,7 @@ See also
 """
 import os
 import logging
+from wrapt import T
 import yaml
 import datetime
 import pandas as pd
@@ -87,6 +88,7 @@ from .asset import (
     Currency,
     Cash,
 )
+from .time_series_processor import TimeSeriesProcessor
 
 
 # Get module-named logger.
@@ -490,7 +492,7 @@ class ManagerBase(object):
         data = [(str(item.name), str(item.value)) for item in self.session.query(Meta)]
         return dict(data)
 
-    def get_dict(self, id):
+    def get_dict(self, asset_id_list):
         """Get a dictionary of assets.
 
         The returned dictionary items will be polymorphic instances of the
@@ -498,7 +500,7 @@ class ManagerBase(object):
 
         Parameters
         ----------
-        id : list
+        asset_id_list : list
             A list if database session `Asset._id` id numbers of the required
             database assets. See `.Asset`.
 
@@ -508,14 +510,87 @@ class ManagerBase(object):
             A dictionary of assets with the specified id numbers. The id
             numbers are the keys of the dictionary.
         """
-        if isinstance(id, list):
+        if isinstance(asset_id_list, list):
             # Get the list of matching funds and construct a new list.
-            entities = self.session.query(Asset).filter(Asset._id.in_(id))
+            entities = self.session.query(Asset).filter(Asset._id.in_(asset_id_list))
             return dict([(asset._id, asset) for asset in entities])
         else:
             raise ValueError(
                 "Argument `id` must be a list of asset id numbers."
             )
+
+    def get_time_series_processor(self, asset_list, price_item='close', date_index=None):
+        """Get a TimeSeriesProcessor for a list of assets.
+
+        Parameters
+        ----------
+        asset_list : list of Asset (or polymorph class) instances
+            A list of securities or assets for which time series are required.
+        price_item : str, optional
+            The specific item of price. Only valid values are: 'price', 'close',
+            'open', 'low', 'high'. Default is 'close'.
+        date_index : pandas.DatetimeIndex, optional
+            If there are non-cash securities specified in the `asset_list` then
+            this argument is overridden by the union of the date index (the
+            `pandas.DatetimeIndex`) of all the non-`Cash` security time-series.
+            If the `asset_list` argument specifies only `Cash` securities then
+            this data range is not optional and is required. It could be
+            provided by the the index of another `time_series` result.
+        """
+        if len(asset_list) == 0:
+            raise ValueError("Argument `asset_list` may not be empty.")
+
+        # Warning if a dataframe has mixed currency time series.
+        if len(set(s.currency for s in asset_list)) > 1:
+            logger.warning("The asset_list is of mixed currencies. You should consider transforming to a common currency!!")
+
+        # Warning if the quote units are mixed
+        if len(set(s.quote_unit for s in asset_list)) > 1:
+            logger.warning("The asset_list is of mixed quote units. You should consider transforming to a common quote unit!!")
+
+        # Get a list of cash securities
+        cash_list = [item for item in asset_list if isinstance(item, Cash)]
+
+        # Get a list of non-cash securities
+        non_cash_list = [asset for asset in asset_list if not isinstance(asset, Cash)]
+
+        #  A date-index must be provided to specify the cash data date range if
+        #  there are no non-cash securities from which the date range may be
+        #  derived.
+        if len(non_cash_list) == 0 and date_index is None:
+            raise ValueError(
+                "Expected non-cash securities in asset_list or a date_index "
+                "argument to specify the date range for the cash securities."
+            )
+        elif len(non_cash_list) == 0:
+            # No non-cash securities
+            tsp_non_cash = None
+        else:
+            # Create a pandas.DataFrame of non-cash securities
+            tsp_non_cash_list = list()
+            # For non-Cash entities
+            for asset in non_cash_list:
+                tsp_non_cash_list.append(
+                    asset.get_time_series_processor(price_item=price_item))
+            tsp_non_cash = TimeSeriesProcessor.concat(tsp_non_cash_list)
+            # Override date_index, if any, with non-cash date index
+            if tsp_non_cash is not None:
+                logger.warning("Overriding date_index argument with non-cash securities date index.")
+            date_index = tsp_non_cash.get_date_index()
+
+        # For all Cash assets. We need the previous non-cash DatetimeIndex to
+        # construct Cash time series.
+        for asset in cash_list:
+            tsp_cash = asset.get_time_series_processor(
+                date_index=date_index, price_item='price')
+
+        # Combine non-cash and cash time series
+        if tsp_non_cash is None:
+            tsp = tsp_cash
+        else:
+            tsp = TimeSeriesProcessor.concat([tsp_non_cash, tsp_cash])
+
+        return tsp
 
     def time_series(
         self,
@@ -534,7 +609,11 @@ class ManagerBase(object):
         Note
         ----
         The values of `Cash` entities shall always be equivalent to a price of
-        1.0 for all dates in the date range.
+        1.0 for all dates in the date range and will be matched to the date index of
+        the non-`Cash` securities in the `asset_list` argument. If the
+        `asset_list` argument contains only `Cash` securities then the
+        `date_index` argument is required to specify the date range of the cash
+        time series.
 
         Parameters
         ----------
@@ -600,8 +679,7 @@ class ManagerBase(object):
             `pandas.DatetimeIndex`) of all the non-`Cash` security time-series.
             If the `asset_list` argument specifies only `Cash` securities then
             this data range is not optional and is required. It could be
-            provided by the the index of another `time_series` result. See
-            documentation on ``Cash.time_series`` for the explanation.
+            provided by the the index of another `time_series` result.
 
         Returns
         -------
@@ -622,57 +700,16 @@ class ManagerBase(object):
         Cash.time_series
 
         """
+        # Get the time series processor for the asset list
         if len(asset_list) == 0:
             raise ValueError("Argument `asset_list` may not be empty.")
 
-        # Get a list of cash securities
-        cash_list = [item for item in asset_list if isinstance(item, Cash)]
-
-        # Get a list of non-cash securities
-        non_cash_list = [asset for asset in asset_list if not isinstance(asset, Cash)]
-
-        #  A date-index must be provided to specify the cash data date range if
-        #  there are no non-cash securities from which the date range may be
-        #  derived.
-        if len(non_cash_list) == 0 and date_index is None:
-            raise ValueError(
-                "Expected non-cash securities in asset_list or a date_index "
-                "argument to specify the date range for the cash securities."
-            )
-
-        data_list = list()
-        if len(non_cash_list) > 0:
-            # Create a pandas.DataFrame of non-cash securities
-            data_list = list()
-            # For non-Cash entities
-            for asset in non_cash_list:
-                # Slip and warn for absent time-series.
-                try:
-                    data = asset.time_series(series, price_item, return_type)
-                except TimeSeriesNoData as ex:
-                    logger.warning(ex)
-                else:
-                    data_list.append(data)
-            data = pd.concat(data_list, axis=1, sort=True)
-            # Any data_index  argument is ignored as non-cash security data date
-            # range takes precedence.
-            data_list = [data]  # List for appending Cash securities to.
-
-        # For all non-Cash entities. We need the previous data DatetimeIndex to
-        # construct Cash time series. See docs.
-        date_index = data.index
-        for asset in cash_list:
-            data = asset.time_series(date_index)
-            data_list.append(data)
-        # Concatenate the separate data in the list into one pandas.DataFrame.
-        data = pd.concat(data_list, axis=1, sort=True)
-
-        # Assure ascending date index
-        data.sort_index(inplace=True)
-
         # Warning if a dataframe has mixed currency time series.
-        if len(set(s.currency for s in data.columns)) > 1:
-            logger.warning("The DataFrame data is of mixed currencies.")
+        if len(set(s.currency for s in asset_list)) > 1:
+            logger.warning("The asset_list is of mixed currencies. You should consider transforming to a common currency!!")
+
+        tsp = self.get_time_series_processor(asset_list, date_index)
+
 
         # Replace column labels as specified by the identifier arg
         # TODO: Replace with a match statement

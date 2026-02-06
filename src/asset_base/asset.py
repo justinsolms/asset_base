@@ -85,10 +85,10 @@ import pandas as pd
 
 import stdnum.isin as stdisin
 
-from numpy import abs
+from numpy import abs, divide
 from scipy.signal import filtfilt
 
-from sqlalchemy import Float, Integer, String, Enum, Boolean, UniqueConstraint
+from sqlalchemy import Float, Integer, String, Enum, Boolean, UniqueConstraint, column
 from sqlalchemy import MetaData, Column, ForeignKey
 
 from sqlalchemy.orm import relationship
@@ -110,6 +110,7 @@ from .time_series import (
     Split,
     TimeSeriesBase,
 )
+from time_series_processor import TimeSeriesProcessor
 
 # Get module-named logger.
 import logging
@@ -346,17 +347,15 @@ class Asset(AssetBase):
 
         return self._asset_class
 
-    def get_eod(self):
+    def get_eod_series(self):
         """Return the EOD time series for the asset.
-
-        # TODO: Rename to `get_eod_series`
 
         Returns
         -------
         pandas.DataFrame
-            An End-Of-Day (EOD) ``pandas.DataFrame`` with columns identical to
-            the keys from the ``time_series.SimpleEOD.to_dict()`` or
-            ``time_series.ListedEOD.to_dict()`` or polymorph class method.
+            An End-Of-Day (EOD) ``pandas.DataFrame`` with columns
+            identical to the keys from the ``time_series.SimpleEOD.to_dict()``
+            or ``time_series.ListedEOD.to_dict()`` or polymorph class method.
 
         Raises
         ------
@@ -393,72 +392,39 @@ class Asset(AssetBase):
         else:
             return self._eod_series[-1]
 
-    # NOTE: Disabled.This is just in case we subclass Asset directly.
-    # @classmethod
-    # def factory(cls, session, asset_name, currency_code, create=True, **kwargs):
-    #     """Manufacture/retrieve an instance from the given parameters.
+    def get_time_series_processor(self, price_item='price'):
+        """Return a TimeSeriesProcessor for this asset.
 
-    #     If a record of the specified class instance does not exist then add it,
-    #     else do nothing. Then return the instance.
+        Parameters
+        ----------
+        price_item : str, optional
+            The single price item column to keep. This argument is standardized
+            across all asset classes and their time-series. In this class the
+            value is required to be 'price' as the EOD time-series for this
+            class only has a 'price' item (See to_dict() method of the
+            ``time_series.EODBase`` class and its polymorphs).
 
-    #     Parameters
-    #     ----------
-    #     session : sqlalchemy.orm.Session
-    #         A session attached to the desired database.
-    #     asset_name : str
-    #         Asset full name.
-    #     currency_code : str(3)
-    #         ISO 4217 3-letter currency codes.
-    #     create : bool, optional
-    #         If `False` then the factory shall expect the specified `Entity` to
-    #         already exist in the session or it shall raise an exception instead
-    #         of creating a first instance.
+        Returns
+        -------
+        .time_series_processor.TimeSeriesProcessor
+            A ``.time_series_processor.TimeSeriesProcessor`` instance for this
+            asset which includes only the EOD time series and `identity_code`
+            columns set to the ``Asset.identity_code``.
+        """
+        # Check price item is valid
+        eod = self.get_eod_series()
+        if price_item not in eod.columns:
+            raise ValueError(
+                f"Unexpected `price_item` argument {price_item}. "
+                f"Expected one of {list(eod.columns)}.")
 
-    #     Note
-    #     ----
-    #     The entity's domicile (and by implication the related currency) must
-    #     already exist in the session or an exception shall be raised.
+        prices_df = eod.reset_index()
+        prices_df.loc["identity_code"] = self.identity_code
+        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df = prices_df[columns_to_keep]
 
-
-    #     Return
-    #     ------
-    #     .Entity
-    #         The single instance that is in the session.
-
-    #     See also
-    #     --------
-    #     .Domicile.factory
-
-    #     """
-    #     # TODO: It is debatable whether or not this factory method should exist
-    #     # as Entity should ber an abstract class. Check if entity exists in the
-    #     # session and if not then add it.
-    #     try:
-    #         obj = (
-    #             session.query(cls)
-    #             .join(Currency)
-    #             .filter(cls.name == asset_name, Currency.ticker == currency_code)
-    #             .one()
-    #         )
-    #     except NoResultFound:
-    #         if not create:
-    #             raise FactoryError(
-    #                 'Asset "{}", currency="{}", not found.'.format(
-    #                     asset_name, currency_code
-    #                 )
-    #             )
-    #         else:
-    #             # Create a new instance, fetch pre-existing currency
-    #             currency = Currency.factory(session, currency_code)
-    #             obj = cls(asset_name, currency, **kwargs)
-    #             session.add(obj)
-    #     else:
-    #         # No changes to reconcile, country_code and entity_name are the key
-    #         # arguments.
-    #         pass
-
-    #     return obj
-
+        tsp = TimeSeriesProcessor(prices_df=prices_df)
+        return tsp
 
 class Cash(Asset):
     """Cash in currency held.
@@ -688,61 +654,92 @@ class Cash(Asset):
         for currency in currency_list:
             Cash.factory(session, currency.ticker)
 
-    def time_series(self, date_index, identifier="asset"):
-        """Retrieve historic time-series for a set of class instances.
+    def get_eod_series(self, date_index):
+        """Return the EOD time series for the Cash object.
 
-        Price time-series for cash is a unity time-series as the price of cash
-        is always 1.0 per unit in local currency; and by extension the returns
-        series is also a unity series. As the time-series exists, only as a
-        notion and not in the database, it is required to have the data and date
-        range from other non-cash entities to synthesize the cash price time
-        series of correct length for concatenation with such data.
+        The price of a cash unit is always 1.0 currency unit.
 
         Parameters
         ----------
-        dates : pandas.DatetimeIndex
+        date_index : pandas.DatetimeIndex
             The time-series dates of other entities that the ``Cash``
             time-series are to be appended to. Without this parameter it is
             impossible to know in advance how long the cash time-series is
             required to be.
-        identifier : str, optional
-            By default the column labels of the returned ``pandas.DataFrame``
-            are ``asset.Asset`` (or polymorph child instances) provided by in
-            the ``asset_list`` argument. With the `identifier` argument one can
-            specify if these column labels are to be substituted:
 
-            'asset':
-                The default ``asset.Asset`` (or polymorph child instances)
-                provided by in the `asset_list` argument.
-            'id':
-                The database table `id` column entry.
-            'ticker':
-                The exchange ticker
-            'identify_code':
-                That which will be returned by the ``asset.Cash.identity_code``
-                attribute.
+        Returns
+        -------
+        pandas.DataFrame
+            An End-Of-Day (EOD) ``pandas.DataFrame`` with columns identical to
+            the keys from the ``time_series.SimpleEOD.to_dict()`` or
+            ``time_series.ListedEOD.to_dict()`` or polymorph class method.
+
+        Raises
+        ------
+        ValueError
+            If the `date_index` argument is not a ``pandas.DatetimeIndex`` or
+            is empty.
+
         """
         if not isinstance(date_index, pd.DatetimeIndex):
             raise ValueError("Unexpected date_index argument type.")
+        if len(date_index) == 0:
+            raise ValueError("Empty date_index argument.")
 
-        # Make a series with all prices set to 1.0
-        series = pd.Series(len(date_index) * [1.0], index=date_index)
-
-        # Add the entity (Cash) as the Series name for later use as column a
-        # label in concatenation into a DataFrame
-        # TODO: Replace with a match statement
-        if identifier == "asset":
-            series.name = self
-        elif identifier == "id":
-            series.name = self._id
-        elif identifier == "ticker":
-            series.name = self.ticker
-        elif identifier == "identity_code":
-            series.name = self.identity_code
+        # Make a list of dicts for a price of 1 currency unit per date
+        if self.quote_units == "cents":
+            price = 100.0
         else:
-            raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
+            price = 1.0
+        trade_eod_dict_list = [{"date_stamp": date, "price": price.copy()} for date in date_index]
 
-        return series
+        data_frame = pd.DataFrame(trade_eod_dict_list)
+        data_frame["date_stamp"] = pd.to_datetime(data_frame["date_stamp"])
+        data_frame.set_index("date_stamp", inplace=True)
+        data_frame.sort_index(inplace=True)  # Assure ascending
+        data_frame.name = self
+
+        return data_frame
+
+    def get_time_series_processor(self, date_index, price_item='price'):
+        """Return a TimeSeriesProcessor for this asset.
+
+        Parameters
+        ----------
+        date_index : pandas.DatetimeIndex
+            The time-series dates of other entities that the ``Cash``
+            time-series are to be appended to. Without this parameter it is
+            impossible to know in advance how long the cash time-series is
+            required to be.
+        price_item : str, optional
+            The single price item column to keep. This argument is standardized
+            across all asset classes and their time-series. In this class the
+            value is required to be 'price' as the EOD time-series for this
+            class only has a 'price' item (See to_dict() method of the
+            ``time_series.EODBase`` class and its polymorphs).
+
+        Returns
+        -------
+        .time_series_processor.TimeSeriesProcessor
+            A ``.time_series_processor.TimeSeriesProcessor`` instance for this
+            asset which includes only the Cash EOD time series of price = 1.0
+            with dates from the `date_index` argument and `identity_code`
+            columns set to the ``Cash.identity_code``.
+        """
+        # Check that the price_item argument is 'price for this Cash class
+        if price_item != 'price':
+            raise ValueError(
+                f"Unexpected `price_item` argument `{price_item}`. "
+                "Expected 'price' for this asset class.")
+
+        prices_df = self.get_eod_series(date_index).reset_index()
+        prices_df.loc["identity_code"] = self.identity_code
+        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df = prices_df[columns_to_keep]
+
+        tsp = TimeSeriesProcessor(prices_df=prices_df)
+
+        return tsp
 
 
 class Forex(Cash):
@@ -1096,7 +1093,7 @@ class Forex(Cash):
         eod_dict = dict()
         for price_ticker in price_ticker_list:
             forex = cls.factory(session, cls.root_currency_ticker, price_ticker)
-            eod = forex.get_eod()
+            eod = forex.get_eod_series()
             eod_dict[price_ticker] = eod[price_item]
         df_eod_prices = pd.DataFrame(eod_dict)
         # Keep last price over holiday periods
@@ -1105,7 +1102,7 @@ class Forex(Cash):
         # Get the `root_currency_ticker` prices in the desired `base_ticker`
         # currency.
         forex = cls.factory(session, cls.root_currency_ticker, base_ticker)
-        eod = forex.get_eod()
+        eod = forex.get_eod_series()
         series_eod_base = eod[price_item]
         # Condition the index to that of df_eod_prices in preparation to become
         # the denominator, then forward fill last price over holiday or break
@@ -2196,173 +2193,58 @@ class ListedEquity(Listed):
         else:
             return self._split_series[-1]
 
-    def time_series(self, series="price", item=None,  identifier='identifier'):
-        """Retrieve (and compute) historic time-series for this instance.
+    def get_time_series_processor(self, price_item="close"):
+        """Return a TimeSeriesProcessor for this asset.
 
         Parameters
         ----------
-        series : str, optional
-            The type of time series to retrieve. The valid values are:
-                'price':
-                    The original price series.
-                'dividend':
-                    The annualized dividend yield.
-                'split':
-                    The stock split ratio.
-                'volume':
-                    The volume of trade (total units of trade) in the period.
-                'return':
-                    The price period-on-period return series.
-                'total_return':
-                    The period-on-period return series inclusive of the extra
-                    yield due to dividends paid (Dividend adjusted values are
-                    used).
-                'total_returns_index':
-                    The period-on-period return series inclusive of the extra
-                    yield due to dividends paid (Dividend adjusted values are
-                    used) as a total returns index (starting at unity at the
-                    first date).
-        item : str, optional
-            FIXME: This has changed to the item of any of the series.
+        price_item : str, optional
             The specific item of price such as 'close', 'open', `high`, or
-            `low`. Only valid when the ``series`` argument is set to 'price'.
-        identifier : str, optional
-            By default the column labels of the returned ``pandas.DataFrame``
-            are ``asset.Asset`` (or polymorph child instances) provided by in
-            the ``asset_list`` argument. With the `identifier` argument one can
-            specify if these column labels are to be substituted:
-                'identify_code' or None (Default):
-                    That which will be returned by the
-                    ``asset.ListedEquity.identity_code`` attribute.
-                'asset':
-                    The default ``asset.Asset`` (or polymorph child instances)
-                    provided by in the `asset_list` argument.
-                'id':
-                    The database table `id` column entry.
-                'isin':
-                    The standard security ISO 6166 ISIN number.
-                'ticker':
-                    The exchange ticker
-        tidy : bool
-            When ``True`` then prices are tidied up by removing outliers.
+            `low`. The selected price item will be renamed to "price" for the
+            processor. The default is 'close'.
 
-        Note
-        ----
-        The data is re-sampled at the daily frequency (365 days per year). Note
-        that this may introduce some serial correlations (autocorrelations) into
-        the data due to the forward filling of any missing data (NaNs).
-
-        See also
-        --------
-        Cash.time_series
-
+        Returns
+        -------
+        .time_series_processor.TimeSeriesProcessor
+            A ``.time_series_processor.TimeSeriesProcessor`` instance for this
+            asset with the end-of-day prices, dividends, and splits data
+            series. The `identity_code` column is set to the value of the
+            ``ListedEquity.identity_code`` attribute.
         """
+        # Check price item is valid
+        eod = self.get_eod_series()
+        if price_item not in eod.columns:
+            raise ValueError(
+                f"Unexpected `price_item` argument {price_item}. "
+                f"Expected one of {list(eod.columns)}.")
 
-        def get_prices(item):
-            eod = self.get_eod()
-            try:
-                price_series = eod[item]
-            except KeyError:
-                raise ValueError(f"Unexpected `price_item` argument {item}.")
-            return price_series
+        # Get prices, select price item, and rename to "price" for the processor.
+        prices_df = eod.reset_index()
+        prices_df.loc["identity_code"] = self.identity_code
+        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df = prices_df[columns_to_keep]
+        columns_to_rename = {price_item: "price"}
+        prices_df.rename(columns=columns_to_rename, inplace=True)
 
-        def get_volumes():
-            eod = self.get_eod()
-            volume_series = eod["volume"]
-            return volume_series
+        # Get dividends, select dividends non-adjusted value item, and rename to
+        # "dividend" for the processor.
+        dividends_df = self.get_dividend_series().reset_index()
+        dividends_df.loc["identity_code"] = self.identity_code
+        columns_to_keep = ["identity_code", "date_stamp", "adjusted_value"]
+        dividends_df = dividends_df[columns_to_keep]
+        columns_to_rename = {"adjusted_value": "dividend"}
+        dividends_df.rename(columns=columns_to_rename, inplace=True)
 
-        def get_dividends(item):
-            dividends = self.get_dividend_series()
-            try:
-                dividend_series = dividends[item]
-            except KeyError:
-                raise ValueError(f"Unexpected `dividend_item` argument {item}.")
-            return dividend_series
+        # Get splits
+        splits_df = self.get_split_series().reset_index()
+        splits_df.loc["identity_code"] = self.identity_code
+        columns_to_keep = ["identity_code", "date_stamp", "numerator", "denominator"]
+        splits_df = splits_df[columns_to_keep]
 
-        def get_splits(item):
-            splits = self.get_split_series()
-            try:
-                split_series = splits[item]
-            except KeyError:
-                raise ValueError(f"Unexpected `split_item` argument {item}.")
-            return split_series
+        # Create and return the processor
+        tsp = TimeSeriesProcessor(prices_df, dividends_df, splits_df)
 
-        def get_total_returns(item):
-            # FIXME: Address NaN returns on dividend days.
-            # FIXME: Address multiple dividends on the same day.
-            # FIXME: Address preprocessing of price data to address NaNs
-            price = get_prices(item)
-            price_shift = price.shift(1)
-            # Try to get dividends if any
-            try:
-                dividend = get_dividends(item='adjusted_value')
-            except DividendSeriesNoData:
-                if self.distributions is True:
-                    raise DividendSeriesNoData(f"Expected dividend data for {self}.")
-                # No dividends
-                numerator = price
-            else:
-                # Warn if not supposed to have dividends
-                if self.distributions is False:
-                    logger.warning(
-                        f"Unexpected dividend data for {self}."
-                        "Adding dividends anyway."
-                    )
-                # If dividends then add them to the price
-                numerator = price.add(dividend, fill_value=0.0)
-            # Total one period returns
-            total_returns = numerator / price_shift
-            # First return will be NaN. Default to unity return.
-            total_returns.iloc[0] = 1.0
-            return total_returns, price
-
-        match series:
-            case "price" :
-                result = get_prices(item)
-            case "dividend":
-                result = get_dividends()
-            case "split":
-                result = get_splits()
-            case "volume":
-                # Get the volume series.
-                result = get_volumes()
-            case "return":
-                price = get_prices(item)
-                # Geometric returns
-                returns = price / price.shift(1)
-                # Replace NaN with no-returns -> 1.0.
-                result = returns.fillna(1.0)
-            case "total_return":
-                # FIXME: What about multiple dividends on the same day?
-                total_returns, price = get_total_returns(item)
-                # Replace NaN with no-returns -> 1.0.
-                result = total_returns.fillna(1.0)
-            case "total_returns_index":
-                # FIXME: What about multiple dividends on the same day?
-                total_returns, price = get_total_returns(item)
-                # Replace NaN with no-returns -> 1.0.
-                total_returns = total_returns.fillna(1.0)
-                result = total_returns.cumprod()
-            case _:
-                raise ValueError(f"Unexpected series argument value `{series}`.")
-
-        # Add the entity (ListedEquity) as the Series name for later use as
-        # column a label in concatenation into a DataFrame
-        match identifier:
-            case "identity_code":
-                result.name = self.identity_code
-            case "id":
-                result.name = self._id
-            case "ticker":
-                result.name = self.ticker
-            case "isin":
-                result.name = self.isin
-            case "asset":
-                result.name = self
-            case _:
-                raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
-
-        return result
+        return tsp
 
 
 class Index(AssetBase):
@@ -2777,130 +2659,6 @@ class ExchangeTradeFund(ListedEquity):
             locality = "foreign"
 
         return locality
-
-    def time_series(
-        self,
-        series="price",
-        price_item="close",
-        return_type="price",
-        identifier="asset",
-        tidy=False,
-        include_index=False,
-    ):
-        """Retrieve historic time-series for this instance.
-
-        Parameters
-        ----------
-        series : str
-            Which security series:
-
-            'price':
-                The security's periodic trade price.
-            'dividend':
-                The annualized dividend yield.
-            'volume':
-                The volume of trade (total units of trade) in the period.
-        price_item : str
-            The specific item of price such as 'close', 'open', `high`, or
-            `low`. Only valid when the ``series`` argument is set to 'price'.
-        return_type : str
-            The specific view of the price series:
-
-            'price':
-                The original price series.
-            'return':
-                The price period-on-period return series.
-            'total_return':
-                The period-on-period return series inclusive of the extra
-                yield due to dividends paid.
-            'total_price':
-                The price period-on-period price series inclusive of the extra
-                yield due to dividends paid. The total_price series start value
-                is the same as the price start value.
-        identifier : str, optional
-            By default the column labels of the returned ``pandas.DataFrame``
-            are ``asset.Asset`` (or polymorph child instances) provided by in
-            the ``asset_list`` argument. With the `identifier` argument one can
-            specify if these column labels are to be substituted:
-
-            'asset':
-                The default ``asset.Asset`` (or polymorph child instances)
-                provided by in the `asset_list` argument.
-            'id':
-                The database table `id` column entry.
-            'isin':
-                The standard security ISO 6166 ISIN number.
-            'ticker':
-                The exchange ticker
-            'identify_code':
-                That which will be returned by the
-                ``asset.ListedEquity.identity_code`` attribute.
-        tidy : bool
-            When ``True`` then prices are tidied up by removing outliers.
-        include_index : bool
-            When ``True`` then the price series is back-filled with the index
-            price series to proxy longer price history. The ``series`` argument
-            must be set to 'price' or an exception is raised. This is due to the
-            fact that indexes that ETFs replicate typically carry only price
-            information.
-
-        Note
-        ----
-        The data is re-sampled at the daily frequency (365 days per year). Note
-        that this may introduce some serial correlations (autocorrelations) into
-        the data due to the forward filling of any missing data (NaNs).
-
-        See also
-        --------
-        Cash.time_series,
-        ListedEquity.time_series
-
-        """
-        data = super().time_series(series, price_item, return_type, identifier)
-
-        # Do we back-fill the the replicated index time-series history
-        if not include_index:
-            return data
-
-        # Is there a replicated index with which we can back-fill with the
-        # replicated index time-series history
-        if self.index is None:
-            id_code = self.identity_code
-            logger.warning(f"The ExchangeTradeFund {id_code} has no Index reference.")
-            return data
-
-        # Now we can back-fill the price with the index time-series history to
-        # produce longer histories.
-
-        # Check we are using prices series only
-        if series == "price":
-            pass
-        else:
-            raise Exception(
-                f"Can back-fill only `price` series, not `{series}` series."
-            )
-
-        # Check that we are using like with like, i.e., price and total
-        # return price are different indices.
-        if return_type in ["price", "return"]:
-            if not self.index.total_return:
-                raise Exception(
-                    "Total price index series cannot back-fill a price series."
-                )
-        elif return_type in ["total_price", "total_return"]:
-            if self.index.total_return:
-                raise Exception(
-                    "Price index series cannot back-fill a total price series."
-                )
-
-        # Get the replicated index for its time-series history as a back-fill
-        back_fill = self.index.time_series(series, price_item, return_type, tidy)
-
-        #  Very important that `data` is 1st and `back_fill` is 2nd so that
-        #  `back_fill` does nto overwrite any elements in `data`.
-        data = data.combine_first(back_fill)
-
-        return data
 
 
 # Initialize time series ASSET_CLASS references after all classes are defined

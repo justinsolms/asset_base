@@ -992,3 +992,289 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         pivoted_adj = TimeSeriesProcessor.pivot_dataframes(adj_df)
         self.assertIn('adj_price', pivoted_adj)
         self.assertEqual(pivoted_adj['adj_price'].shape, (3, 2))
+
+    def test_concat_basic_two_processors(self):
+        """Test basic concatenation of two TimeSeriesProcessor instances."""
+        # Create first processor with TEST:A
+        price_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 102.0]
+        })
+        tsp_a = TimeSeriesProcessor(price_df_a, dividends_df=None, splits_df=None)
+
+        # Create second processor with TEST:B
+        price_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [200.0, 202.0, 204.0]
+        })
+        tsp_b = TimeSeriesProcessor(price_df_b, dividends_df=None, splits_df=None)
+
+        # Concatenate
+        tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
+
+        # Verify result
+        self.assertIsInstance(tsp_combined, TimeSeriesProcessor)
+        self.assertEqual(len(tsp_combined.prices_df), 6)
+        self.assertEqual(tsp_combined.prices_df['identity_code'].nunique(), 2)
+        self.assertIn('TEST:A', tsp_combined.prices_df['identity_code'].values)
+        self.assertIn('TEST:B', tsp_combined.prices_df['identity_code'].values)
+
+    def test_concat_with_dividends(self):
+        """Test concatenation when dividends are present."""
+        # First processor with dividend
+        price_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 102.0]
+        })
+        dividend_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-02')],
+            'unadjusted_value': [1.0]
+        })
+        tsp_a = TimeSeriesProcessor(price_df_a, dividends_df=dividend_df_a, splits_df=None)
+
+        # Second processor with dividend
+        price_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [200.0, 202.0, 204.0]
+        })
+        dividend_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'unadjusted_value': [2.0]
+        })
+        tsp_b = TimeSeriesProcessor(price_df_b, dividends_df=dividend_df_b, splits_df=None)
+
+        # Concatenate
+        tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
+
+        # Verify dividends are combined
+        self.assertIsNotNone(tsp_combined.dividends_df)
+        self.assertEqual(len(tsp_combined.dividends_df), 2)
+        self.assertIn('TEST:A', tsp_combined.dividends_df['identity_code'].values)
+        self.assertIn('TEST:B', tsp_combined.dividends_df['identity_code'].values)
+
+    def test_concat_with_splits(self):
+        """Test concatenation when splits are present."""
+        # First processor with split
+        price_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 50.5]
+        })
+        split_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp_a = TimeSeriesProcessor(price_df_a, dividends_df=None, splits_df=split_df_a)
+
+        # Second processor with split
+        price_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [200.0, 202.0, 101.0]
+        })
+        split_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp_b = TimeSeriesProcessor(price_df_b, dividends_df=None, splits_df=split_df_b)
+
+        # Concatenate
+        tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
+
+        # Verify splits are combined
+        self.assertIsNotNone(tsp_combined.splits_df)
+        self.assertEqual(len(tsp_combined.splits_df), 2)
+        self.assertIn('TEST:A', tsp_combined.splits_df['identity_code'].values)
+        self.assertIn('TEST:B', tsp_combined.splits_df['identity_code'].values)
+
+    def test_concat_mixed_dividends_and_splits(self):
+        """Test concatenation with mixed dividend/split presence."""
+        # First processor with dividend only
+        price_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 102.0]
+        })
+        dividend_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-02')],
+            'unadjusted_value': [1.0]
+        })
+        tsp_a = TimeSeriesProcessor(price_df_a, dividends_df=dividend_df_a, splits_df=None)
+
+        # Second processor with split only
+        price_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [200.0, 202.0, 101.0]
+        })
+        split_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp_b = TimeSeriesProcessor(price_df_b, dividends_df=None, splits_df=split_df_b)
+
+        # Third processor with neither
+        price_df_c = pd.DataFrame({
+            'identity_code': ['TEST:C'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [300.0, 303.0, 306.0]
+        })
+        tsp_c = TimeSeriesProcessor(price_df_c, dividends_df=None, splits_df=None)
+
+        # Concatenate
+        tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b, tsp_c])
+
+        # Verify combined data
+        self.assertEqual(len(tsp_combined.prices_df), 9)
+        self.assertIsNotNone(tsp_combined.dividends_df)
+        self.assertIsNotNone(tsp_combined.splits_df)
+        self.assertEqual(len(tsp_combined.dividends_df), 1)
+        self.assertEqual(len(tsp_combined.splits_df), 1)
+
+    def test_concat_single_processor(self):
+        """Test concatenation with a single processor."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 102.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
+
+        # Concatenate single processor
+        tsp_combined = TimeSeriesProcessor.concat([tsp])
+
+        # Should be equivalent to original
+        self.assertIsInstance(tsp_combined, TimeSeriesProcessor)
+        self.assertEqual(len(tsp_combined.prices_df), 3)
+        pd.testing.assert_frame_equal(
+            tsp_combined.prices_df.sort_values(['identity_code', 'date_stamp']).reset_index(drop=True),
+            tsp.prices_df.sort_values(['identity_code', 'date_stamp']).reset_index(drop=True)
+        )
+
+    def test_concat_overlapping_assets(self):
+        """Test concatenation with overlapping assets (same identity_code)."""
+        # First processor with TEST:A on dates 1-3
+        price_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 102.0]
+        })
+        tsp_a = TimeSeriesProcessor(price_df_a, dividends_df=None, splits_df=None)
+
+        # Second processor with TEST:A on dates 4-6
+        price_df_b = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-04', periods=3, freq='D'),
+            'price': [103.0, 104.0, 105.0]
+        })
+        tsp_b = TimeSeriesProcessor(price_df_b, dividends_df=None, splits_df=None)
+
+        # Concatenate
+        tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
+
+        # Should have 6 rows for same asset
+        self.assertEqual(len(tsp_combined.prices_df), 6)
+        self.assertEqual(tsp_combined.prices_df['identity_code'].nunique(), 1)
+
+        # Verify all dates are present
+        test_a_data = tsp_combined.prices_df[tsp_combined.prices_df['identity_code'] == 'TEST:A']
+        self.assertEqual(len(test_a_data), 6)
+
+    def test_concat_invalid_type(self):
+        """Test concatenation with invalid input type."""
+        price_df = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 3,
+            'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+            'price': [100.0, 101.0, 102.0]
+        })
+        tsp = TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None)
+
+        # Try to concatenate with non-TimeSeriesProcessor
+        with self.assertRaises(TypeError) as context:
+            TimeSeriesProcessor.concat([tsp, "not a processor"])
+        self.assertIn("must be TimeSeriesProcessor instances", str(context.exception))
+
+    def test_concat_preserves_data_integrity(self):
+        """Test that concatenation preserves all data correctly."""
+        # Create two processors with full corporate actions
+        price_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'] * 4,
+            'date_stamp': pd.date_range('2020-01-01', periods=4, freq='D'),
+            'price': [100.0, 101.0, 102.0, 103.0]
+        })
+        dividend_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-02')],
+            'unadjusted_value': [1.0]
+        })
+        split_df_a = pd.DataFrame({
+            'identity_code': ['TEST:A'],
+            'date_stamp': [pd.Timestamp('2020-01-03')],
+            'numerator': [2.0],
+            'denominator': [1.0]
+        })
+        tsp_a = TimeSeriesProcessor(price_df_a, dividends_df=dividend_df_a, splits_df=split_df_a)
+
+        price_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'] * 4,
+            'date_stamp': pd.date_range('2020-01-01', periods=4, freq='D'),
+            'price': [200.0, 202.0, 204.0, 206.0]
+        })
+        dividend_df_b = pd.DataFrame({
+            'identity_code': ['TEST:B'],
+            'date_stamp': [pd.Timestamp('2020-01-04')],
+            'unadjusted_value': [2.0]
+        })
+        tsp_b = TimeSeriesProcessor(price_df_b, dividends_df=dividend_df_b, splits_df=None)
+
+        # Concatenate
+        tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
+
+        # Verify prices
+        self.assertEqual(len(tsp_combined.prices_df), 8)
+
+        # Verify dividends
+        self.assertEqual(len(tsp_combined.dividends_df), 2)
+        self.assertEqual(tsp_combined.dividends_df['unadjusted_value'].sum(), 3.0)
+
+        # Verify splits
+        self.assertEqual(len(tsp_combined.splits_df), 1)
+        self.assertAlmostEqual(
+            tsp_combined.splits_df.iloc[0]['numerator'] / tsp_combined.splits_df.iloc[0]['denominator'],
+            2.0,
+            places=6
+        )
+
+    def test_concat_three_processors(self):
+        """Test concatenation of three processors."""
+        processors = []
+        for i, code in enumerate(['TEST:A', 'TEST:B', 'TEST:C']):
+            price_df = pd.DataFrame({
+                'identity_code': [code] * 3,
+                'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
+                'price': [(i+1)*100.0, (i+1)*101.0, (i+1)*102.0]
+            })
+            processors.append(TimeSeriesProcessor(price_df, dividends_df=None, splits_df=None))
+
+        # Concatenate all three
+        tsp_combined = TimeSeriesProcessor.concat(processors)
+
+        # Verify
+        self.assertEqual(len(tsp_combined.prices_df), 9)
+        self.assertEqual(tsp_combined.prices_df['identity_code'].nunique(), 3)
+        for code in ['TEST:A', 'TEST:B', 'TEST:C']:
+            self.assertIn(code, tsp_combined.prices_df['identity_code'].values)
+

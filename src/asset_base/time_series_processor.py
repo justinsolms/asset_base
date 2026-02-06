@@ -21,12 +21,18 @@ class TimeSeriesProcessor():
         ``['identity_code', 'date_stamp', 'price']``.
     dividends_df : pandas.DataFrame, optional
         Dividend data with columns:
-        ``['identity_code', 'date_stamp', 'adjusted_value']``.
+        ``['identity_code', 'date_stamp', 'unadjusted_value']``.
         If provided, total returns are computed. Default is ``None``.
     splits_df : pandas.DataFrame, optional
         Share split data with columns:
         ``['identity_code', 'date_stamp', 'numerator', 'denominator']``.
         Default is ``None``.
+
+    Note
+    ----
+    The 'identity_code' column is typically the ``asset.Asset.identity_code`` by
+    convention, but any unique asset identifier may be used as long as it is
+    consistent across prices, dividends, and splits DataFrames.
 
     Internal processing steps are executed upon each individual price series
     to maintain independence across series and avoid cross-asset contamination
@@ -522,6 +528,19 @@ class TimeSeriesProcessor():
 
         self.prices_df = df_out
 
+    def get_date_index(self) -> pd.DatetimeIndex:
+        """Get unique sorted date index across all identity_codes.
+
+        Returns
+        -------
+        pandas.DatetimeIndex
+            DatetimeIndex of unique sorted dates across all identity_codes.
+        """
+        date_index: pd.DatetimeIndex = pd.DatetimeIndex(
+            sorted(self.prices_df['date_stamp'].unique())
+        )
+        return date_index
+
     def get_total_return(self) -> pd.DataFrame:
         """Get total return DataFrame.
 
@@ -723,5 +742,49 @@ class TimeSeriesProcessor():
             pivoted_dfs[col] = pivoted
 
         return pivoted_dfs
+
+    @staticmethod
+    def concat(tsp_list: list['TimeSeriesProcessor']) -> "TimeSeriesProcessor":
+        """Concatenate multiple TimeSeriesProcessor instances.
+
+        Parameters
+        ----------
+        tsp_list : list of TimeSeriesProcessor
+            List of TimeSeriesProcessor instances to concatenate.
+
+        Returns
+        -------
+        TimeSeriesProcessor
+            A new TimeSeriesProcessor instance containing the concatenated data.
+
+        Raises
+        ------
+        TypeError
+            If any item in tsp_list is not a TimeSeriesProcessor instance.
+        """
+        if not all(isinstance(tsp, TimeSeriesProcessor) for tsp in tsp_list):
+            raise TypeError("All items in tsp_list must be TimeSeriesProcessor instances")
+
+        combined_prices = pd.concat([tsp.prices_df for tsp in tsp_list], ignore_index=True)
+
+        combined_dividends = None
+        if any(tsp.dividends_df is not None for tsp in tsp_list):
+            dividend_dfs = [
+                tsp.dividends_df for tsp in tsp_list if tsp.dividends_df is not None
+            ]
+            combined_dividends = pd.concat(dividend_dfs, ignore_index=True)
+
+        combined_splits = None
+        if any(tsp.splits_df is not None for tsp in tsp_list):
+            split_dfs = [
+                tsp.splits_df for tsp in tsp_list if tsp.splits_df is not None
+            ]
+            combined_splits = pd.concat(split_dfs, ignore_index=True)
+
+        return TimeSeriesProcessor(
+            prices_df=combined_prices,
+            dividends_df=combined_dividends,
+            splits_df=combined_splits
+        )
 
 
