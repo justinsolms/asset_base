@@ -61,10 +61,7 @@ See also
 .submissions
 
 """
-import os
 import logging
-from wrapt import T
-import yaml
 import datetime
 import pandas as pd
 
@@ -74,20 +71,11 @@ from sqlalchemy import MetaData as SQLAlchemyMetaData
 
 from sqlalchemy.orm.exc import NoResultFound
 
-from asset_base import get_config_path
-
 from .exceptions import NotSetUp, TimeSeriesNoData
 from .financial_data import Dump, History, MetaData, Static
 from .common import Base, SQLiteSession, TestSession
 from .entity import Domicile, Exchange
-from .asset import (
-    Asset,
-    ExchangeTradeFund,
-    Forex,
-    ListedEquity,
-    Currency,
-    Cash,
-)
+from .asset import ExchangeTradeFund, Forex, ListedEquity, Currency, Cash
 from .time_series_processor import TimeSeriesProcessor
 
 
@@ -492,33 +480,6 @@ class ManagerBase(object):
         data = [(str(item.name), str(item.value)) for item in self.session.query(Meta)]
         return dict(data)
 
-    def get_dict(self, asset_id_list):
-        """Get a dictionary of assets.
-
-        The returned dictionary items will be polymorphic instances of the
-        assets specified by the list of asset id numbers.
-
-        Parameters
-        ----------
-        asset_id_list : list
-            A list if database session `Asset._id` id numbers of the required
-            database assets. See `.Asset`.
-
-        Return
-        ------
-        dict
-            A dictionary of assets with the specified id numbers. The id
-            numbers are the keys of the dictionary.
-        """
-        if isinstance(asset_id_list, list):
-            # Get the list of matching funds and construct a new list.
-            entities = self.session.query(Asset).filter(Asset._id.in_(asset_id_list))
-            return dict([(asset._id, asset) for asset in entities])
-        else:
-            raise ValueError(
-                "Argument `id` must be a list of asset id numbers."
-            )
-
     def get_time_series_processor(self, asset_list, price_item='close', date_index=None):
         """Get a TimeSeriesProcessor for a list of assets.
 
@@ -592,145 +553,6 @@ class ManagerBase(object):
 
         return tsp
 
-    def time_series(
-        self,
-        asset_list,
-        series="price",
-        price_item="close",
-        return_type="price",
-        identifier="asset",
-        tidy=True,
-        date_index=None,
-    ):
-        """Return historic price or return, time-series for a list of assets.
-
-        TODO: Remove `series` argument and use to get price series only
-
-        Note
-        ----
-        The values of `Cash` entities shall always be equivalent to a price of
-        1.0 for all dates in the date range and will be matched to the date index of
-        the non-`Cash` securities in the `asset_list` argument. If the
-        `asset_list` argument contains only `Cash` securities then the
-        `date_index` argument is required to specify the date range of the cash
-        time series.
-
-        Parameters
-        ----------
-        asset_list : list of Asset (or polymorph class) instances
-            A list of securities or assets for which time series are required.
-        series : str, optional
-            Which security series:
-
-            'price':
-                The security's periodic trade price.
-            'dividend':
-                The annualized distribution yield.
-            'volume':
-                The volume of trade (total units of trade) in the period.
-        price_item : str, optional
-            The specific item of price. Only valid for the `price` type:
-
-            'close' :
-                The period's close price.
-            'open' :
-                The period's open price.
-            'low' :
-                The period's lowest price.
-            'high' :
-                The period's highest price.
-        return_type : str, optional
-            The specific view of the price series:
-
-            'price':
-                The original price series.
-            'return':
-                The price period-on-period return series.
-            'total_return':
-                The price period-on-period return series including the extra
-                yield due to distribution paid.
-            'total_price':
-                The price period-on-period price series inclusive of the extra
-                yield due to dividends paid. The total_price series start value
-                is the same as the price start value.
-        identifier : str, optional
-            By default the column labels of the returned ``pandas.DataFrame``
-            are ``asset.Asset`` (or polymorph child instances) provided by in
-            the ``asset_list`` argument. With the `identifier` argument one can
-            specify if these column labels are to be substituted:
-
-            'asset':
-                The default ``asset.Asset`` (or polymorph child instances)
-                provided by in the `asset_list` argument.
-            'id':
-                The database table `id` column entry.
-            'isin':
-                The standard security ISO 6166 ISIN number.
-            'ticker':
-                The exchange ticker
-            'identify_code':
-                That which will be returned by the ``asset.Asset.identity_code``
-                attribute.
-        tidy : bool, optional
-            When ``True`` then prices are tidied up by removing outliers.
-        date_index : pandas.DatetimeIndex, optional
-            If there are non-cash securities specified in the `asset_list` then
-            this argument is overridden by the union of the date index (the
-            `pandas.DatetimeIndex`) of all the non-`Cash` security time-series.
-            If the `asset_list` argument specifies only `Cash` securities then
-            this data range is not optional and is required. It could be
-            provided by the the index of another `time_series` result.
-
-        Returns
-        -------
-        pandas.DataFrame
-            A column of data for each  ``.asset.Asset`` instance (or polymorph)
-            in the ``asset-list`` argument. The column labels are the
-            ``.asset.Asset`` instances.
-
-        Raises
-        ------
-        ValueError
-            Argument id_list may not be empty.
-        Exception
-            Expected non-cash securities in asset_list.
-
-        See also
-        --------
-        Cash.time_series
-
-        """
-        # Get the time series processor for the asset list
-        if len(asset_list) == 0:
-            raise ValueError("Argument `asset_list` may not be empty.")
-
-        # Warning if a dataframe has mixed currency time series.
-        if len(set(s.currency for s in asset_list)) > 1:
-            logger.warning("The asset_list is of mixed currencies. You should consider transforming to a common currency!!")
-
-        tsp = self.get_time_series_processor(asset_list, date_index)
-
-
-        # Replace column labels as specified by the identifier arg
-        # TODO: Replace with a match statement
-        if identifier == "asset":
-            id_dict = {}
-        elif identifier == "id":
-            id_dict = {asset: asset._id for asset in asset_list}
-        elif identifier == "isin":
-            id_dict = {asset: asset.isin for asset in asset_list}
-        elif identifier == "ticker":
-            id_dict = {asset: asset.ticker for asset in asset_list}
-        elif identifier == "identity_code":
-            id_dict = {asset: asset.identity_code for asset in asset_list}
-        else:
-            raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
-        data = data.rename(columns=id_dict)
-        data.columns.name = identifier
-
-        # Return all time series in one pandas.DataFrame.
-        return data
-
     def to_common_currency(self, data_frame, currency_ticker):
         """Transform price-like time-series to a common currency.
 
@@ -739,6 +561,7 @@ class ManagerBase(object):
         data_frame : pandas.DataFrame
             An asset price data frame derived from the ``time_series``
             method. Must be price series data. Thus valid
+        # FIXME: This method need the Asset polymorph objects and time_series() no longer exists.
         currency_ticker : str(3), optional
             ISO 4217 3-letter currency code of the desired price currency.
 

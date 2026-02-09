@@ -29,10 +29,11 @@ from sqlalchemy.exc import NoResultFound
 
 from src.asset_base.common import Common
 from src.asset_base.financial_data import Dump
-from src.asset_base.asset import Forex, ListedEquity
+from src.asset_base.asset import Cash, Forex, ListedEquity
 from src.asset_base.time_series import Dividend, ListedEOD
 from src.asset_base.manager import Manager, Meta, substitute_security_labels
 from src.asset_base.exceptions import TimeSeriesNoData
+from src.asset_base.time_series_processor import TimeSeriesProcessor
 
 import warnings
 
@@ -242,46 +243,28 @@ class TestManager(unittest.TestCase):
             .sort_index(axis=1),  # Sorts column rank
         )
 
-    def test_time_series(self):
-        """Test all securities time series."""
-        # Test total-return product over short historical date window.
-        securities_list = self.session.query(ListedEquity).all()
-        data = self.manager.time_series(securities_list, return_type="total_return")
-        substitute_security_labels(data, "ticker", inplace=True)
-        data = data.loc["2020-01-01":"2021-01-01"]  # Fixed historical window
-        data_check_prod = data.prod().to_dict()
-        test_data = {
-            "STX40": 1.0807429980281673,
-            "AAPL": 0.4557730329977179,
-            "MCD": 1.113204809354809,
-        }
-        self.assertEqual(test_data, data_check_prod)
+    def test_get_time_series_processor(self):
+        """Test manager get_time_series_processor for mixed assets."""
+        listed_equity = self.session.query(ListedEquity).first()
+        self.assertIsNotNone(listed_equity)
 
-    def test_time_series_forex(self):
-        """Test all securities time series with currency transformed to ZAR."""
-        # Test total_return check-product over short historical date window.
-        securities_list = self.session.query(ListedEquity).all()
-        data = self.manager.time_series(securities_list, return_type="total_return")
-        data_zar = self.manager.to_common_currency(data, "ZAR")
-        data = substitute_security_labels(data, "ticker")
-        data_zar = substitute_security_labels(data_zar, "ticker")
-        forex = Forex.get_rates_data_frame(self.session, "ZAR", ["USD"])
+        cash = Cash.factory(self.session, self.cash_ticker)
 
-        # Recover exchange rates. Correct recovery is the test that everything
-        # works
-        recover = data / data_zar
-        recover = recover[["STX40", "AAPL", "MCD"]]
-        # Extract last 5 rows of data which should be the same and should be
-        # sufficient
-        stx_40 = recover["STX40"].tail(5)
-        aapl = recover["AAPL"].tail(5)
-        mcd = recover["MCD"].tail(5)
-        # The MCD and APPL should, within rounding errors, correspond
-        self.assertTrue(all(aapl.round(6) == mcd.round(6)))
-        # This is ZAR to ZAR and should all be 1.0
-        self.assertTrue(all(stx_40 == 1.0))
-        # The ZARUSD exchange rate is properly recovered
-        self.assertTrue(all(forex.reindex(aapl.index).USD.round(6) == aapl.round(6)))
+        tsp = self.manager.get_time_series_processor([listed_equity, cash])
+
+        self.assertIsInstance(tsp, TimeSeriesProcessor)
+        self.assertIn("identity_code", tsp.prices_df.columns)
+        self.assertIn("price", tsp.prices_df.columns)
+        self.assertFalse(tsp.prices_df.empty)
+
+        identity_codes = set(tsp.prices_df["identity_code"].unique())
+        self.assertIn(listed_equity.identity_code, identity_codes)
+        self.assertIn(cash.identity_code, identity_codes)
+
+        cash_prices = tsp.prices_df.loc[
+            tsp.prices_df["identity_code"] == cash.identity_code, "price"
+        ]
+        self.assertTrue((cash_prices == 1.0).all())
 
 
 class Suite(object):

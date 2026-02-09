@@ -110,7 +110,7 @@ from .time_series import (
     Split,
     TimeSeriesBase,
 )
-from time_series_processor import TimeSeriesProcessor
+from .time_series_processor import TimeSeriesProcessor
 
 # Get module-named logger.
 import logging
@@ -1789,7 +1789,7 @@ class Listed(Share):
         """
         # Re-use all listed security meta-data
         class_name = cls.__name__
-        data_frame_dict = dumper.read(name_list=[class_name])
+        data_frame_dict = dumper.read(key_name_list=[class_name])
         cls.from_data_frame(session, data_frame_dict[class_name])
         logger.warning(
             "Reused %s data - Data may be stale. Consider a hard "
