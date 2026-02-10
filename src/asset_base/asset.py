@@ -1005,7 +1005,7 @@ class Forex(Cash):
         return obj
 
     @classmethod
-    def update_all(cls, session, get_forex_method=None, _test_forex_list=None):
+    def update_all(cls, session, get_forex_method=None):
         """Update/create all the objects in the asset_base session.
 
         The existing records of the ``Currency`` instances in
@@ -1024,11 +1024,7 @@ class Forex(Cash):
             then the ``ForexEOD`` time_series will not be created.
 
         """
-        # For testing only
-        if _test_forex_list is not None:
-            foreign_currencies_list = _test_forex_list
-        else:
-            foreign_currencies_list = cls.foreign_currencies
+        foreign_currencies_list = cls.foreign_currencies
 
         # Create Forex instances as per the Forex.foreign_currencies list
         # attribute

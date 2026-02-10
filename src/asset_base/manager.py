@@ -298,8 +298,7 @@ class ManagerBase(object):
             raise ex
 
     def set_up(
-        self, reuse=True, update=True, _test_isin_list=None, _test_forex_list=None
-    ):
+        self, reuse=True, update=True):
         """Set up the database for operations.
 
         Parameters
@@ -343,13 +342,6 @@ class ManagerBase(object):
         # First commit. The update method call below will commit again
         self.commit()
 
-        # Update all from API feeds
-        # TODO: Remove this. Updating must be a separate call tio update() - note the knockon changes to all tests.
-        if update is True:
-            self.update(
-                _test_isin_list=_test_isin_list, _test_forex_list=_test_forex_list
-            )
-
     def tear_down(self, delete_dump_data=False):
         """Tear down the environment for operation of the module.
 
@@ -379,7 +371,7 @@ class ManagerBase(object):
         # Delete database
         self.close(drop=True)
 
-    def update(self, _test_isin_list=None, _test_forex_list=None):
+    def update(self):
         """Update all non-static data.
 
         Uses the ``.financial_data`` module as the data source.
@@ -403,8 +395,6 @@ class ManagerBase(object):
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
             get_splits_method=history.get_splits,
-            # Hidden args for testing only!
-            _test_isin_list=_test_isin_list,
         )
 
         # Forex update - based on existing currencies and built in list
@@ -412,7 +402,6 @@ class ManagerBase(object):
         Forex.update_all(
             self.session,
             get_forex_method=history.get_forex,
-            _test_forex_list=_test_forex_list,  # Hidden arg. For testing only!
         )
 
         # TODO: Include Index.update_all
@@ -431,7 +420,7 @@ class ManagerBase(object):
         data download form feeds.
 
         The dump shall include data from the classes:
-        - ListedEquity (and its time series data: ListedEOD and Dividend)
+        - ListedEquity (and its time series data: ListedEOD, Dividend and Split)
 
         This excludes the following data items which are always available as
         static data through the ``financial_data.Static`` class or as
@@ -445,8 +434,6 @@ class ManagerBase(object):
             cls.dump(self.session, self.dumper)
 
     def reuse(self):
-        # TODO: FInd and make clear ho EOD and Dividend data is reused.
-        # TODO: Reuse FOREX data
         """Reuse dumped data as a database initialization resource.
 
         See also
@@ -497,17 +484,44 @@ class ManagerBase(object):
             If the `asset_list` argument specifies only `Cash` securities then
             this data range is not optional and is required. It could be
             provided by the the index of another `time_series` result.
+
+        The `TimeSeriesProcessor` returned by this method will have the
+        `price_item` time series for all the securities in the `asset_list` and
+        the union date index of the non-cash securities in the `asset_list` or
+        the `date_index` argument if there are no non-cash securities in the
+        `asset_list`. See the documentation of the `TimeSeriesProcessor` class
+        for more details on the `TimeSeriesProcessor` returned by this method.
+        The identity code of the securities in the `asset_list` will be used as
+        the column labels of the `price_item` time series in the returned
+        `TimeSeriesProcessor`.
+
+        Warning
+        -------
+        It is possible to have mixed currency and quote unit time series in the
+        returned `TimeSeriesProcessor` if the `asset_list` argument contains
+        securities with different currencies and quote units. This may be
+        undesirable and the user should consider transforming to a common
+        currency and quote unit using the `to_common_currency` method and
+        scaling the prices to a common quote unit before using the time series
+        data for further analysis.
+
         """
         if len(asset_list) == 0:
             raise ValueError("Argument `asset_list` may not be empty.")
 
         # Warning if a dataframe has mixed currency time series.
+        # TODO: Consider how to avoid this
         if len(set(s.currency for s in asset_list)) > 1:
-            logger.warning("The asset_list is of mixed currencies. You should consider transforming to a common currency!!")
+            logger.warning(
+                "The asset_list is of mixed currencies. You should consider "
+                "transforming to a common currency!!")
 
         # Warning if the quote units are mixed
-        if len(set(s.quote_unit for s in asset_list)) > 1:
-            logger.warning("The asset_list is of mixed quote units. You should consider transforming to a common quote unit!!")
+        # TODO: Consider how to avoid this
+        if len(set(s.quote_units for s in asset_list)) > 1:
+            logger.warning(
+                "The asset_list is of mixed quote units. You should consider "
+                "scaling prices to a common quote unit!!")
 
         # Get a list of cash securities
         cash_list = [item for item in asset_list if isinstance(item, Cash)]
@@ -541,6 +555,7 @@ class ManagerBase(object):
 
         # For all Cash assets. We need the previous non-cash DatetimeIndex to
         # construct Cash time series.
+        tsp_cash = None
         for asset in cash_list:
             tsp_cash = asset.get_time_series_processor(
                 date_index=date_index, price_item='price')
@@ -548,6 +563,8 @@ class ManagerBase(object):
         # Combine non-cash and cash time series
         if tsp_non_cash is None:
             tsp = tsp_cash
+        elif tsp_cash is None:
+            tsp = tsp_non_cash
         else:
             tsp = TimeSeriesProcessor.concat([tsp_non_cash, tsp_cash])
 
