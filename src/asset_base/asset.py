@@ -419,7 +419,7 @@ class Asset(AssetBase):
                 f"Expected one of {list(eod.columns)}.")
 
         prices_df = eod.reset_index()
-        prices_df.loc["identity_code"] = self.identity_code
+        prices_df["identity_code"] = self.identity_code
         columns_to_keep = ["identity_code", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
@@ -691,7 +691,7 @@ class Cash(Asset):
             price = 100.0
         else:
             price = 1.0
-        trade_eod_dict_list = [{"date_stamp": date, "price": price.copy()} for date in date_index]
+        trade_eod_dict_list = [{"date_stamp": date, "price": price} for date in date_index]
 
         data_frame = pd.DataFrame(trade_eod_dict_list)
         data_frame["date_stamp"] = pd.to_datetime(data_frame["date_stamp"])
@@ -733,7 +733,7 @@ class Cash(Asset):
                 "Expected 'price' for this asset class.")
 
         prices_df = self.get_eod_series(date_index).reset_index()
-        prices_df.loc["identity_code"] = self.identity_code
+        prices_df["identity_code"] = self.identity_code
         columns_to_keep = ["identity_code", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
@@ -2220,24 +2220,24 @@ class ListedEquity(Listed):
 
         # Get prices, select price item, and rename to "price" for the processor.
         prices_df = eod.reset_index()
-        prices_df.loc["identity_code"] = self.identity_code
+        prices_df["identity_code"] = self.identity_code
         columns_to_keep = ["identity_code", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
         columns_to_rename = {price_item: "price"}
         prices_df.rename(columns=columns_to_rename, inplace=True)
 
-        # Get dividends, select dividends non-adjusted value item, and rename to
+        # Get dividends, select dividends unadjusted value item, and rename to
         # "dividend" for the processor.
         dividends_df = self.get_dividend_series().reset_index()
-        dividends_df.loc["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", "adjusted_value"]
+        dividends_df["identity_code"] = self.identity_code
+        columns_to_keep = ["identity_code", "date_stamp", "unadjusted_value"]
         dividends_df = dividends_df[columns_to_keep]
-        columns_to_rename = {"adjusted_value": "dividend"}
-        dividends_df.rename(columns=columns_to_rename, inplace=True)
+        # Add dividend column as a copy of unadjusted_value
+        dividends_df["dividend"] = dividends_df["unadjusted_value"]
 
         # Get splits
         splits_df = self.get_split_series().reset_index()
-        splits_df.loc["identity_code"] = self.identity_code
+        splits_df["identity_code"] = self.identity_code
         columns_to_keep = ["identity_code", "date_stamp", "numerator", "denominator"]
         splits_df = splits_df[columns_to_keep]
 

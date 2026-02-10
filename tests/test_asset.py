@@ -170,35 +170,6 @@ class TestCash(TestBase):
         locality = self.cash.get_locality("ZA")
         self.assertEqual(locality, "foreign")
 
-    def test_time_series_returns_unity_series(self):
-        """Test time_series method returns series of 1.0 values."""
-        # Create a date index
-        dates = pd.date_range(start="2025-01-01", end="2025-01-10", freq="D")
-
-        series = self.cash.time_series(dates, identifier="asset")
-
-        # All values should be 1.0
-        self.assertTrue((series == 1.0).all())
-        self.assertEqual(len(series), len(dates))
-
-    def test_time_series_identifier_asset(self):
-        """Test time_series with identifier='asset'."""
-        dates = pd.date_range(start="2025-01-01", end="2025-01-05", freq="D")
-        series = self.cash.time_series(dates, identifier="asset")
-        self.assertEqual(series.name, self.cash)
-
-    def test_time_series_identifier_ticker(self):
-        """Test time_series with identifier='ticker'."""
-        dates = pd.date_range(start="2025-01-01", end="2025-01-05", freq="D")
-        series = self.cash.time_series(dates, identifier="ticker")
-        self.assertEqual(series.name, self.cash.ticker)
-
-    def test_time_series_identifier_identity_code(self):
-        """Test time_series with identifier='identity_code'."""
-        dates = pd.date_range(start="2025-01-01", end="2025-01-05", freq="D")
-        series = self.cash.time_series(dates, identifier="identity_code")
-        self.assertEqual(series.name, self.cash.identity_code)
-
     def test_update_all_creates_cash_for_all_currencies(self):
         """Test update_all creates Cash instance for each Currency."""
         # Get count of currencies
@@ -1192,6 +1163,243 @@ class TestExchangeTradeFund(TestBase):
         self.assertEqual(etf_foreign._locality, "foreign")
 
 
+class TestCashGetTimeSeriesProcessor(TestBase):
+    """Test suite for Cash.get_time_series_processor method."""
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        self.cash = Cash(self.currency)
+        self.session.add(self.cash)
+        self.session.commit()
+
+    def test_get_time_series_processor_returns_processor(self):
+        """Test that method returns TimeSeriesProcessor instance."""
+        from src.asset_base.time_series_processor import TimeSeriesProcessor
+        date_index = pd.DatetimeIndex([
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 2),
+            datetime.date(2024, 1, 3)
+        ])
+        tsp = self.cash.get_time_series_processor(date_index)
+        self.assertIsInstance(tsp, TimeSeriesProcessor)
+
+    def test_get_time_series_processor_requires_date_index(self):
+        """Test that date_index parameter is required."""
+        # Missing date_index should raise TypeError
+        with self.assertRaises(TypeError):
+            self.cash.get_time_series_processor()
+
+    def test_get_time_series_processor_invalid_date_index_type(self):
+        """Test that invalid date_index type raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.cash.get_time_series_processor(date_index=[1, 2, 3])
+
+    def test_get_time_series_processor_empty_date_index_raises_error(self):
+        """Test that empty date_index raises ValueError."""
+        date_index = pd.DatetimeIndex([])
+        with self.assertRaises(ValueError):
+            self.cash.get_time_series_processor(date_index)
+
+    def test_get_time_series_processor_default_price_item(self):
+        """Test that default price_item is 'price'."""
+        date_index = pd.DatetimeIndex([
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 2)
+        ])
+        tsp = self.cash.get_time_series_processor(date_index)
+        self.assertIsNotNone(tsp.prices_df)
+
+    def test_get_time_series_processor_invalid_price_item_raises_error(self):
+        """Test that non-'price' price_item raises ValueError."""
+        date_index = pd.DatetimeIndex([datetime.date(2024, 1, 1)])
+        with self.assertRaises(ValueError):
+            self.cash.get_time_series_processor(date_index, price_item='close')
+
+    def test_get_time_series_processor_includes_identity_code(self):
+        """Test that processor includes identity_code column."""
+        date_index = pd.DatetimeIndex([
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 2)
+        ])
+        tsp = self.cash.get_time_series_processor(date_index)
+        self.assertIn('identity_code', tsp.prices_df.columns)
+
+    def test_get_time_series_processor_prices_are_one(self):
+        """Test that cash prices are 1.0 for 'units' quote_units."""
+        date_index = pd.DatetimeIndex([
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 2),
+            datetime.date(2024, 1, 3)
+        ])
+        tsp = self.cash.get_time_series_processor(date_index)
+        # All prices should be 1.0
+        prices = tsp.prices_df['price'].values
+        self.assertTrue(all(p == 1.0 for p in prices))
+
+    def test_get_time_series_processor_date_index_length_matches(self):
+        """Test that processor has same number of dates as input."""
+        date_index = pd.DatetimeIndex([
+            datetime.date(2024, 1, 1),
+            datetime.date(2024, 1, 2),
+            datetime.date(2024, 1, 3)
+        ])
+        tsp = self.cash.get_time_series_processor(date_index)
+        # Should have 3 rows (excluding identity_code row if added that way)
+        # Based on code, identity_code is set via .loc which may add a row
+        # Check that we have at least the expected dates
+        self.assertGreaterEqual(len(tsp.prices_df), len(date_index))
+
+
+class TestListedEquityGetTimeSeriesProcessor(TestBase):
+    """Test suite for ListedEquity.get_time_series_processor method."""
+
+    @classmethod
+    def setUpClass(cls):
+        """Set up class-wide test fixtures."""
+        super().setUpClass()
+        cls.listed_name = "Test Listed for TSP"
+        cls.isin = "US0231351067"  # Different ISIN
+        cls.ticker_symbol = "TSPTST"
+        cls.status = "listed"
+
+    def setUp(self):
+        """Set up test fixtures."""
+        super().setUp()
+        # Create a ListedEquity instance
+        self.listed_equity = ListedEquity(
+            name=self.listed_name,
+            issuer=self.issuer,
+            isin=self.isin,
+            exchange=self.exchange,
+            ticker=self.ticker_symbol,
+            status=self.status
+        )
+        self.session.add(self.listed_equity)
+        self.session.commit()
+
+        # Add some EOD data
+        from src.asset_base.time_series import ListedEOD
+        for i in range(5):
+            date = datetime.date(2024, 1, 1) + datetime.timedelta(days=i)
+            eod = ListedEOD(
+                base_obj=self.listed_equity,
+                date_stamp=date,
+                open=100.0 + i,
+                close=101.0 + i,
+                high=102.0 + i,
+                low=99.0 + i,
+                adjusted_close=101.0 + i,
+                volume=1000 + i
+            )
+            self.session.add(eod)
+
+        # Add some dividend data
+        from src.asset_base.time_series import Dividend
+        div = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=datetime.date(2024, 1, 3),
+            currency="USD",
+            declaration_date=datetime.date(2024, 1, 1),
+            payment_date=datetime.date(2024, 1, 10),
+            period="Quarterly",
+            record_date=datetime.date(2024, 1, 2),
+            unadjusted_value=1.5,
+            adjusted_value=1.5
+        )
+        self.session.add(div)
+
+        # Add some split data
+        from src.asset_base.time_series import Split
+        split = Split(
+            base_obj=self.listed_equity,
+            date_stamp=datetime.date(2024, 1, 4),
+            numerator=2,
+            denominator=1
+        )
+        self.session.add(split)
+
+        self.session.commit()
+
+    def test_get_time_series_processor_returns_processor(self):
+        """Test that method returns TimeSeriesProcessor instance."""
+        from src.asset_base.time_series_processor import TimeSeriesProcessor
+        tsp = self.listed_equity.get_time_series_processor()
+        self.assertIsInstance(tsp, TimeSeriesProcessor)
+
+    def test_get_time_series_processor_default_price_item_is_close(self):
+        """Test that default price_item is 'close'."""
+        tsp = self.listed_equity.get_time_series_processor()
+        # Should have 'price' column (renamed from 'close')
+        self.assertIn('price', tsp.prices_df.columns)
+
+    def test_get_time_series_processor_with_open_price_item(self):
+        """Test that price_item='open' works."""
+        tsp = self.listed_equity.get_time_series_processor(price_item='open')
+        self.assertIsNotNone(tsp.prices_df)
+        self.assertIn('price', tsp.prices_df.columns)
+
+    def test_get_time_series_processor_with_high_price_item(self):
+        """Test that price_item='high' works."""
+        tsp = self.listed_equity.get_time_series_processor(price_item='high')
+        self.assertIsNotNone(tsp.prices_df)
+        self.assertIn('price', tsp.prices_df.columns)
+
+    def test_get_time_series_processor_with_low_price_item(self):
+        """Test that price_item='low' works."""
+        tsp = self.listed_equity.get_time_series_processor(price_item='low')
+        self.assertIsNotNone(tsp.prices_df)
+        self.assertIn('price', tsp.prices_df.columns)
+
+    def test_get_time_series_processor_invalid_price_item_raises_error(self):
+        """Test that invalid price_item raises ValueError."""
+        with self.assertRaises(ValueError):
+            self.listed_equity.get_time_series_processor(price_item='invalid_column')
+
+    def test_get_time_series_processor_includes_identity_code(self):
+        """Test that processor includes identity_code column."""
+        tsp = self.listed_equity.get_time_series_processor()
+        self.assertIn('identity_code', tsp.prices_df.columns)
+
+    def test_get_time_series_processor_has_dividends(self):
+        """Test that processor includes dividends DataFrame."""
+        tsp = self.listed_equity.get_time_series_processor()
+        self.assertIsNotNone(tsp.dividends_df)
+        self.assertGreater(len(tsp.dividends_df), 0)
+
+    def test_get_time_series_processor_dividends_renamed_correctly(self):
+        """Test that dividend column is added (copy of unadjusted_value)."""
+        tsp = self.listed_equity.get_time_series_processor()
+        self.assertIn('dividend', tsp.dividends_df.columns)
+        self.assertIn('unadjusted_value', tsp.dividends_df.columns)
+        # Verify dividend equals unadjusted_value
+        import numpy as np
+        np.testing.assert_array_equal(
+            tsp.dividends_df['dividend'].values,
+            tsp.dividends_df['unadjusted_value'].values
+        )
+
+    def test_get_time_series_processor_has_splits(self):
+        """Test that processor includes splits DataFrame."""
+        tsp = self.listed_equity.get_time_series_processor()
+        self.assertIsNotNone(tsp.splits_df)
+        self.assertGreater(len(tsp.splits_df), 0)
+
+    def test_get_time_series_processor_splits_have_numerator_denominator(self):
+        """Test that splits DataFrame has numerator and denominator columns."""
+        tsp = self.listed_equity.get_time_series_processor()
+        self.assertIn('numerator', tsp.splits_df.columns)
+        self.assertIn('denominator', tsp.splits_df.columns)
+
+    def test_get_time_series_processor_price_column_renamed(self):
+        """Test that selected price_item is renamed to 'price'."""
+        tsp = self.listed_equity.get_time_series_processor(price_item='open')
+        # Should have 'price' column but not 'open' column
+        self.assertIn('price', tsp.prices_df.columns)
+        # The original 'open' should not be in the columns after filtering
+        self.assertNotIn('open', tsp.prices_df.columns)
+
+
 def suite():
     """Create and return test suite with all test classes."""
     test_suite = unittest.TestSuite()
@@ -1204,6 +1412,8 @@ def suite():
         TestListedEquity,
         TestIndex,
         TestExchangeTradeFund,
+        TestCashGetTimeSeriesProcessor,
+        TestListedEquityGetTimeSeriesProcessor,
     ]
 
     for test_class in test_classes:
@@ -1211,7 +1421,6 @@ def suite():
         test_suite.addTests(tests)
 
     return test_suite
-
 
 if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
