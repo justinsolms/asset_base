@@ -378,12 +378,6 @@ class StaticIndices(_Feed):
         # Mark the data as static (non feed API).
         data["static"] = True
 
-        # For testing purposes only!!!
-        if "_test_ticker_list" in kwargs and kwargs["_test_ticker_list"] is not None:
-            _test_ticker_list = kwargs.pop("_test_ticker_list")
-            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data["ticker"].isin(_test_ticker_list)]
-
         return data
 
     def get_indices(self, index_list, **kwargs):
@@ -485,12 +479,6 @@ class MetaData(_Feed):
         data = data[list(column_dict.keys())]
         data.rename(columns=column_dict, inplace=True)
 
-        # For testing purposes only!!!
-        if "_test_isin_list" in kwargs and kwargs["_test_isin_list"] is not None:
-            _test_isin_list = kwargs.pop("_test_isin_list")
-            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data["isin"].isin(_test_isin_list)]
-
         return data
 
     def get_indices(self, feed="EOD", **kwargs) -> pd.DataFrame:
@@ -518,12 +506,6 @@ class MetaData(_Feed):
             data.rename(columns=column_dict, inplace=True)
         else:
             raise Exception("Feed {} not implemented.".format(feed))
-
-        # For testing purposes only!!!
-        if "_test_ticker_list" in kwargs and kwargs["_test_ticker_list"] is not None:
-            _test_ticker_list = kwargs.pop("_test_ticker_list")
-            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data["ticker"].isin(_test_ticker_list)]
 
         return data
 
