@@ -144,15 +144,18 @@ class Dump(_Feed):
         super().__init__(testing=testing)
 
     def write(self, dump_dict):
-        """Write a dict of ``pandas.DataFrame`` to CSV files.
+        """Write a mapping of class names to ``pandas.DataFrame`` files.
 
-        The key is the file prefix.
+        Each entry in ``dump_dict`` is written as a pickle file named
+        ``"<key>.pandas.dataframe.pkl"`` under this dumper's data directory.
+        Keys are typically class names (for example ``"ListedEquity"``,
+        ``"ListedEOD"``) so that corresponding :meth:`read` calls can
+        reconstruct the mapping.
 
         Parameters
         ----------
         dump_dict : dict of pandas.DataFrame
-            A dict of pandas DataFrames to dump. The key shall be used to
-            construct the file name as `<key>.pandas.dataframe.pkl`.
+            Mapping from a string key to the DataFrame to be dumped.
         """
         for key, item in list(dump_dict.items()):
             file_name = f"{key}.pandas.dataframe.pkl"
@@ -161,20 +164,21 @@ class Dump(_Feed):
             logger.info(f"Dumped class {key} to {path}")
 
     def read(self, key_name_list):
-        """Read a dict of ``pandas.DataFrame`` from CSV files.
+        """Read one or more dumped ``pandas.DataFrame`` objects.
 
-        The file prefix is the key.
+        For each name in ``key_name_list`` a file named
+        ``"<name>.pandas.dataframe.pkl"`` is loaded from this dumper's data
+        directory and returned in a dictionary keyed by that same name.
 
         Parameters
         ----------
         key_name_list : list of str
-            A set or subset list object of the strings used for dict keys in the
-            `write()` method.
+            Iterable of keys previously used in :meth:`write`.
 
         Returns
         -------
         dict of pandas.DataFrame
-            The key shall be the CSV file name prefix
+            Mapping from key name to the loaded DataFrame.
         """
         dump_dict = dict()
         for name in key_name_list:

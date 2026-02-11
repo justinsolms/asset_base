@@ -1527,57 +1527,47 @@ class Listed(Share):
         status=None,
         create=True,
         **kwargs,
-    ):
-        """Manufacture/retrieve an instance from the given parameters.
+        ):
+        """Retrieve or create a ``Listed`` instance.
 
-        If a record of the specified class instance does not exist then add it,
-        else do nothing. Then return the instance.
+        The factory always *tries to retrieve first*, using either the
+        ``isin`` *or* the (``mic``, ``ticker``) pair as the lookup key. If a
+        matching row is found it is returned (and optionally reconciled with
+        any non-``None`` parameters). If none is found and ``create`` is
+        ``True``, a new ``Listed`` is created; otherwise a ``FactoryError`` is
+        raised.
 
-        If either an ISIN number or a MIC and Ticker are provided the factory
-        shall first attempt retrieval. Failing that if the other parameters are
-        sufficient then a new instance shall be committed to the session.
+        Modes
+        -----
+        **Retrieval** (no new row is created):
+        - At least one of the following identifier sets must be supplied:
+            - ``isin``
+            - both ``mic`` and ``ticker``
+        - ``create`` may be ``True`` or ``False``; retrieval is always
+            attempted first.
+        - If no existing instance is found and ``create`` is ``False``, a
+            ``FactoryError`` is raised.
 
-        Factory Method Behavior
-        ------------------------
-        This factory operates in two modes controlled by the ``create`` parameter:
+        **Creation** (row is created only when missing and ``create`` is True):
+        - If retrieval fails and ``create`` is ``True``, the following
+            arguments are required in addition to a valid identifier
+            (``isin`` and ``ticker``):
+            - ``listed_name``
+            - ``issuer_name``
+            - ``issuer_domicile_code``
+            - ``mic``
+        - The referenced ``Exchange`` and ``Issuer`` (and their domiciles) are
+            resolved via their respective ``factory`` methods and must already
+            exist; otherwise a ``FactoryError`` is raised.
 
-        **Retrieval Mode** (create=False or minimal identifiers):
-            Retrieves an existing Listed by ISIN or by (MIC, ticker) pair.
-            Raises ``FactoryError`` if not found.
-
-            Examples::
-
-                # Retrieve by ISIN
-                listed = Listed.factory(
-                    session, isin="US0378331005", create=False
-                )
-
-                # Retrieve by exchange MIC and ticker
-                listed = Listed.factory(
-                    session, mic="XNYS", ticker="AAPL", create=False
-                )
-
-        **Creation Mode** (create=True with full parameters):
-            Retrieves existing Listed or creates new one if missing.
-            **Important**: The issuer, exchange, and their domiciles must already
-            exist or ``FactoryError`` is raised.
-
-            Example::
-
-                # Issuer domicile and exchange must already exist
-                listed = Listed.factory(
-                    session, isin="US0378331005",
-                    listed_name="Apple Inc", ticker="AAPL",
-                    issuer_name="Apple Inc",
-                    issuer_domicile_code="US",
-                    mic="XNYS", status="listed"
-                )
-
-        **Dependency Enforcement**:
-            This factory calls ``Issuer.factory()`` and ``Exchange.factory()`` which
-            in turn call ``Domicile.factory()`` in retrieval mode, ensuring all
-            dependencies must pre-exist. This prevents accidental creation of
-            foundational Entity/Domicile/Currency records.
+        Reconciliation of existing rows
+        --------------------------------
+        When an existing instance is found, selected fields are updated from
+        the arguments *if* non-``None`` values are provided and consistent:
+        - ``listed_name``, ``mic``, ``ticker`` and ``status`` may be updated.
+        - The issuer is treated as immutable: providing an ``issuer_name`` or
+            ``issuer_domicile_code`` that conflicts with the stored issuer
+            raises ``ReconcileError``.
 
         Parameters
         ----------
@@ -1759,10 +1749,17 @@ class Listed(Share):
 
     @classmethod
     def dump(cls, session, dumper: Dump):
-        """Dump all class instances and their time series data to disk.
+        """Dump ``Listed`` metadata and its time series to disk.
 
-        The data can be re-used to re-create all class instances and the time
-        series data using the ``reuse`` method.
+        This method serialises all ``Listed`` instances (identified by ISIN)
+        to a :class:`pandas.DataFrame` and writes it via ``dumper`` under the
+        key ``Listed.__name__``. It then delegates to ``ListedEOD.dump`` to
+        persist end-of-day time-series data for each listed security.
+
+        Only data that originates from external data sources (such as APIs)
+        is dumped. Static reference tables (currencies, domiciles, exchanges,
+        issuers, etc.) are *not* dumped and must be recreated separately when
+        reusing.
 
         Parameters
         ----------
@@ -1773,6 +1770,7 @@ class Listed(Share):
 
         See also
         --------
+        .reuse
         .asset_base.AssetBase.dump
 
         """
@@ -1787,7 +1785,33 @@ class Listed(Share):
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
-        """Reuse dumped data as a database initialization resource.
+        """Populate ``Listed`` and its EOD series from a dump.
+
+        This reads previously dumped ``Listed`` metadata (keyed by ISIN) from
+        ``dumper`` and reconstructs or updates instances via
+        :meth:`from_data_frame`. It then delegates to ``ListedEOD.reuse`` to
+        restore end-of-day time-series data for each listed security.
+
+        Intended usage
+        --------------
+        - Use this primarily to initialise a *new* and otherwise empty
+            application database that already contains all required static
+            reference data (currencies, domiciles, exchanges, issuers, etc.).
+        - The dump is keyed by business identifiers (ISIN and MIC/ticker). New
+            database primary keys are allowed to differ from the database that
+            produced the dump.
+
+        Effects on existing data
+        ------------------------
+        - When called on a non-empty database, existing ``Listed`` instances
+            for the same identifiers may be reconciled or updated by the
+            underlying :meth:`factory` / :meth:`from_data_frame` logic.
+        - Time-series reuse deletes existing records for the relevant asset
+            class before inserting those from the dump (see
+            ``TimeSeriesBase.reuse``).
+
+        Note that there is currently no date-based filtering: all rows present
+        in the dump will be reinserted for the matching assets.
 
         Parameters
         ----------
@@ -1795,13 +1819,6 @@ class Listed(Share):
             A session attached to the desired database.
         dumper : .financial_data.Dump
             The financial data dumper.
-
-        Warning
-        -------
-        This method is intended to be used only to initialise a new and empty database.
-        Data in the reused dump file that has a `date_stamp` on or before the
-        recorded last date from the previous addition of time series instances
-        will be ignored. In other words, your dumped data will not be reused.
 
         See also
         --------

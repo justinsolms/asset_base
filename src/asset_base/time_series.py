@@ -147,37 +147,39 @@ class TimeSeriesBase(Base):
     @classmethod
     def from_data_frame(cls, session, asset_class, data_frame):
         # FIXME: Use overloaded method pointer class attributes instead of these arguments
-        """Insert instances into the database from ``pandas.DataFrame`` rows.
+        """Upsert time-series records from a ``pandas.DataFrame``.
 
-        This method uses the SqlAlchemy session ``add_all`` method to add or
-        updates all the ``asset.Asset`` child class' time series.
+        For each row in ``data_frame`` this method:
+
+        - Resolves the owning asset instance using the
+          ``asset_class.KEY_CODE_LABEL`` column (for example ``isin`` for
+          ``Listed``).
+        - Checks whether a time-series record already exists for the
+          combination of asset and ``date_stamp``.
+        - Updates existing records in place, or creates new ones when missing.
+
+        The mapping from business identifiers (e.g. ISIN) to the internal
+        database primary key is performed using
+        :meth:`asset_class.key_code_id_table`. This allows a dump produced from
+        one database to be safely reused with another database that has
+        different primary-key values, as long as the business identifiers are
+        consistent.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             The database session.
         asset_class : .asset.AssetBase or child class
-            The ``Base`` class which has this time-series data. (Not to be
-            confused with the market asset class of security such as cash,
-            bonds, equities commodities, etc.).
+            The ``Base`` class that the time-series belongs to (for example
+            ``ListedEquity``). This is *not* the market asset-class label.
         data_frame : pandas.DataFrame
-            A ``pandas.DataFrame`` with columns with names identical to the
-            ``TimeSeriesBase`` child class' constructor' method arguments, with
-            the exception that there must be no would-be column named
-            `base_obj`. Instead there must be a column with the name given by
-            the `asset_class.KEY_CODE_LABEL` class attribute. This
-            `asset_class.KEY_CODE_LABEL` is a string giving the name of the
-            column that contains values that allow for the identification of the
-            `asset_class` instance that the time-series data row belongs to. For
-            example, if the `asset_class` is ``asset.Listed``, then the
-            `KEY_CODE_LABEL` and therefore column name would be `isin` with
-            listed security ISIN numbers as rows. If for example the
-            `asset_class` is ``asset.Cash``, then the `KEY_CODE_LABEL` and
-            therefore column name would be `asset_currency`. This column must be
-            populated with the `<asset_class>.key_code` respective class
-            attribute value. This text string based approach is more convenient
-            for formatting data identity when fetched from financial data API
-            services.
+            A ``pandas.DataFrame`` with columns matching the concrete
+            ``TimeSeriesBase`` subclass' constructor arguments, except that
+            there must be no ``base_obj`` column. Instead a column named
+            ``asset_class.KEY_CODE_LABEL`` must be present and contain the
+            identifying key (for example ISIN) for the owning asset instance.
+            This column is used solely to resolve the asset IDs and is dropped
+            before records are created or updated.
         """
 
         # Check for zero rows of data
@@ -356,10 +358,14 @@ class TimeSeriesBase(Base):
 
     @classmethod
     def dump(cls, session, dumper: Dump, asset_class_cls):
-        """Dump all class instances and their time series data to disk.
+        """Dump time-series data for a given asset class to disk.
 
-        The data can be re-used to re-create all class instances and the time
-        series data using the ``reuse`` method.
+        All instances of ``cls`` that belong to assets of ``asset_class_cls``
+        are exported to a :class:`pandas.DataFrame` via :meth:`to_data_frame`
+        and written by ``dumper`` under the key ``cls.__name__``. The
+        resulting dump contains business identifiers (for example ISIN) rather
+        than database primary keys so that it can be reused across different
+        databases.
 
         Parameters
         ----------
@@ -368,8 +374,8 @@ class TimeSeriesBase(Base):
         dumper : .financial_data.Dump
             The financial data dumper.
         asset_class_cls : .asset.Asset (or child class) class reference
-            The ``Asset`` class reference which which when instantiated could be
-            composed of this time-series data.
+            The ``Asset`` class whose instances own the time-series records
+            being dumped (for example ``ListedEquity`` for ``ListedEOD``).
 
         See also
         --------
@@ -393,7 +399,19 @@ class TimeSeriesBase(Base):
 
     @classmethod
     def reuse(cls, session, dumper: Dump, asset_class_cls):
-        """Reuse dumped data as a database initialization resource.
+        """Restore or refresh time-series data from a dump.
+
+        The dump is expected to have been produced by :meth:`dump` and to be
+        keyed by ``cls.__name__``. All existing time-series rows of this class
+        are first deleted using instance-level deletes (safe for
+        joined-table inheritance), and then :meth:`from_data_frame` is used to
+        repopulate them from the dumped :class:`pandas.DataFrame`.
+
+        The mapping from the business identifiers in the dump to asset IDs is
+        performed via ``asset_class_cls.key_code_id_table(session)``, so the
+        database receiving the dump must already contain the corresponding
+        asset instances, but their primary-key values may differ from those of
+        the database that produced the dump.
 
         Parameters
         ----------
@@ -402,15 +420,8 @@ class TimeSeriesBase(Base):
         dumper : .financial_data.Dump
             The financial data dumper.
         asset_class_cls : .asset.Asset (or child class) class reference
-            The ``Asset`` class reference which which when instantiated could be
-            composed of this time-series data.
-
-        Warning
-        -------
-        This method is intended to be used only to initialise a new and empty database.
-        Data in the reused dump file that has a `date_stamp` on or before the
-        recorded last date from the previous addition of time series instances
-        will be ignored. In other words, your dumped data will not be reused.
+        The ``Asset`` class reference which, when instantiated, owns the
+        time-series data (for example ``ListedEquity`` for ``ListedEOD``).
 
         See also
         --------

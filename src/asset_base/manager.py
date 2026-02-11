@@ -410,31 +410,43 @@ class ManagerBase(object):
         self.commit()
 
     def dump(self):
-        """Dump re-usable content to disk files.
+        """Dump reusable market data to disk files.
 
-        The purpose of the dump files is to provide a convenience reusable data
-        source for initialising the ``asset_base`` database without
-        necessitating a lengthy download of data from the data feeds (via the
-        ``financial_data` module). Instead time may be save as most of the
-        previously dumped data should be reused and only a small fraction of new
-        data download form feeds.
+        This method serialises the classes listed in ``classes_to_dump`` using
+        their class-level :meth:`dump` implementations (for example
+        :meth:`ListedEquity.dump`). The resulting files can later be consumed
+        by :meth:`reuse` to rebuild non-static market data without refetching
+        it from upstream data feeds.
 
-        The dump shall include data from the classes:
-        - ListedEquity (and its time series data: ListedEOD, Dividend and Split)
+        By design, *static* reference data is **not** dumped here. The
+        following are always recreated from the built-in static files in
+        :mod:`financial_data` and must exist before reuse is attempted:
 
-        This excludes the following data items which are always available as
-        static data through the ``financial_data.Static`` class or as
-        derived data form the static data:
         - Currency
         - Domicile
         - Exchange
         - Cash
+
+        Currently ``classes_to_dump`` includes only ``ListedEquity`` (and its
+        associated time series data: ``ListedEOD``, ``Dividend`` and
+        ``Split``).
         """
         for cls in self.classes_to_dump:
             cls.dump(self.session, self.dumper)
 
     def reuse(self):
-        """Reuse dumped data as a database initialization resource.
+        """Reuse previously dumped market data as a database initialisation resource.
+
+        For each class in ``classes_to_dump`` this method calls the
+        corresponding class-level :meth:`reuse`. Static reference tables (such
+        as currencies, domiciles, exchanges and cash) are **not** populated
+        here and must already exist in the database, typically via
+        :meth:`set_up`.
+
+        ``reuse`` is primarily intended to speed up creation of a new database
+        by avoiding repeated API downloads; it reconstructs objects based on
+        business identifiers (for example ISIN) rather than preserving primary
+        key values from the database that produced the dump.
 
         See also
         --------
@@ -453,7 +465,13 @@ class ManagerBase(object):
                     f"Reused dumped data for {class_name}")
 
     def delete_dumps(self):
-        """Delete dumped data folder."""
+        """Delete all dump files while keeping the dump folder.
+
+        This is a convenience wrapper around :meth:`Dump.delete`. It removes
+        all dumped DataFrame files but intentionally leaves the underlying dump
+        directory in place so that future dump operations can recreate files
+        without needing to recreate the directory structure.
+        """
         self.dumper.delete()
 
     def get_meta(self):
