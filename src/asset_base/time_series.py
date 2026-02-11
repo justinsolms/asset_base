@@ -424,9 +424,11 @@ class TimeSeriesBase(Base):
 
         # For reuse operations, ensure we delete any existing records first
         # to prevent conflicts during bulk insert
-        existing_count = session.query(cls).count()
-        if existing_count > 0:
-            session.query(cls).delete()
+        # Use proper deletion for joined-table inheritance
+        existing_records = session.query(cls).all()
+        if existing_records:
+            for record in existing_records:
+                session.delete(record)
             session.flush()
 
         cls.from_data_frame(session, asset_class_cls, data_frame_dict[class_name])
@@ -1252,14 +1254,11 @@ class Split(TimeSeriesBase):
             date_stamp : datetime.date
             numerator : float
             denominator : float
-            ratio : float
         """
         return {
             "date_stamp": self.date_stamp,
             "numerator": self.numerator,
             "denominator": self.denominator,
-            # TODO: Add unittest for this new field
-            "ratio": self.numerator / self.denominator,
         }
 
     @classmethod

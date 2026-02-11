@@ -1354,6 +1354,19 @@ class Listed(Share):
     # TODO: Automate from class magic attributes.
     _name_appendix = "Listed"
 
+    @staticmethod
+    def _check_isin(isin):
+        """Check to see if the isin number provided is valid."""
+        if stdisin.is_valid(isin):
+            # Convert the number to the minimal representation. This strips
+            # the number of any valid separators and removes surrounding
+            # whitespace.
+            isin = stdisin.compact(isin)
+        else:
+            raise BadISIN(isin)
+
+        return isin
+
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
         # Currency is the exchange listing currency, i.e., the exchange's
@@ -1794,24 +1807,8 @@ class Listed(Share):
         # Re-use all security end-of-day time-series data
         ListedEOD.reuse(session, dumper, Listed)
 
-    @staticmethod
-    def _check_isin(isin):
-        """Check to see if the isin number provided is valid."""
-        if stdisin.is_valid(isin):
-            # Convert the number to the minimal representation. This strips
-            # the number of any valid separators and removes surrounding
-            # whitespace.
-            isin = stdisin.compact(isin)
-        else:
-            raise BadISIN(isin)
 
-        return isin
-
-
-# TODO: Make a ListedEquityBase parent with ListedEquity next to ExchangeTradeFund child classes. The idea is to use only the leaves orf a hierarchical tree
 class ListedEquity(Listed):
-    # TODO: Document behaviour. Esp. reg. name and isin changes.
-    # TODO: Calculate time-series based on holdings. Specify depth to look
     """Exchange listed ordinary shares in an issuing company.
 
     Ordinary shares are also known as equity shares and they are the most
@@ -1973,18 +1970,21 @@ class ListedEquity(Listed):
 
         """
         dictionary = super().to_dict()
-        additional_dict = {
-            "industry_class": self.industry_class,
-            "industry_name": self._industry_class_icb.industry_name,
-            "super_sector_name": self._industry_class_icb.super_sector_name,
-            "sector_name": self._industry_class_icb.sector_name,
-            "sub_sector_name": self._industry_class_icb.sub_sector_name,
-            "industry_code": self._industry_class_icb.industry_code,
-            "super_sector_code": self._industry_class_icb.super_sector_code,
-            "sector_code": self._industry_class_icb.sector_code,
-            "sub_sector_code": self._industry_class_icb.sub_sector_code,
-        }
-        dictionary.update(additional_dict)
+
+        # Only add industry classification if it exists
+        if self._industry_class_icb is not None:
+            additional_dict = {
+                "industry_class": self.industry_class,
+                "industry_name": self._industry_class_icb.industry_name,
+                "super_sector_name": self._industry_class_icb.super_sector_name,
+                "sector_name": self._industry_class_icb.sector_name,
+                "sub_sector_name": self._industry_class_icb.sub_sector_name,
+                "industry_code": self._industry_class_icb.industry_code,
+                "super_sector_code": self._industry_class_icb.super_sector_code,
+                "sector_code": self._industry_class_icb.sector_code,
+                "sub_sector_code": self._industry_class_icb.sub_sector_code,
+            }
+            dictionary.update(additional_dict)
 
         return dictionary
 
