@@ -129,6 +129,16 @@ ASSET_CLASSES = ("money", "bond", "property", "equity", "commodity", "multi")
 class AssetBase(Common):
     """Base class for the module.
 
+    Parameters
+    ----------
+    name : str
+        Entity full name.
+    currency : .entity.Currency
+        Currency of asset pricing.
+    quote_units : {'units', 'cents'}, optional
+        Price quotations are either in currency units (default) or currency
+        cents.
+
     Note
     ----
     This class uses the ``@functools.total_ordering`` decorator and implements
@@ -152,6 +162,10 @@ class AssetBase(Common):
     _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship(Currency)
 
+    # Price quote in cents or units. Strictly convert all prices to currency
+    # units in case of this attribute being in cents.
+    quote_units = Column(Enum("units", "cents"), nullable=False)
+
     # All historical generic time-series collection ranked by date_stamp
     _series = relationship(
         TimeSeriesBase,
@@ -161,9 +175,16 @@ class AssetBase(Common):
         )
     """list: EOD historical time-series collection ranked by date_stamp."""
 
-    def __init__(self, name, currency):
+    def __init__(self, name, currency, quote_units="units"):
         """Instance initialization."""
         self.currency = currency
+
+        # Check quote_units is valid
+        if quote_units not in ("units", "cents"):
+            raise ValueError(
+                f"Unexpected `quote_units` argument {quote_units}. "
+                "Expected 'units' or 'cents'.")
+        self.quote_units = quote_units
 
         super().__init__(name)
 
@@ -277,10 +298,6 @@ class Asset(AssetBase):
     _owner_id = Column(Integer, ForeignKey("entity._id"), nullable=True)
     owner = relationship("Entity", backref="asset_list", foreign_keys=[_owner_id])
 
-    # Price quote in cents or units. Strictly convert all prices to currency
-    # units in case of this attribute being in cents.
-    quote_units = Column(Enum("units", "cents"), nullable=False)
-
     # TODO: This (or child) is were we would add asset fundamental data relationships
     # TODO: This (or child) is were we would add asset book relationships
 
@@ -288,19 +305,14 @@ class Asset(AssetBase):
     # indeterminate.
     _asset_class = None
 
-    def __init__(self, name, currency, **kwargs):
+    def __init__(self, name, currency, quote_units="units", **kwargs):
         """Instance initialization."""
-
-        if "quote_units" in kwargs:
-            self.quote_units = kwargs.pop("quote_units")
-        else:
-            self.quote_units = "units"
 
         # Asset owner
         if "owner" in kwargs:
             self.owner = kwargs.pop("owner")
 
-        super().__init__(name, currency, **kwargs)
+        super().__init__(name, currency, quote_units, **kwargs)
 
     @property
     def _eod_series(self):
