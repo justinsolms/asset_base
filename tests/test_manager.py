@@ -108,6 +108,34 @@ class TestManager(unittest.TestCase):
         if hasattr(self, 'manager'):
             self.manager.close()
 
+    def _configure_static_mock(self, mock_static, currency_tickers, domicile_codes, exchange_mics):
+        """Helper to configure Static mock with basic currency/domicile/exchange data."""
+        # Map currencies to countries
+        currency_map = {'USD': 'US', 'EUR': 'EU'}
+        country_names = {'US': 'United States', 'EU': 'European Union'}
+        currency_names = {'USD': 'US Dollar', 'EUR': 'Euro'}
+        exchange_names = {'XNYS': 'New York Stock Exchange', 'XLON': 'London Stock Exchange'}
+        exchange_countries = {'XNYS': 'US', 'XLON': 'GB'}
+
+        mock_static.get_currency.return_value = pd.DataFrame({
+            'ticker': currency_tickers,
+            'name': [currency_names.get(t, f'{t} Currency') for t in currency_tickers],
+            'country_code_list': [currency_map.get(t, t[:2]) for t in currency_tickers]
+        })
+
+        mock_static.get_domicile.return_value = pd.DataFrame({
+            'country_code': domicile_codes,
+            'country_name': [country_names.get(c, f'Country {c}') for c in domicile_codes],
+            'currency_ticker': [next((k for k, v in currency_map.items() if v == c), currency_tickers[0]) for c in domicile_codes]
+        })
+
+        mock_static.get_exchange.return_value = pd.DataFrame({
+            'mic': exchange_mics,
+            'exchange_name': [exchange_names.get(m, f'{m} Exchange') for m in exchange_mics],
+            'country_code': [exchange_countries.get(m, 'US') for m in exchange_mics],
+            'operating_mic': exchange_mics
+        })
+
     def _configure_standard_static_data(self, currency_tickers=None, domicile_codes=None, exchange_mics=None):
         """Configure standard static data mocks.
 
@@ -126,32 +154,71 @@ class TestManager(unittest.TestCase):
             domicile_codes = ['US']
         if exchange_mics is None:
             exchange_mics = ['XNYS']
+        self._configure_static_mock(self.mock_static, currency_tickers, domicile_codes, exchange_mics)
 
-        # Map currencies to countries
-        currency_map = {'USD': 'US', 'EUR': 'EU'}
-        country_names = {'US': 'United States', 'EU': 'European Union'}
-        currency_names = {'USD': 'US Dollar', 'EUR': 'Euro'}
-        exchange_names = {'XNYS': 'New York Stock Exchange', 'XLON': 'London Stock Exchange'}
-        exchange_countries = {'XNYS': 'US', 'XLON': 'GB'}
+    def _create_listed_equity(self, num_eod=3, add_dividend=True, add_split=True):
+        """Create a basic USD ListedEquity with optional EOD/dividend/split data."""
+        from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
+        import datetime
 
-        self.mock_static.get_currency.return_value = pd.DataFrame({
-            'ticker': currency_tickers,
-            'name': [currency_names.get(t, f'{t} Currency') for t in currency_tickers],
-            'country_code_list': [currency_map.get(t, t[:2]) for t in currency_tickers]
-        })
+        usd = Currency.factory(self.session, 'USD')
+        domicile = Domicile.factory(self.session, 'US')
+        issuer = Issuer.factory(self.session, 'Test Company', 'US')
+        exchange = Exchange.factory(self.session, 'XNYS')
 
-        self.mock_static.get_domicile.return_value = pd.DataFrame({
-            'country_code': domicile_codes,
-            'country_name': [country_names.get(c, f'Country {c}') for c in domicile_codes],
-            'currency_ticker': [next((k for k, v in currency_map.items() if v == c), currency_tickers[0]) for c in domicile_codes]
-        })
+        listed = ListedEquity(
+            name="Test Stock",
+            issuer=issuer,
+            isin="US0378331005",
+            exchange=exchange,
+            ticker="TEST",
+            status="listed"
+        )
+        self.session.add(listed)
+        self.session.commit()
 
-        self.mock_static.get_exchange.return_value = pd.DataFrame({
-            'mic': exchange_mics,
-            'exchange_name': [exchange_names.get(m, f'{m} Exchange') for m in exchange_mics],
-            'country_code': [exchange_countries.get(m, 'US') for m in exchange_mics],
-            'operating_mic': exchange_mics
-        })
+        # Add EOD data
+        for i in range(num_eod):
+            date = datetime.date(2024, 1, 1) + datetime.timedelta(days=i)
+            eod = ListedEOD(
+                base_obj=listed,
+                date_stamp=date,
+                open=100.0 + i,
+                close=101.0 + i,
+                high=102.0 + i,
+                low=99.0 + i,
+                adjusted_close=101.0 + i,
+                volume=1000 + i
+            )
+            self.session.add(eod)
+
+        if add_dividend:
+            dividend_date = datetime.date(2024, 1, 2)
+            dividend = Dividend(
+                base_obj=listed,
+                date_stamp=dividend_date,
+                currency='USD',
+                declaration_date=dividend_date,
+                payment_date=dividend_date,
+                period='Quarterly',
+                record_date=dividend_date,
+                unadjusted_value=0.50,
+                adjusted_value=0.50
+            )
+            self.session.add(dividend)
+
+        if add_split:
+            split_date = datetime.date(2024, 1, 3)
+            split = Split(
+                base_obj=listed,
+                date_stamp=split_date,
+                numerator=2.0,
+                denominator=1.0
+            )
+            self.session.add(split)
+
+        self.session.commit()
+        return listed
 
     def test_manager_initialization(self):
         """Test Manager instance initialization."""
@@ -252,109 +319,51 @@ class TestManager(unittest.TestCase):
             self.manager.get_time_series_processor([])
         self.assertIn("may not be empty", str(context.exception))
 
-    def test_get_time_series_processor_with_cash_requires_date_index(self):
-        """Test get_time_series_processor with only Cash requires date_index."""
-        self.manager.set_up(reuse=False, update=False)
-
-        from src.asset_base.entity import Currency
-        usd = Currency.factory(self.session, 'USD')
-        cash_usd = Cash(usd)
-
-        # Should raise ValueError without date_index
-        with self.assertRaises(ValueError) as context:
-            self.manager.get_time_series_processor([cash_usd])
-        self.assertIn("date_index", str(context.exception))
-
-    def test_get_time_series_processor_with_cash_and_date_index(self):
-        """Test get_time_series_processor with Cash and date_index."""
-        self.manager.set_up(reuse=False, update=False)
-
-        from src.asset_base.entity import Currency
-        import datetime
-
-        usd = Currency.factory(self.session, 'USD')
-        cash_usd = Cash(usd)
-
-        date_index = pd.DatetimeIndex([
-            datetime.date(2024, 1, 1),
-            datetime.date(2024, 1, 2),
-            datetime.date(2024, 1, 3)
-        ])
-
-        # Should work with date_index
-        tsp = self.manager.get_time_series_processor([cash_usd], date_index=date_index)
-        self.assertIsInstance(tsp, TimeSeriesProcessor)
-
     def test_get_time_series_processor_with_listed_equity(self):
-        """Test get_time_series_processor with ListedEquity."""
+        """Test get_time_series_processor with a ListedEquity identity_code."""
         self.manager.set_up(reuse=False, update=False)
+        listed = self._create_listed_equity(num_eod=3, add_dividend=True, add_split=True)
 
-        from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
-        import datetime
-
-        # Create necessary entities
-        usd = Currency.factory(self.session, 'USD')
-        domicile = Domicile.factory(self.session, 'US')
-        issuer = Issuer.factory(self.session, 'Test Company', 'US')
-        exchange = Exchange.factory(self.session, 'XNYS')
-
-        # Create a ListedEquity with EOD data
-        listed = ListedEquity(
-            name="Test Stock",
-            issuer=issuer,
-            isin="US0378331005",  # Valid ISIN (Apple Inc.)
-            exchange=exchange,
-            ticker="TEST",
-            status="listed"
-        )
-        self.session.add(listed)
-        self.session.commit()
-
-        # Add some EOD data
-        for i in range(3):
-            date = datetime.date(2024, 1, 1) + datetime.timedelta(days=i)
-            eod = ListedEOD(
-                base_obj=listed,
-                date_stamp=date,
-                open=100.0 + i,
-                close=101.0 + i,
-                high=102.0 + i,
-                low=99.0 + i,
-                adjusted_close=101.0 + i,
-                volume=1000 + i
-            )
-            self.session.add(eod)
-
-        # Add dividend data (required for get_time_series_processor)
-        dividend_date = datetime.date(2024, 1, 2)
-        dividend = Dividend(
-            base_obj=listed,
-            date_stamp=dividend_date,
-            currency='USD',
-            declaration_date=dividend_date,
-            payment_date=dividend_date,
-            period='Quarterly',
-            record_date=dividend_date,
-            unadjusted_value=0.50,
-            adjusted_value=0.50
-        )
-        self.session.add(dividend)
-
-        # Add split data (required for get_time_series_processor)
-        split_date = datetime.date(2024, 1, 3)
-        split = Split(
-            base_obj=listed,
-            date_stamp=split_date,
-            numerator=2.0,
-            denominator=1.0
-        )
-        self.session.add(split)
-        self.session.commit()
-
-        # Should work without date_index (uses EOD dates)
-        tsp = self.manager.get_time_series_processor([listed])
+        # Use identity_code for manager-level time series processor
+        tsp = self.manager.get_time_series_processor([listed.identity_code])
         self.assertIsInstance(tsp, TimeSeriesProcessor)
         self.assertGreater(len(tsp.prices_df), 0)
+
+    def test_get_time_series_processor_with_listed_equity_and_cash(self):
+        """Test get_time_series_processor with ListedEquity and cash asset."""
+        self.manager.set_up(reuse=False, update=False)
+        listed = self._create_listed_equity(num_eod=3, add_dividend=True, add_split=True)
+
+        # Get time series processor including cash asset via currency ticker
+        tsp = self.manager.get_time_series_processor(
+            [listed.identity_code], cash_currency_ticker='USD')
+        self.assertIsInstance(tsp, TimeSeriesProcessor)
+        self.assertGreater(len(tsp.prices_df), 0)
+
+        # Expect both listed equity and USD cash identity codes present
+        identity_codes = set(tsp.prices_df["identity_code"].unique())
+        self.assertIn(listed.identity_code, identity_codes)
+        self.assertIn('USD', identity_codes)
+
+    def test_get_resampled_total_returns_with_listed_equity_and_cash(self):
+        """Test get_resampled_total_returns for a ListedEquity and cash."""
+        self.manager.set_up(reuse=False, update=False)
+        # Provide enough observations for the TimeSeriesProcessor sample size check
+        listed = self._create_listed_equity(num_eod=25, add_dividend=False, add_split=False)
+
+        # Weekly resampled total returns including cash
+        total_returns = self.manager.get_resampled_total_returns(
+            [listed.identity_code], cash_currency_ticker='USD', frequency='W')
+
+        self.assertIsInstance(total_returns, pd.DataFrame)
+        self.assertGreater(len(total_returns.index), 0)
+        self.assertIn(listed.identity_code, total_returns.columns)
+        self.assertIn('USD', total_returns.columns)
+
+    def test_get_asset_dict_with_unknown_identity_code_raises(self):
+        """Unknown identity_code list yields TimeSeriesNoData."""
+        with self.assertRaises(TimeSeriesNoData):
+            self.manager.get_asset_dict(['UNKNOWN.IDENTITY'])
 
     def test_to_common_currency(self):
         """Test to_common_currency method."""
@@ -391,22 +400,8 @@ class TestManager(unittest.TestCase):
         """Test close method."""
         mock_static = unittest.mock.MagicMock()
         mock_static_class.return_value = mock_static
-        mock_static.get_currency.return_value = pd.DataFrame({
-            'ticker': ['USD'],
-            'name': ['US Dollar'],
-            'country_code_list': ['US']
-        })
-        mock_static.get_domicile.return_value = pd.DataFrame({
-            'country_code': ['US'],
-            'country_name': ['United States'],
-            'currency_ticker': ['USD']
-        })
-        mock_static.get_exchange.return_value = pd.DataFrame({
-            'mic': ['XNYS'],
-            'exchange_name': ['New York Stock Exchange'],
-            'country_code': ['US'],
-            'operating_mic': ['XNYS']
-        })
+        # Reuse common static mock configuration helper
+        self._configure_static_mock(mock_static, ['USD'], ['US'], ['XNYS'])
 
         temp_manager = Manager(dialect='memory', testing=True)
         temp_manager.set_up(reuse=False, update=False)

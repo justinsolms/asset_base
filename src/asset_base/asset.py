@@ -2149,10 +2149,25 @@ class ListedEquity(Listed):
             If no time series exists.
         """
         dividend_dict_list = [s.to_dict() for s in self._dividend_series]
-        # Check if distributions are expected. Then raise an exception if no data is found.
-        if self.distributions and len(dividend_dict_list) == 0:
-            raise DividendSeriesNoData(
-                f"Expected dividend data for {self} as `distributions` attribute is True.")
+
+        # If no dividend records exist
+        if len(dividend_dict_list) == 0:
+            # If distributions are expected then raise an explicit exception
+            # so that callers can decide how to handle missing data.
+            if self.distributions:
+                raise DividendSeriesNoData(
+                    f"Expected dividend data for {self} as `distributions` attribute is True.")
+
+            # If distributions are not expected and no data is present then
+            # return an empty DataFrame with the minimal required columns so
+            # that downstream code can treat dividends as simply absent.
+            series = pd.DataFrame(columns=["date_stamp", "unadjusted_value"])
+            series["date_stamp"] = pd.to_datetime(series["date_stamp"])
+            series.set_index("date_stamp", inplace=True)
+            series.sort_index(inplace=True)
+            series.name = self
+            return series
+
         # Warn if no distributions are expected but data is found. This is not
         # an exception as the distributions attribute may be incorrectly set to
         # False or there may be special distribution events.
@@ -2160,6 +2175,7 @@ class ListedEquity(Listed):
             logger.warning(
                 f"Found dividend data for {self} but `distributions` attribute "
                 "is False. Check if `distributions` is correctly set.")
+
         series = pd.DataFrame(dividend_dict_list)
         series["date_stamp"] = pd.to_datetime(series["date_stamp"])
         series.set_index("date_stamp", inplace=True)
