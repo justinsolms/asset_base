@@ -69,13 +69,17 @@ from sqlalchemy import String
 from sqlalchemy import Column
 from sqlalchemy import MetaData as SQLAlchemyMetaData
 
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 
-from .exceptions import NotSetUp, TimeSeriesNoData
+from .exceptions import (
+    NotSetUp,
+    TimeSeriesNoData,
+    EODSeriesNoData,
+)
 from .financial_data import Dump, History, MetaData, Static
 from .common import Base, SQLiteSession, TestSession
 from .entity import Domicile, Exchange
-from .asset import ExchangeTradeFund, Forex, ListedEquity, Currency, Cash
+from .asset import Asset, ExchangeTradeFund, Forex, ListedEquity, Currency, Cash, Listed
 from .time_series_processor import TimeSeriesProcessor
 
 
@@ -485,108 +489,7 @@ class ManagerBase(object):
         data = [(str(item.name), str(item.value)) for item in self.session.query(Meta)]
         return dict(data)
 
-    def get_time_series_processor(self, asset_list, price_item='close', date_index=None):
-        """Get a TimeSeriesProcessor for a list of assets.
 
-        Parameters
-        ----------
-        asset_list : list of Asset (or polymorph class) instances
-            A list of securities or assets for which time series are required.
-        price_item : str, optional
-            The specific item of price. Only valid values are: 'price', 'close',
-            'open', 'low', 'high'. Default is 'close'.
-        date_index : pandas.DatetimeIndex, optional
-            If there are non-cash securities specified in the `asset_list` then
-            this argument is overridden by the union of the date index (the
-            `pandas.DatetimeIndex`) of all the non-`Cash` security time-series.
-            If the `asset_list` argument specifies only `Cash` securities then
-            this data range is not optional and is required. It could be
-            provided by the the index of another `time_series` result.
-
-        The `TimeSeriesProcessor` returned by this method will have the
-        `price_item` time series for all the securities in the `asset_list` and
-        the union date index of the non-cash securities in the `asset_list` or
-        the `date_index` argument if there are no non-cash securities in the
-        `asset_list`. See the documentation of the `TimeSeriesProcessor` class
-        for more details on the `TimeSeriesProcessor` returned by this method.
-        The identity code of the securities in the `asset_list` will be used as
-        the column labels of the `price_item` time series in the returned
-        `TimeSeriesProcessor`.
-
-        Warning
-        -------
-        It is possible to have mixed currency and quote unit time series in the
-        returned `TimeSeriesProcessor` if the `asset_list` argument contains
-        securities with different currencies and quote units. This may be
-        undesirable and the user should consider transforming to a common
-        currency and quote unit using the `to_common_currency` method and
-        scaling the prices to a common quote unit before using the time series
-        data for further analysis.
-
-        """
-        if len(asset_list) == 0:
-            raise ValueError("Argument `asset_list` may not be empty.")
-
-        # Warning if a dataframe has mixed currency time series.
-        # TODO: Consider how to avoid this
-        if len(set(s.currency for s in asset_list)) > 1:
-            logger.warning(
-                "The asset_list is of mixed currencies. You should consider "
-                "transforming to a common currency!!")
-
-        # Warning if the quote units are mixed
-        # TODO: Consider how to avoid this
-        if len(set(s.quote_units for s in asset_list)) > 1:
-            logger.warning(
-                "The asset_list is of mixed quote units. You should consider "
-                "scaling prices to a common quote unit!!")
-
-        # Get a list of cash securities
-        cash_list = [item for item in asset_list if isinstance(item, Cash)]
-
-        # Get a list of non-cash securities
-        non_cash_list = [asset for asset in asset_list if not isinstance(asset, Cash)]
-
-        #  A date-index must be provided to specify the cash data date range if
-        #  there are no non-cash securities from which the date range may be
-        #  derived.
-        if len(non_cash_list) == 0 and date_index is None:
-            raise ValueError(
-                "Expected non-cash securities in asset_list or a date_index "
-                "argument to specify the date range for the cash securities."
-            )
-        elif len(non_cash_list) == 0:
-            # No non-cash securities
-            tsp_non_cash = None
-        else:
-            # Create a pandas.DataFrame of non-cash securities
-            tsp_non_cash_list = list()
-            # For non-Cash entities
-            for asset in non_cash_list:
-                tsp_non_cash_list.append(
-                    asset.get_time_series_processor(price_item=price_item))
-            tsp_non_cash = TimeSeriesProcessor.concat(tsp_non_cash_list)
-            # Override date_index, if any, with non-cash date index
-            if tsp_non_cash is not None:
-                logger.warning("Overriding date_index argument with non-cash securities date index.")
-            date_index = tsp_non_cash.get_date_index()
-
-        # For all Cash assets. We need the previous non-cash DatetimeIndex to
-        # construct Cash time series.
-        tsp_cash = None
-        for asset in cash_list:
-            tsp_cash = asset.get_time_series_processor(
-                date_index=date_index, price_item='price')
-
-        # Combine non-cash and cash time series
-        if tsp_non_cash is None:
-            tsp = tsp_cash
-        elif tsp_cash is None:
-            tsp = tsp_non_cash
-        else:
-            tsp = TimeSeriesProcessor.concat([tsp_non_cash, tsp_cash])
-
-        return tsp
 
     def to_common_currency(self, data_frame, currency_ticker):
         """Transform price-like time-series to a common currency.
@@ -657,8 +560,253 @@ class ManagerBase(object):
     # TODO: Add a method to transform and force a single currency within a
     # dataframe of mixed currency time series.
 
-    # TODO: Add a method to flag mixed currencies==True that a dataframe has
-    # mixed currency time series.
+    def get_time_series_processor(
+        self, identity_code_list, cash_currency_ticker=None, price_item="close"):
+        """Get a time series processor for a list of assets.
+
+        Parameters
+        ----------
+        identity_code_list : list of str
+            List of identity codes corresponding to ``Asset.identity_code``
+            (or polymorph) instances.
+        cash_currency_ticker : str, optional
+            ISO 4217 3-letter currency ticker for the single cash asset to
+            include. There must be exactly none or one ``Cash`` asset in this
+            currency and its currency must match that of all assets referenced
+            in the ``identity_code_list``. If not provided then no cash asset is
+            included.
+        price_item : str, optional
+            The price item to use for listed assets. These could be 'open',
+            'close', 'high' or 'low' depending on the available data. Default is
+            'close'.
+
+        Returns
+        -------
+        TimeSeriesProcessor
+            A TimeSeriesProcessor instance with time-series data loaded for all
+            assets referenced in the ``identity_code_list`` and the cash asset
+            if specified by ``cash_currency_ticker``. The time-series data is
+            not yet processed or adjusted for corporate actions. This is left to
+            the caller to run the full processing pipeline via
+            ``TimeSeriesProcessor.process()`` method.
+
+        Notes
+        -----
+        - Unknown identity codes or assets with missing time-series data are
+          skipped and a warning is logged and the method proceeds with the
+          remaining assets. If no assets with usable time-series data are found
+          then a ``TimeSeriesNoData`` exception is raised.
+        - All listed assets and the cash asset must share the same price
+            currency. Currently mixed-currency portfolios are rejected with a
+            ``ValueError``.
+        - The returned TimeSeriesProcessor performs validation, corporate action
+          adjustment and resampling on a per-asset basis.
+
+        """
+        if not identity_code_list:
+            raise ValueError("Argument `identity_code_list` may not be empty.")
+
+        # Resolve listed assets from identity codes. Note that the
+        # get_asset_dict method logs warnings and skips unknown identity codes
+        # so that we can proceed with the valid ones. We will raise an error
+        # later if no valid assets are found for any of the provided identity codes.
+        asset_dict = self.get_asset_dict(identity_code_list)
+        listed_assets = list(asset_dict.values())
+
+        # Enforce common currency across all assets (listed + cash)
+        currency_tickers = {asset.currency.ticker for asset in listed_assets}
+        if len(currency_tickers) != 1:
+            raise ValueError(
+                f"Mixed asset currencies detected {currency_tickers}. "
+                "All listed assets and the cash asset must share the "
+                "same currency in the current implementation."
+            )
+
+        # Resolve the unique Cash asset for the requested currency if a
+        # cash_currency_ticker is provided. If not provided then no cash asset
+        # is included.
+        if cash_currency_ticker is not None:
+            try:
+                cash_currency = (
+                    self.session.query(Currency)
+                    .filter(Currency.ticker == cash_currency_ticker)
+                    .one()
+                )
+            except NoResultFound:
+                raise TimeSeriesNoData(
+                    f"No Currency found for ticker {cash_currency_ticker!r}. "
+                    "Ensure static currency data is loaded via Manager.set_up()."
+                )
+            else:
+                cash_assets = (
+                    self.session.query(Cash)
+                    .filter(Cash._currency_id == cash_currency._id)
+                    .all()
+                )
+                if len(cash_assets) == 0:
+                    raise TimeSeriesNoData(
+                        "No Cash asset found for currency ticker "
+                        f"{cash_currency_ticker!r}. Exactly one Cash asset is required."
+                    )
+                if len(cash_assets) > 1:
+                    raise TimeSeriesNoData(
+                        "Multiple Cash assets found for currency ticker "
+                        f"{cash_currency_ticker!r}. Exactly one Cash asset is required."
+                    )
+                cash_asset = cash_assets[0]
+
+            # Enforce common currency between cash asset and listed assets
+            currency_tickers.add(cash_asset.currency.ticker)
+            if len(currency_tickers) != 1:
+                raise ValueError(
+                    f"Mixed asset currencies detected {currency_tickers}. "
+                    "All listed assets and the cash asset must share the "
+                    "same currency in the current implementation."
+                )
+        else:
+            cash_asset = None
+
+        # Build TimeSeriesProcessor objects for listed assets, handling
+        # missing time-series data on a per-asset basis.
+        tsp_list = []
+        for asset in listed_assets:
+            try:
+                tsp = asset.get_time_series_processor(price_item=price_item)
+            except EODSeriesNoData:
+                logger.warning(
+                    "Missing EOD series for asset %s (identity_code=%s). "
+                    "Skipping this asset.",
+                    asset,
+                    asset.identity_code,
+                )
+                continue
+            else:
+                tsp_list.append(tsp)
+        if not tsp_list:
+            raise TimeSeriesNoData(
+                "No usable listed assets with time-series data for the "
+                "provided identity_code_list."
+            )
+
+        # Combine all listed TimeSeriesProcessors and derive the common
+        # date index for building the cash series.
+        tsp_non_cash = TimeSeriesProcessor.concat(tsp_list)
+        if cash_asset is not None:
+            date_index = tsp_non_cash.get_date_index()
+            cash_tsp = cash_asset.get_time_series_processor(
+                date_index=date_index, price_item="price"
+            )
+            tsp_all = TimeSeriesProcessor.concat([tsp_non_cash, cash_tsp])
+        else:
+            tsp_all = tsp_non_cash
+
+        return tsp_all
+
+    def get_resampled_total_returns(
+        self,
+        identity_code_list,
+        cash_currency_ticker=None,
+        price_item="close",
+        frequency="W",
+    ):
+        """Get a resampled total return ``pandas.DataFrame`` for a list of assets.
+
+        Parameters
+        ----------
+        identity_code_list : list of str
+            List of identity codes corresponding to ``Asset.identity_code``
+            (or polymorph) instances.
+        cash_currency_ticker : str, optional
+            ISO 4217 3-letter currency ticker for the single cash asset to
+            include. There must be exactly none or one ``Cash`` asset in this
+            currency and its currency must match that of all assets referenced
+            in the ``identity_code_list``. If not provided then no cash asset is
+            included.
+        price_item : str, optional
+            The price item to use for listed assets. These could be 'open',
+            'close', 'high' or 'low' depending on the available data. Default is
+            'close'.
+        frequency : str, optional
+            The resampling frequency to use for the total return series. This is
+            passed to the `pandas.DataFrame.resample` method. Default is 'W' for
+            weekly frequency. See `pandas.DataFrame.resample` documentation for
+            more details on valid frequency strings.
+
+        Returns
+        -------
+        pandas.DataFrame
+            A DataFrame of resampled total returns for the assets referenced in
+            the `identity_code_list` and the cash asset if specified by
+            `cash_currency_ticker`. The DataFrame is indexed by date and has
+            columns corresponding to the assets. The column labels are the
+            assets' `identity_code` strings. The total returns are resampled to
+            the specified frequency, accumulated over the resampling period, and
+            expressed as geometric returns (for example, a total return of 1.05
+            represents a 5% return over the resampling period).
+
+        Note
+        ----
+        It is highly recommended to use Logarithmic returns for resampled
+        returns as they are time-additive and more accurate for longer
+        resampling periods. However, the current implementation uses geometric
+        returns for simplicity and to avoid issues with zero or negative returns
+        that can arise with logarithmic returns.
+
+        """
+        tsp_all = self.get_time_series_processor(identity_code_list, cash_currency_ticker, price_item)
+
+        # Run the full processing pipeline and compute total returns
+        tsp_all.process()
+        downsampled = tsp_all.get_downsampled_total_return(frequency=frequency)
+
+        # Pivot to wide matrix: index=date, columns=identity_code
+        pivoted = TimeSeriesProcessor.pivot_dataframes(downsampled)
+        # The TimeSeriesProcessor.pivot_dataframes method returns a dictionary
+        # of pivoted DataFrames for each data type. We want the total return
+        # DataFrame.
+        total_return_matrix = pivoted["total_return"]
+
+        return total_return_matrix
+
+    def get_asset_dict(self, identity_code_list):
+        """Get a dict of assets based on a list of identity codes.
+
+        Parameters
+        ----------
+        identity_code_list : list of str
+            A list of asset identity codes.
+
+        Returns
+        -------
+        dict
+            Mapping of ``identity_code`` strings to ``Asset`` (or
+            polymorphic child) instances found in the current session.
+            Unknown or malformed identity codes are skipped with a warning.
+        """
+        asset_dict = {}
+        for identity_code in identity_code_list:
+            # Attempt to resolve the asset for the identity code. If not found
+            # then log a warning and skip to the next code.
+            try:
+                asset = self.session.query(Asset).filter_by(
+                    identity_code=identity_code).one()
+            except NoResultFound:
+                logger.warning(
+                    "No asset found for identity_code %s", identity_code)
+            except MultipleResultsFound:
+                logger.warning(
+                    "Multiple assets found for identity_code %s", identity_code)
+            else:
+                asset_dict[identity_code] = asset
+
+        # Raise an error if no assets were found for any of the provided
+        # identity codes
+        if not asset_dict:
+            raise TimeSeriesNoData(
+                "No assets found for the provided identity_code_list."
+            )
+
+        return asset_dict
 
 
 class Manager(ManagerBase):

@@ -665,7 +665,7 @@ class TimeSeriesProcessor():
 
     @staticmethod
     def pivot_dataframes(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
-        """Pivot DataFrame by identity_code and date_stamp.
+        """Pivot DataFrame to date_stamp index and identity_code columns labels.
 
         Takes a DataFrame with 'identity_code' and 'date_stamp' columns plus
         additional data columns, and creates a separate pivoted DataFrame for
@@ -764,6 +764,17 @@ class TimeSeriesProcessor():
         """
         if not all(isinstance(tsp, TimeSeriesProcessor) for tsp in tsp_list):
             raise TypeError("All items in tsp_list must be TimeSeriesProcessor instances")
+
+        # The tsp_list may not be empty
+        if not tsp_list:
+            raise ValueError("tsp_list cannot be empty")
+
+        # Remove None items form the tsp_list
+        tsp_list = [tsp for tsp in tsp_list if tsp is not None]
+
+        # Check that the tsp_list is not empty after removing None items
+        if not tsp_list:
+            raise ValueError("tsp_list cannot be empty after removing None items")
 
         combined_prices = pd.concat([tsp.prices_df for tsp in tsp_list], ignore_index=True)
 
