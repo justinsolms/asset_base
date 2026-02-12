@@ -274,7 +274,14 @@ class ManagerBase(object):
         if hasattr(self, "session_obj") and self.session_obj is not None:
             self.session_obj.close()
             if drop is True:
-                self.drop_database()
+                # Delegate dropping of the underlying database to the
+                # session manager, which knows how to tear down its
+                # specific backend (SQLite file, in-memory DB, etc.).
+                #
+                # NOTE: Manager itself does not implement drop_database;
+                # that responsibility lives on the Session wrappers in
+                # common.py (TestSession/SQLiteSession via _Session).
+                self.session_obj.drop_database()
             del self.session_obj
         if hasattr(self, "session"):
             # Also delete the _make_session convenience attribute
