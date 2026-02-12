@@ -1183,8 +1183,8 @@ class Share(Asset):
     # Number of share units issued byu the Issuer
     shares_in_issue = Column(Integer, nullable=True)
 
-    # Does the share pay distributions or not
-    # FIXME: Does not reflect the security meta data correctly
+    # True of a share pays distributions such as dividends or interest, else
+    # False. Default is False.
     distributions = Column(Boolean, nullable=False, default=False)
 
     #  A short class name for use in naming
@@ -2145,8 +2145,17 @@ class ListedEquity(Listed):
             If no time series exists.
         """
         dividend_dict_list = [s.to_dict() for s in self._dividend_series]
-        if len(dividend_dict_list) == 0:
-            raise DividendSeriesNoData(f"Expected dividend data for {self}")
+        # Check if distributions are expected. Then raise an exception if no data is found.
+        if self.distributions and len(dividend_dict_list) == 0:
+            raise DividendSeriesNoData(
+                f"Expected dividend data for {self} as `distributions` attribute is True.")
+        # Warn if no distributions are expected but data is found. This is not
+        # an exception as the distributions attribute may be incorrectly set to
+        # False or there may be special distribution events.
+        if not self.distributions and len(dividend_dict_list) > 0:
+            logger.warning(
+                f"Found dividend data for {self} but `distributions` attribute "
+                "is False. Check if `distributions` is correctly set.")
         series = pd.DataFrame(dividend_dict_list)
         series["date_stamp"] = pd.to_datetime(series["date_stamp"])
         series.set_index("date_stamp", inplace=True)
@@ -2235,9 +2244,18 @@ class ListedEquity(Listed):
             asset with the end-of-day prices, dividends, and splits data
             series. The `identity_code` column is set to the value of the
             ``ListedEquity.identity_code`` attribute.
+
+        Raises
+        ------
+        ValueError
+            If the ``price_item`` argument is not a column in the end-of-day
+            price series.
         """
-        # Check price item is valid
+        # Get EOD prices and do not handle the EODSeriesNoData exception here as
+        # the processor cannot be created without price data. The exception
+        # should be handled by the caller.
         eod = self.get_eod_series()
+        # Check price item is valid
         if price_item not in eod.columns:
             raise ValueError(
                 f"Unexpected `price_item` argument {price_item}. "
@@ -2253,18 +2271,29 @@ class ListedEquity(Listed):
 
         # Get dividends, select dividends unadjusted value item, and rename to
         # "dividend" for the processor.
-        dividends_df = self.get_dividend_series().reset_index()
-        dividends_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", "unadjusted_value"]
-        dividends_df = dividends_df[columns_to_keep]
-        # Add dividend column as a copy of unadjusted_value
-        dividends_df["dividend"] = dividends_df["unadjusted_value"]
+        try:
+            dividends_df = self.get_dividend_series().reset_index()
+        except DividendSeriesNoData:
+            logger.warning(
+                f"No dividend data for {self}. "
+                "Distributions were expected but Dividend series will be empty.")
+            dividends_df = None
+        else:
+            dividends_df["identity_code"] = self.identity_code
+            columns_to_keep = ["identity_code", "date_stamp", "unadjusted_value"]
+            dividends_df = dividends_df[columns_to_keep]
+            # Add dividend column as a copy of unadjusted_value
+            dividends_df["dividend"] = dividends_df["unadjusted_value"]
 
         # Get splits
-        splits_df = self.get_split_series().reset_index()
-        splits_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", "numerator", "denominator"]
-        splits_df = splits_df[columns_to_keep]
+        try:
+            splits_df = self.get_split_series().reset_index()
+        except SplitSeriesNoData:
+            splits_df = None
+        else:
+            splits_df["identity_code"] = self.identity_code
+            columns_to_keep = ["identity_code", "date_stamp", "numerator", "denominator"]
+            splits_df = splits_df[columns_to_keep]
 
         # Create and return the processor
         tsp = TimeSeriesProcessor(prices_df, dividends_df, splits_df)
