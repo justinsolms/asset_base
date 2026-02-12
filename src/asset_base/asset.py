@@ -158,6 +158,14 @@ class AssetBase(Common):
     _id = Column(Integer, ForeignKey("common._id"), primary_key=True)
     """ Primary key."""
 
+    # A human readable string unique to the class instance. This is not a key
+    # code but is useful for display and debugging purposes. It is not required
+    # to be unique across the entire database but is required to be unique
+    # within the asset class. For example, the ticker "USD" is unique within the
+    # Cash class but not across all asset classes as it may also be used as a
+    # ticker in the Listed class.
+    identity_code = Column(String(64), unique=True, index=True, nullable=False)
+
     # Each Asset has one Currency.
     _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship(Currency)
@@ -174,6 +182,7 @@ class AssetBase(Common):
         uselist=True,
         )
     """list: EOD historical time-series collection ranked by date_stamp."""
+
 
     def __init__(self, name, currency, quote_units="units"):
         """Instance initialization."""
@@ -493,6 +502,8 @@ class Cash(Asset):
         # Quote units always in 'units' for cash
         super().__init__(name, currency, quote_units="units")
 
+        self.identity_code = self.ticker
+
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         msg = "{}({})".format(self.__class__.__name__, self.currency.ticker)
@@ -513,11 +524,6 @@ class Cash(Asset):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.ticker
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
         return self.ticker
 
     @property
@@ -864,19 +870,21 @@ class Forex(Cash):
         # Note that we set the pricing currency of the cash asset here.
         super().__init__(price_currency)
 
-        # Override the name to be the joined currency tickers
-        self.name = f"{base_currency.ticker}{price_currency.ticker}"
+
 
         # Expect the `base_currency` to be the root currency (USD).
-        self.base_currency = base_currency
         if base_currency.ticker != self.root_currency_ticker:
             raise AssertionError(
                 "Expected the `base_currency` to be the root currency (USD)."
             )
+        self.base_currency = base_currency
 
-        # Ticker is Joined ISO 4217 3-letter currency code which is constrained
+        # All are joined ISO 4217 3-letter currency code which is constrained
         # to be unique by the UniqueConstraint on the ticker column.
-        self.ticker = "{}{}".format(self.base_currency.ticker, self.currency.ticker)
+        joined_ticker = f"{self.base_currency.ticker}{self.currency.ticker}"
+        self.ticker = joined_ticker
+        self.identity_code = joined_ticker
+        self.name = joined_ticker  # Override the name
 
     def __repr__(self):
         """Return the official string output."""
@@ -897,11 +905,6 @@ class Forex(Cash):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return "{}{}".format(self.base_currency.ticker, self.currency.ticker)
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
         return "{}{}".format(self.base_currency.ticker, self.currency.ticker)
 
     @property
@@ -1414,6 +1417,12 @@ class Listed(Share):
 
         super().__init__(name, issuer, currency, **kwargs)
 
+        # Ticker is added for human readability and convenience, but the unique
+        # identifier is the ISIN. The ticker is not necessarily unique across
+        # exchanges, but the combination of exchange MIC and ticker is unique.
+        # The ISIN is unique across all exchanges.
+        self.identity_code = self.isin + "." + self.ticker
+
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
@@ -1435,11 +1444,6 @@ class Listed(Share):
     def key_code(self):
         """A key string unique to the class instance."""
         return self.isin
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
-        return self.isin + "." + self.ticker
 
     @property
     def long_name(self):
@@ -2396,6 +2400,11 @@ class Index(AssetBase):
 
         super().__init__(name, currency, **kwargs)
 
+        # TODO: MAke sure Index tickers are unique across the world.
+        # This is a big assumption but it is necessary for the key_code to be j
+        # ust the ticker.
+        self.identity_code = self.ticker
+
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return '{}(name="{}", ticker="{}")'.format(
@@ -2410,11 +2419,6 @@ class Index(AssetBase):
 
     @property
     def key_code(self):
-        """Return a unique string code for this class instance."""
-        return f"{self.ticker}"
-
-    @property
-    def identity_code(self):
         """Return a unique string code for this class instance."""
         return f"{self.ticker}"
 
