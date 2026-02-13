@@ -413,6 +413,22 @@ class Asset(AssetBase):
         else:
             return self._eod_series[-1]
 
+    def get_last_eod_date(self):
+        """Return the date of the last EOD for the asset.
+
+        Returns
+        -------
+        pandas.Timestamp
+            The date of the last EOD for the asset.
+
+        Raises
+        ------
+        EODSeriesNoData
+            If no time series exists.
+        """
+        last_eod = self.get_last_eod()
+        return last_eod.date_stamp
+
     def get_time_series_processor(self, price_item='price'):
         """Return a TimeSeriesProcessor for this asset.
 
@@ -1344,11 +1360,23 @@ class Listed(Share):
     _exchange_id = Column(Integer, ForeignKey("exchange._id"), nullable=False)
     exchange = relationship("Exchange", backref="securities_list")
 
-    # Ticker on the listing exchange (Uses exchange MIC).
+    # Ticker on the listing exchange (Uses exchange MIC). MIC is the ISO 10383
+    # Market Identifier Code which is a unique identification code used to
+    # identify securities trading exchanges. The MIC could be accessed through
+    # the exchange relationship, but it is also stored here for query
+    # convenience and to enforce the unique constraint on the combination of MIC
+    # and ticker.
     mic = Column(String(4), nullable=False)
     ticker = Column(String(12), nullable=False)
 
-    # National Securities Identifying Number
+    # The National Securities Identifying Number (ISIN) is a unique identifier
+    # for the security. It is not a ticker symbol and does not specify a
+    # particular trading location. The ISIN consists of two alphabetic
+    # characters (the ISO 3166-1 alpha-2 code for the issuing country), nine
+    # alpha-numeric characters (the National Securities Identifying Number,
+    # padded as necessary with leading zeros), and one numerical check digit.
+    # The ISIN is unique across all exchanges, while the combination of exchange
+    # MIC and ticker it is the ticker that is unique for that exchange.
     isin = Column(String(12), nullable=False)
 
     # Each ISIN is unique and each Exchange/ticker pair is unique
@@ -1384,24 +1412,44 @@ class Listed(Share):
 
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
-        # Currency is the exchange listing currency, i.e., the exchange's
-        # domicile currency.
-        currency = exchange.domicile.currency
-
-
         # Do no remove this code!!. Some methods that use this class (such as
         # factory methods) are able to place arguments with a None value, this
         # circumventing Python's positional-arguments checks. Check manually
         # them here.
-        if all([name, issuer, isin, exchange, ticker]):
+        if all([name, issuer, isin, exchange, ticker, status]):
             pass
         else:
             raise ValueError("Unexpected `None` value for some positional arguments.")
 
+        # De-listed  often carry the same name as the listed share, so when the
+        # status is de-listed we append the status to the name for uniqueness
+        # and clarity. For example, if the share name is "ABC Ltd" and the
+        # status is "delisted" then the name of the instance will be "ABC Ltd
+        # (delisted)". This is because there may be a need to have both the
+        # listed and de-listed share in the database at the same time, and if
+        # they have the same name then it is not clear which is which.
+        if status == "delisted":
+            name = f"{name} ({status})"
 
-        # Instrument identification and listing
-        self.mic = exchange.mic
+        # Some shares carry the same name as the issuer, if so we append the
+        # exchange MIC of the exchange to the name for uniqueness and clarity.
+        # For example, if the share name is "ABC Ltd" and the exchange is
+        # "Johannesburg Stock Exchange" then the name of the instance will be
+        # "ABC Ltd (Johannesburg Stock Exchange)". This is because there may be
+        # a need to have the same share listed on multiple exchanges in the
+        # database at the same time.
+        if name == issuer.name:
+            name = f"{name} ({exchange.mic})"
+
+        # The currency is that of the exchange domicile. This is because the
+        # price of a share is that of the exchange listing, and the exchange
+        # listing is in the exchange domicile currency. This is the usual case,
+        # but there may be exceptions. This will be addressed in a future
+        # software upgrade if it becomes an issue.
+        currency = exchange.domicile.currency
+
         self.exchange = exchange
+        self.mic = exchange.mic
         self.ticker = ticker
         self.status = status
 

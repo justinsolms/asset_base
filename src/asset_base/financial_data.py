@@ -439,10 +439,20 @@ class MetaData(_Feed):
         super().__init__()
 
     def get_etfs(self, **kwargs):
-        """Fetch JSE securities mata-data from a local file."""
+        """Fetch JSE securities mata-data from a local file.
+
+        Raises
+        ------
+        ValueError
+            If duplicate entries are found in the expected unique columns of the
+            data.
+
+        """
         universe_file_name = "ETFMeta.csv"
         path = self._path(universe_file_name)
 
+        # Columns to keep and rename to a standard. This is also then a check
+        # for expected columns.
         column_dict = {
             "mic": "mic",
             "ticker": "ticker",
@@ -451,7 +461,6 @@ class MetaData(_Feed):
             "distributions": "distributions",
             "asset_class": "asset_class",
             "locality": "locality",
-            "domicile": "domicile_code",
             "quote_units": "quote_units",
             "industry_class": "industry_class",
             "industry_code": "industry_code",
@@ -467,6 +476,16 @@ class MetaData(_Feed):
             "super_sector_name": "super_sector_name",
             "ter": "ter",
         }
+        # List of columns to check for duplicates. Note these are the renamed
+        # column labels.
+        duplicate_check_list = [
+            # Delisted securities may have the same name as currently listed
+            'status.listed_name',
+            # Ticker is not unique across exchanges, but the combination of mic and ticker should be unique.
+            'mic.ticker',
+            # ISIN is the unique identifier for securities and should be unique across the data
+            'isin'
+            ]
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
@@ -483,6 +502,24 @@ class MetaData(_Feed):
         data = data[list(column_dict.keys())]
         data.rename(columns=column_dict, inplace=True)
 
+        # Check for duplicates in the data and raise an error if found
+        for item in duplicate_check_list:
+            if '.' in item:
+                # For columns with dot notation we need to check for duplicates
+                # in the combined column. For example 'mic.ticker' is a
+                # combination of 'mic' and 'ticker' columns.
+                sub_columns = item.split('.')
+                if data.duplicated(subset=sub_columns).any():
+                    duplicates = data[data.duplicated(subset=sub_columns, keep=False)].index.tolist()
+                    row_nums = [int(dup) + 2 for dup in duplicates]  # Adjust for header and zero indexing
+                    raise ValueError(f"Duplicate entries in rows {row_nums} found in column {item} of file {path}.")
+            else:
+                column = item
+                if data.duplicated(subset=[column]).any():
+                    duplicates = data[data.duplicated(subset=[item], keep=False)].index.tolist()
+                    row_nums = [int(dup) + 2 for dup in duplicates]  # Adjust for header and zero indexing
+                    raise ValueError(f"Duplicate entries in rows {row_nums} found in column {item} of file {path}.")
+
         return data
 
     def get_indices(self, feed="EOD", **kwargs) -> pd.DataFrame:
@@ -490,6 +527,8 @@ class MetaData(_Feed):
 
         if feed == "EOD":
             feed = Exchanges()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
             column_dict = {
                 "Name": "index_name",
                 "Code": "ticker",
@@ -642,6 +681,8 @@ class History(_Feed):
         # Pick feed
         if feed == "EOD":
             feed = MultiHistorical()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
             column_dict = {
                 "date": "date_stamp",
                 "ticker": "ticker",
@@ -729,6 +770,8 @@ class History(_Feed):
         # Pick feed
         if feed == "EOD":
             feed = MultiHistorical()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
             column_dict = {
                 "date": "date_stamp",
                 "ticker": "ticker",
@@ -741,6 +784,8 @@ class History(_Feed):
                 "unadjustedValue": "unadjusted_value",
                 "value": "adjusted_value",
             }
+            # Columns to treat as dates and convert to pandas datetime format.
+            # This is also then a check for expected columns.
             date_columns_list = [
                 "date_stamp",
                 "declaration_date",
@@ -824,12 +869,16 @@ class History(_Feed):
         # Pick feed
         if feed == "EOD":
             feed = MultiHistorical()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
             column_dict = {
                 "date": "date_stamp",
                 "ticker": "ticker",
                 "exchange": "mic",
                 "split": "split",
             }
+            # Columns to treats as dates and convert to pandas datetime format.
+            # This is also then a check for expected columns.
             date_columns_list = [
                 "date_stamp",
             ]

@@ -31,9 +31,9 @@ def cli():
     "--hard", is_flag=True,
     help="Hard initialization, delete reusable dump data. Not recommended unless data is stale.")
 def setup(hard):
-    """Tear down old database, dumping reusable data, initialize a new one, and
-    populate it with data. Reuse dumped data to expedite population of the new
-    database.
+    """Tear down old database (if it exists), dump reusable data,
+    initialize a new database, reuse dumped data, then populate/update with data
+    from APIs.
 
     WARNING: Dump data may be stale especially security meta-data. Use
     the --hard option to delete dump data and force a full fresh population of

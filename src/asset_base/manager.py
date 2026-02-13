@@ -350,6 +350,10 @@ class ManagerBase(object):
         if reuse:
             self.reuse()
 
+        # Check for newer data and update the database with API data.
+        if update:
+            self.update()
+
         # First commit. The update method call below will commit again
         self.commit()
 
@@ -396,13 +400,13 @@ class ManagerBase(object):
             )
 
         # Check for newer securities data and update the database
-        fundamentals = MetaData()
+        security_metadata = MetaData()
         history = History()
         # TODO: Future security classes place their update_all() methods here.
         # NOTE: ListedEquity.update_all() here
         ExchangeTradeFund.update_all(
             self.session,
-            get_meta_method=fundamentals.get_etfs,
+            get_meta_method=security_metadata.get_etfs,
             get_eod_method=history.get_eod,
             get_dividends_method=history.get_dividends,
             get_splits_method=history.get_splits,

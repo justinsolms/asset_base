@@ -673,8 +673,10 @@ class ListedEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to
-    ASSET_CLASS = None  # Will be set after Listed is imported to avoid circular import
+    # Define which asset class this time series belongs to. Will be set by
+    # _initialize_asset_class_references at the end of asset.py to avoid
+    # circular import
+    ASSET_CLASS = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -779,8 +781,10 @@ class ListedEquityEOD(ListedEOD):
     _id = Column(Integer, ForeignKey("listed_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to
-    ASSET_CLASS = None  # Will be set after ListedEquity is imported to avoid circular import
+    # Define which asset class this time series belongs to. Will be set by
+    # _initialize_asset_class_references at the end of asset.py to avoid
+    # circular import
+    ASSET_CLASS = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -881,8 +885,10 @@ class IndexEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to
-    ASSET_CLASS = None  # Will be set after Index is imported to avoid circular import
+    # Define which asset class this time series belongs to. Will be set by
+    # _initialize_asset_class_references at the end of asset.py to avoid
+    # circular import
+    ASSET_CLASS = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -961,8 +967,10 @@ class ForexEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to
-    ASSET_CLASS = None  # Will be set after Forex is imported to avoid circular import
+    # Define which asset class this time series belongs to. Will be set by
+    # _initialize_asset_class_references at the end of asset.py to avoid
+    # circular import
+    ASSET_CLASS = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -1041,8 +1049,10 @@ class Dividend(TimeSeriesBase):
     _id = Column(Integer, ForeignKey("time_series_base._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to
-    ASSET_CLASS = None  # Will be set after ListedEquity is imported to avoid circular import
+    # Define which asset class this time series belongs to. Will be set by
+    # _initialize_asset_class_references at the end of asset.py to avoid
+    # circular import
+    ASSET_CLASS = None
 
     # FIXME: Cannot have NULL here but some dividends are triggering tis
     currency = Column(String, nullable=True)
@@ -1226,8 +1236,10 @@ class Split(TimeSeriesBase):
     _id = Column(Integer, ForeignKey("time_series_base._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to
-    ASSET_CLASS = None  # Will be set after ListedEquity is imported to avoid circular import
+    # Define which asset class this time series belongs to. Will be set by
+    # _initialize_asset_class_references at the end of asset.py to avoid
+    # circular import
+    ASSET_CLASS = None
 
     numerator = Column(Float, nullable=False)
     """float: The numerator of the split ratio, e.g., 2 for a 2-for-1 split."""
