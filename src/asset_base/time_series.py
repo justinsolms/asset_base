@@ -106,7 +106,8 @@ class TimeSeriesBase(Base):
     # data. Each and every concrete time-series class must have this attribute
     # set to the asset class it belongs to. For example, for ListedEOD this
     # attribute must be set to Listed, etc.
-    ASSET_CLASS = None  # Abstract, do not use!
+    # Class-level ref, not mapped by SQLAlchemy
+    ASSET_CLASS: ClassVar[Optional[object]] = None  # Abstract, do not use!
 
     def __init__(self, base_obj, date_stamp):
         """Instance initialization."""
@@ -674,7 +675,8 @@ class ListedEOD(TradeEOD):
     # data. Each and every concrete time-series class must have this attribute
     # set to the asset class it belongs to. For example, for ListedEOD this
     # attribute must be set to Listed, etc.
-    ASSET_CLASS: type["Listed"] | None = None
+    # Class-level pointer to the asset class, not an ORM column
+    ASSET_CLASS: ClassVar[Optional["Listed"]] = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -774,7 +776,7 @@ class ListedEquityEOD(ListedEOD):
     # data. Each and every concrete time-series class must have this attribute
     # set to the asset class it belongs to. For example, for ListedEOD this
     # attribute must be set to Listed, etc.
-    ASSET_CLASS: type["ListedEquity"] | None = None
+    ASSET_CLASS: ClassVar[Optional["ListedEquity"]] = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -870,7 +872,7 @@ class IndexEOD(TradeEOD):
     # data. Each and every concrete time-series class must have this attribute
     # set to the asset class it belongs to. For example, for ListedEOD this
     # attribute must be set to Listed, etc.
-    ASSET_CLASS: type["Index"] | None = None
+    ASSET_CLASS: ClassVar[Optional["Index"]] = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -954,7 +956,7 @@ class ForexEOD(TradeEOD):
     # data. Each and every concrete time-series class must have this attribute
     # set to the asset class it belongs to. For example, for ListedEOD this
     # attribute must be set to Listed, etc.
-    ASSET_CLASS: type["Forex"] | None = None
+    ASSET_CLASS: ClassVar[Optional["Forex"]] = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
