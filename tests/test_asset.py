@@ -5,21 +5,21 @@ import datetime
 import pandas as pd
 import test
 
-from src.asset_base.common import TestSession
-from src.asset_base.financial_data import Dump, MetaData
-from src.asset_base.financial_data import History, Static
-from src.asset_base.exceptions import FactoryError, BadISIN, ReconcileError
-from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
-from src.asset_base.asset import (
+from asset_base.common import TestSession
+from asset_base.financial_data import Dump, MetaData
+from asset_base.financial_data import History, Static
+from asset_base.exceptions import FactoryError, BadISIN, ReconcileError
+from asset_base.entity import Currency, Domicile, Issuer, Exchange
+from asset_base.asset import (
     Cash,
     Forex,
     ListedEquity,
     Index,
     ExchangeTradeFund,
 )
-from src.asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
+from asset_base.time_series import Dividend, ForexEOD, IndexEOD, ListedEOD
 
-from src.asset_base.utils import date_to_str
+from asset_base.utils import date_to_str
 
 
 class TestBase(unittest.TestCase):

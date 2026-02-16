@@ -32,15 +32,13 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.orm import object_session
 
 # Used to avoid ImportError (most likely due to a circular import)
-from typing import TYPE_CHECKING
-
-import asset
+from typing import TYPE_CHECKING, ClassVar, Optional
 
 if TYPE_CHECKING:
-    from .asset import Listed, ListedEquity, Index, Forex
+    from asset_base.asset import Listed, ListedEquity, Index, Forex
 
-from .common import Base
-from .financial_data import Dump
+from asset_base.common import Base
+from asset_base.financial_data import Dump
 
 # Get module-named logger.
 import logging
@@ -1190,6 +1188,7 @@ class Dividend(TimeSeriesBase):
         data_frame = get_method()
         # Bulk add/update data.
         cls.from_data_frame(session, data_frame)
+
 
 class Split(TimeSeriesBase):
     """A single listed security's date-stamped split data.

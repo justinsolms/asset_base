@@ -96,25 +96,20 @@ from sqlalchemy.orm import object_session
 from sqlalchemy.orm.exc import NoResultFound
 from zmq import METADATA
 
-from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData, SplitSeriesNoData
-from .exceptions import ReconcileError
-from .exceptions import BadISIN
-from .financial_data import Dump
-from .entity import Currency, Exchange, Issuer
-from .common import Common
-from .industry_class import IndustryClassICB
-from .time_series import (
-    Dividend,
-    ForexEOD,
-    IndexEOD,
-    ListedEOD,
-    EODBase,
-    Split,
-    TimeSeriesBase,
-)
-from .time_series_processor import TimeSeriesProcessor
+from asset_base.exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData, SplitSeriesNoData
+from asset_base.exceptions import ReconcileError
+from asset_base.exceptions import BadISIN
+from asset_base.financial_data import Dump
+from asset_base.entity import Currency, Exchange, Issuer
+from asset_base.common import Common
+from asset_base.industry_class import IndustryClassICB
+from asset_base.time_series import TimeSeriesBase, EODBase
+from asset_base.time_series import Dividend, Split,
+from asset_base.time_series import ListedEOD, ForexEOD, IndexEOD
 
-from .financial_data import History as FinancialHistory
+from asset_base.time_series_processor import TimeSeriesProcessor
+
+from asset_base.financial_data import History as FinancialHistory
 
 # Get module-named logger.
 import logging
@@ -603,7 +598,7 @@ class Cash(Asset):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
-        Factory Method Behavior
+        Factory Method Behaviour
         ------------------------
         This factory operates in two modes controlled by the ``create`` parameter:
 
@@ -942,7 +937,7 @@ class Forex(Cash):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
-        Factory Method Behavior
+        Factory Method Behaviour
         ------------------------
         This factory operates in two modes controlled by the ``create`` parameter:
 
@@ -2440,7 +2435,7 @@ class Index(AssetBase):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
-        Factory Method Behavior
+        Factory Method Behaviour
         ------------------------
         This factory operates in two modes controlled by the ``create`` parameter:
 
