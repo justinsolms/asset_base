@@ -406,8 +406,8 @@ class ManagerBase(object):
         # NOTE: ListedEquity.update_all() here
         ExchangeTradeFund.update_all(
             self.session,
-            get_meta_method=security_metadata.get_etfs,
-            get_eod_method=history.get_eod,
+            get_meta_method=security_metadata.get_etfs_meta,
+            get_eod_method=history.get_trade_eod,
             get_dividends_method=history.get_dividends,
             get_splits_method=history.get_splits,
         )
@@ -416,7 +416,7 @@ class ManagerBase(object):
         # Forex.foreign_currencies
         Forex.update_all(
             self.session,
-            get_forex_method=history.get_forex,
+            get_forex_method=history.get_forex_eod,
         )
 
         # TODO: Include Index.update_all

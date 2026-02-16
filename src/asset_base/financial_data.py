@@ -438,7 +438,7 @@ class MetaData(_Feed):
         """Instance initialization."""
         super().__init__()
 
-    def get_etfs(self, **kwargs):
+    def get_etfs_meta(self, **kwargs):
         """Fetch JSE securities mata-data from a local file.
 
         Raises
@@ -638,8 +638,8 @@ class History(_Feed):
 
         return from_date_list, to_date_list
 
-    def get_eod(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
-        """Get historical EOD for a specified list of securities.
+    def get_trade_eod(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
+        """Get historical EOD trade data for a specified list of securities.
 
         This method fetches the data from the specified feed.
 
@@ -924,7 +924,7 @@ class History(_Feed):
 
         return data
 
-    def get_forex(self, forex_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
+    def get_forex_eod(self, forex_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
@@ -995,7 +995,7 @@ class History(_Feed):
 
         return data
 
-    def get_indices(self, index_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
+    def get_indices_eod(self, index_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of indices.
 
         This method fetches the data from the specified feed.

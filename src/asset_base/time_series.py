@@ -20,19 +20,24 @@ from abc import abstractmethod
 from datetime import date
 import datetime
 import sys
+from flask import session
 import numpy as np
 import pandas as pd
 
 from sqlalchemy import Float, Integer, String, Date
 from sqlalchemy import MetaData, Column, ForeignKey
 from sqlalchemy import UniqueConstraint
+
 from sqlalchemy.orm import relationship
+from sqlalchemy.orm import object_session
 
 # Used to avoid ImportError (most likely due to a circular import)
 from typing import TYPE_CHECKING
 
+import asset
+
 if TYPE_CHECKING:
-    from .asset import Asset
+    from .asset import Listed, ListedEquity, Index, Forex
 
 from .common import Base
 from .financial_data import Dump
@@ -96,6 +101,15 @@ class TimeSeriesBase(Base):
     _date_column_names = ["date_stamp"]
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
+    # This attribute is not used and is here only for reference. It must be
+    # lazily initialized by ``_initialize_asset_class_references`` at the end of
+    # asset.py module file to avoid circular import and for the time-series
+    # logic to be able to reference the asset class that holds the time-series
+    # data. Each and every concrete time-series class must have this attribute
+    # set to the asset class it belongs to. For example, for ListedEOD this
+    # attribute must be set to Listed, etc.
+    ASSET_CLASS = None  # Abstract, do not use!
+
     def __init__(self, base_obj, date_stamp):
         """Instance initialization."""
         # Type check date_stamp - must be datetime.date but not pandas.Timestamp
@@ -129,24 +143,13 @@ class TimeSeriesBase(Base):
         """Convert all instance time-series public attributes to a dictionary."""
         pass
 
-    @classmethod
     @abstractmethod
-    def update_all(cls, session, get_method):
-        """Update/create all time-series for the list of asset instances.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        get_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all this class' constructor method arguments.
-        """
+    def update_all(self, session):
+        """Update/create all time-series for the list of asset instances."""
         pass
 
     @classmethod
-    def from_data_frame(cls, session, asset_class, data_frame):
-        # FIXME: Use overloaded method pointer class attributes instead of these arguments
+    def from_data_frame(cls, session, data_frame):
         """Upsert time-series records from a ``pandas.DataFrame``.
 
         For each row in ``data_frame`` this method:
@@ -169,9 +172,6 @@ class TimeSeriesBase(Base):
         ----------
         session : sqlalchemy.orm.Session
             The database session.
-        asset_class : .asset.AssetBase or child class
-            The ``Base`` class that the time-series belongs to (for example
-            ``ListedEquity``). This is *not* the market asset-class label.
         data_frame : pandas.DataFrame
             A ``pandas.DataFrame`` with columns matching the concrete
             ``TimeSeriesBase`` subclass' constructor arguments, except that
@@ -181,6 +181,7 @@ class TimeSeriesBase(Base):
             This column is used solely to resolve the asset IDs and is dropped
             before records are created or updated.
         """
+        asset_class = cls.ASSET_CLASS
 
         # Check for zero rows of data
         if data_frame.empty:
@@ -277,16 +278,13 @@ class TimeSeriesBase(Base):
             pass
 
     @classmethod
-    def to_data_frame(cls, session, asset_class):
+    def to_data_frame(cls, session):
         """Return a ``pandas.DataFrame`` with a row for each class instance.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             The database session.
-        asset_class : .asset.Asset (or polymorph class)
-            The ``Asset`` or polymorph class that is composed of the time-series
-            data.
 
         Returns
         -------
@@ -296,6 +294,7 @@ class TimeSeriesBase(Base):
             of a column named ``listed``, instead there shall be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
         """
+        asset_class = cls.ASSET_CLASS
 
         # Generate a table translating key_code to asset_class._id. The key_code
         # column label shall be the asset_class.KEY_CODE_LABEL class
@@ -357,7 +356,7 @@ class TimeSeriesBase(Base):
         return data_table
 
     @classmethod
-    def dump(cls, session, dumper: Dump, asset_class_cls):
+    def dump(cls, session, dumper: Dump):
         """Dump time-series data for a given asset class to disk.
 
         All instances of ``cls`` that belong to assets of ``asset_class_cls``
@@ -373,9 +372,6 @@ class TimeSeriesBase(Base):
             A session attached to the desired database.
         dumper : .financial_data.Dump
             The financial data dumper.
-        asset_class_cls : .asset.Asset (or child class) class reference
-            The ``Asset`` class whose instances own the time-series records
-            being dumped (for example ``ListedEquity`` for ``ListedEOD``).
 
         See also
         --------
@@ -385,7 +381,7 @@ class TimeSeriesBase(Base):
         dump_dict = dict()
 
         # A table item for  all instances of this class
-        data_frame = cls.to_data_frame(session, asset_class_cls)
+        data_frame = cls.to_data_frame(session)
 
         # Handle empty DataFrame case gracefully - still dump it but with a log message
         if data_frame.empty:
@@ -442,7 +438,7 @@ class TimeSeriesBase(Base):
                 session.delete(record)
             session.flush()
 
-        cls.from_data_frame(session, asset_class_cls, data_frame_dict[class_name])
+        cls.from_data_frame(session, data_frame_dict[class_name])
 
 
 class EODBase(TimeSeriesBase):
@@ -673,10 +669,14 @@ class ListedEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to. Will be set by
-    # _initialize_asset_class_references at the end of asset.py to avoid
-    # circular import
-    ASSET_CLASS = None
+    # This attribute is not used and is here only for reference. It must be
+    # lazily initialized by ``_initialize_asset_class_references`` at the end of
+    # asset.py module file to avoid circular import and for the time-series
+    # logic to be able to reference the asset class that holds the time-series
+    # data. Each and every concrete time-series class must have this attribute
+    # set to the asset class it belongs to. For example, for ListedEOD this
+    # attribute must be set to Listed, etc.
+    ASSET_CLASS: type["Listed"] | None = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -699,8 +699,13 @@ class ListedEOD(TradeEOD):
         )
 
     @classmethod
-    def update_all(cls, session, get_method):
+    def update_all(cls, session):
         """Update/create the eod trade data of all the Listed instances.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the database.
 
         Warning
         -------
@@ -708,39 +713,22 @@ class ListedEOD(TradeEOD):
         not updated by this method as it is the responsibility of the ``Listed``
         class and its child classes to manage that attribute.
 
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        get_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all this class' constructor method arguments.
-
-        Note
-        ----
-        No object shall be destroyed, only updated or missing object created.
-
-        Note
-        ----
-        This method only updates actively listed securities.
-
         """
-        # Import here to avoid circular import
-        from .asset import Listed
-
-        # Get asset class
-        asset_class = Listed
+        asset_class = cls.ASSET_CLASS
 
         # Get only all actively listed Listed instances so we can fetch their
         # EOD trade data
         securities_list = (
-            session.query(asset_class).filter(asset_class.status == "listed").all()
+            session.query(asset_class).filter(
+                asset_class.status == "listed").all()
         )
 
-        # Get all financial data
+        # Get all financial data. No form or to date is specified as the asset
+        # class EOD_GET_METHOD is expected to handle that logic internally.
+        get_method = asset_class.EOD_GET_METHOD
         data_frame = get_method(securities_list)
         # Bulk add/update data.
-        cls.from_data_frame(session, asset_class, data_frame)
+        cls.from_data_frame(session, data_frame)
 
 
 class ListedEquityEOD(ListedEOD):
@@ -781,10 +769,14 @@ class ListedEquityEOD(ListedEOD):
     _id = Column(Integer, ForeignKey("listed_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to. Will be set by
-    # _initialize_asset_class_references at the end of asset.py to avoid
-    # circular import
-    ASSET_CLASS = None
+    # This attribute is not used and is here only for reference. It must be
+    # lazily initialized by ``_initialize_asset_class_references`` at the end of
+    # asset.py module file to avoid circular import and for the time-series
+    # logic to be able to reference the asset class that holds the time-series
+    # data. Each and every concrete time-series class must have this attribute
+    # set to the asset class it belongs to. For example, for ListedEOD this
+    # attribute must be set to Listed, etc.
+    ASSET_CLASS: type["ListedEquity"] | None = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -807,7 +799,7 @@ class ListedEquityEOD(ListedEOD):
         )
 
     @classmethod
-    def update_all(cls, session, get_method):
+    def update_all(cls, session):
         """Update/create the eod trade data of all the ListedEquity instances.
 
         Warning
@@ -820,35 +812,23 @@ class ListedEquityEOD(ListedEOD):
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        get_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all this class' constructor method arguments.
-
-        Note
-        ----
-        No object shall be destroyed, only updated or missing object created.
-
-        Note
-        ----
-        This method only updates actively listed equity securities.
 
         """
-        # Import here to avoid circular import
-        from .asset import ListedEquity
-
         # Get asset class
-        asset_class = ListedEquity
+        asset_class = cls.ASSET_CLASS
 
-        # Get only all actively listed ListedEquity instances so we can fetch their
+        # Filter only listed ListedEquity instances so we can fetch their
         # EOD trade data
         securities_list = (
             session.query(asset_class).filter(asset_class.status == "listed").all()
         )
 
-        # Get all financial data
+        # Get all financial data. No form or to date is specified as the asset
+        # class EOD_GET_METHOD is expected to handle that logic internally.
+        get_method = asset_class.EOD_GET_METHOD
         data_frame = get_method(securities_list)
         # Bulk add/update data.
-        cls.from_data_frame(session, asset_class, data_frame)
+        cls.from_data_frame(session, data_frame)
 
 
 class IndexEOD(TradeEOD):
@@ -885,10 +865,14 @@ class IndexEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to. Will be set by
-    # _initialize_asset_class_references at the end of asset.py to avoid
-    # circular import
-    ASSET_CLASS = None
+    # This attribute is not used and is here only for reference. It must be
+    # lazily initialized by ``_initialize_asset_class_references`` at the end of
+    # asset.py module file to avoid circular import and for the time-series
+    # logic to be able to reference the asset class that holds the time-series
+    # data. Each and every concrete time-series class must have this attribute
+    # set to the asset class it belongs to. For example, for ListedEOD this
+    # attribute must be set to Listed, etc.
+    ASSET_CLASS: type["Index"] | None = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -899,7 +883,7 @@ class IndexEOD(TradeEOD):
         )
 
     @classmethod
-    def update_all(cls, session, get_method):
+    def update_all(cls, session):
         """Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -912,25 +896,23 @@ class IndexEOD(TradeEOD):
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        get_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all this class' constructor method arguments.
-
-        Note
-        ----
-        No object shall be destroyed, only updated or missing object created.
 
         """
-        # Get asset class - use the ASSET_CLASS attribute set during initialization
         asset_class = cls.ASSET_CLASS
 
-        # Get all actively listed Listed instances so we can fetch their
+        # Get only all actively listed Listed instances so we can fetch their
         # EOD trade data
-        index_list = (
-            session.query(asset_class).filter(asset_class.static == False).all()  # noqa
+        securities_list = (
+            session.query(asset_class).filter(
+                asset_class.status == "listed").all()
         )
 
-        super().update_all(session, asset_class, index_list, get_method)
+        # Get all financial data. No form or to date is specified as the asset
+        # class EOD_GET_METHOD is expected to handle that logic internally.
+        get_method = asset_class.EOD_GET_METHOD
+        data_frame = get_method(securities_list)
+        # Bulk add/update data.
+        cls.from_data_frame(session, data_frame)
 
 
 class ForexEOD(TradeEOD):
@@ -967,10 +949,14 @@ class ForexEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # Define which asset class this time series belongs to. Will be set by
-    # _initialize_asset_class_references at the end of asset.py to avoid
-    # circular import
-    ASSET_CLASS = None
+    # This attribute is not used and is here only for reference. It must be
+    # lazily initialized by ``_initialize_asset_class_references`` at the end of
+    # asset.py module file to avoid circular import and for the time-series
+    # logic to be able to reference the asset class that holds the time-series
+    # data. Each and every concrete time-series class must have this attribute
+    # set to the asset class it belongs to. For example, for ListedEOD this
+    # attribute must be set to Listed, etc.
+    ASSET_CLASS: type["Forex"] | None = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -981,7 +967,7 @@ class ForexEOD(TradeEOD):
         )
 
     @classmethod
-    def update_all(cls, session, get_method):
+    def update_all(cls, session):
         """Update/create the eod trade data of all the Listed instances.
 
         Warning
@@ -1003,14 +989,14 @@ class ForexEOD(TradeEOD):
         No object shall be destroyed, only updated or missing object created.
 
         """
-        # Get asset class - use the ASSET_CLASS attribute set during initialization
         asset_class = cls.ASSET_CLASS
 
-        # Get all actively listed Listed instances so we can fetch their
-        # EOD trade data
-        forex_list = session.query(asset_class).all()
-
-        super().update_all(session, asset_class, forex_list, get_method)
+        # Get all financial data. No form or to date is specified as the asset
+        # class EOD_GET_METHOD is expected to handle that logic internally.
+        get_method = asset_class.EOD_GET_METHOD
+        data_frame = get_method()
+        # Bulk add/update data.
+        cls.from_data_frame(session, data_frame)
 
 
 class Dividend(TimeSeriesBase):
@@ -1198,8 +1184,12 @@ class Dividend(TimeSeriesBase):
             session.query(asset_class).filter(asset_class.status == "listed").all()
         )
 
-        super().update_all(session, asset_class, securities_list, get_method)
-
+        # Get all financial data. No form or to date is specified as the asset
+        # class DIVIDEND_GET_METHOD is expected to handle that logic internally.
+        get_method = asset_class.DIVIDEND_GET_METHOD
+        data_frame = get_method()
+        # Bulk add/update data.
+        cls.from_data_frame(session, data_frame)
 
 class Split(TimeSeriesBase):
     """A single listed security's date-stamped split data.
@@ -1311,9 +1301,6 @@ class Split(TimeSeriesBase):
         This method only updates actively listed securities.
 
         """
-        # TODO: Find a way to get the financial_data module to look for delisted
-        # data. Then skipping de-listed securities below can be avoided
-
         # Get asset class - use the ASSET_CLASS attribute set during initialization
         asset_class = cls.ASSET_CLASS
 
@@ -1322,17 +1309,22 @@ class Split(TimeSeriesBase):
             session.query(asset_class).filter(asset_class.status == "listed").all()
         )
 
-        super().update_all(session, asset_class, securities_list, get_method)
+        # Get all financial data. No form or to date is specified as the asset
+        # class SPLIT_GET_METHOD is expected to handle that logic internally.
+        get_method = asset_class.SPLIT_GET_METHOD
+        data_frame = get_method()
+        # Bulk add/update data.
+        cls.from_data_frame(session, data_frame)
 
 
 # Initialize ASSET_CLASS attributes after all classes are defined
 # This must be called after asset module is imported to avoid circular imports
 def _initialize_asset_class_references():
-    """Initialize ASSET_CLASS attributes for time series classes.
+    """Lazy initialization ASSET_CLASS attributes for time series classes.
 
     This function should be called once after the asset module is fully loaded
-    to set up the bidirectional type references between asset and time series classes.
-    This avoids circular import issues while maintaining type safety.
+    to set up the bidirectional type references between asset and time series
+    classes. This avoids circular import issues while maintaining type safety.
     """
     from .asset import Listed, ListedEquity, Index, Forex
 

@@ -320,9 +320,7 @@ class TestListedEquityEOD(TestBase):
         self.session.commit()
 
         # Use the test fixture data
-        ListedEquityEOD.from_data_frame(
-            self.session, ListedEquity, self.test_trade_eod_df
-        )
+        ListedEquityEOD.from_data_frame(self.session, self.test_trade_eod_df)
         self.session.commit()
 
         # Query all ListedEquityEOD instances
@@ -344,9 +342,7 @@ class TestListedEquityEOD(TestBase):
         self.session.commit()
 
         # First load - create records
-        ListedEquityEOD.from_data_frame(
-            self.session, ListedEquity, self.test_trade_eod_df
-        )
+        ListedEquityEOD.from_data_frame(self.session, self.test_trade_eod_df)
         self.session.commit()
 
         # Modify the DataFrame with updated values
@@ -356,9 +352,7 @@ class TestListedEquityEOD(TestBase):
         ] = 999.9
 
         # Second load - update records
-        ListedEquityEOD.from_data_frame(
-            self.session, ListedEquity, updated_df
-        )
+        ListedEquityEOD.from_data_frame(self.session, updated_df)
         self.session.commit()
 
         # Query the updated record
@@ -382,9 +376,7 @@ class TestListedEquityEOD(TestBase):
         empty_df = pd.DataFrame(columns=self.test_trade_eod_df.columns)
 
         # Should not raise an error
-        ListedEquityEOD.from_data_frame(
-            self.session, ListedEquity, empty_df
-        )
+        ListedEquityEOD.from_data_frame(self.session, empty_df)
         self.session.commit()
 
         # Should have no records
@@ -397,13 +389,11 @@ class TestListedEquityEOD(TestBase):
         self.session.commit()
 
         # Load data
-        ListedEquityEOD.from_data_frame(
-            self.session, ListedEquity, self.test_trade_eod_df
-        )
+        ListedEquityEOD.from_data_frame(self.session, self.test_trade_eod_df)
         self.session.commit()
 
         # Convert back to DataFrame
-        result_df = ListedEquityEOD.to_data_frame(self.session, ListedEquity)
+        result_df = ListedEquityEOD.to_data_frame(self.session)
 
         # Should have same number of rows
         self.assertEqual(len(result_df), len(self.test_trade_eod_df))
@@ -426,7 +416,7 @@ class TestListedEquityEOD(TestBase):
         self.session.add(self.listed_equity)
         self.session.commit()
 
-        result_df = ListedEquityEOD.to_data_frame(self.session, ListedEquity)
+        result_df = ListedEquityEOD.to_data_frame(self.session)
 
         # Should return empty DataFrame with proper columns
         self.assertTrue(result_df.empty)

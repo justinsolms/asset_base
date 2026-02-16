@@ -60,9 +60,10 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy import Integer, String, Date, Column, UniqueConstraint
 from sqlalchemy.orm.decl_api import DeclarativeMeta
-from sqlalchemy.orm import declarative_base, Session, declared_attr
+from sqlalchemy.orm import declarative_base, Session, declared_attr, object_session
 from sqlalchemy_utils import drop_database, database_exists, create_database  # type: ignore
 
+from .financial_data import MetaData as FinancialMetaData
 
 from asset_base import get_cache_path
 
@@ -418,6 +419,15 @@ class Common(Base):
     date_mod_stamp = Column(Date, nullable=True)
     """sqlalchemy.DateTime: Modification date stamp. May be in the past."""
 
+    # The financial_data module metadata getter method provider instance for all
+    # classes inheriting from Common.
+    METADATA_INSTANCE = FinancialMetaData()
+
+    # The metadata get method should be overridden in child classes to return
+    # the appropriate metadata get method for that class. Use the METADATA
+    # instance.
+    METADATA_GET_METHOD = None
+
     def __init__(self, name):
         """Instance initialization."""
         self.name = name
@@ -582,8 +592,7 @@ class Common(Base):
 
         return data_frame
 
-    @classmethod
-    def update_all(cls, session, get_method, **kwargs):
+    def update_all(self, **kwargs):
         """Update/create all the objects in the asset_base session.
 
         Parameters
@@ -600,7 +609,13 @@ class Common(Base):
         No object shall be destroyed, only updated, or missing object created.
 
         """
+        session = object_session(self)
+        if session is None:
+            raise RuntimeError(
+                "There is no active session attached to this instance.")
+
         # Get all financial data
+        get_method = self.METADATA_GET_METHOD  # class
         data_frame = get_method(**kwargs)
         # Bulk add/update data (uses the factory method)
-        cls.from_data_frame(session, data_frame)
+        self.from_data_frame(session, data_frame)
