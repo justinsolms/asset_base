@@ -700,18 +700,12 @@ class ListedEOD(TradeEOD):
 
     @classmethod
     def update_all(cls, session):
-        """Update/create the eod trade data of all the Listed instances.
+        """Update the EOD trade data of all the Listed instances.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the database.
-
-        Warning
-        -------
-        The Listed.time_series_last_date attribute (or child class attribute) is
-        not updated by this method as it is the responsibility of the ``Listed``
-        class and its child classes to manage that attribute.
 
         """
         asset_class = cls.ASSET_CLASS
@@ -719,8 +713,7 @@ class ListedEOD(TradeEOD):
         # Get only all actively listed Listed instances so we can fetch their
         # EOD trade data
         securities_list = (
-            session.query(asset_class).filter(
-                asset_class.status == "listed").all()
+            session.query(asset_class).filter(asset_class.status == "listed").all()
         )
 
         # Get all financial data. No form or to date is specified as the asset
@@ -798,15 +791,10 @@ class ListedEquityEOD(ListedEOD):
             f"adjusted_close={self.adjusted_close}, volume={self.volume})"
         )
 
+    # FIXME: This method is identical to ListedEOD.update_all. Consider refactoring to avoid code duplication.
     @classmethod
     def update_all(cls, session):
-        """Update/create the eod trade data of all the ListedEquity instances.
-
-        Warning
-        -------
-        The ListedEquity.time_series_last_date attribute (or child class attribute) is
-        not updated by this method as it is the responsibility of the ``ListedEquity``
-        class and its child classes to manage that attribute.
+        """Update the EOD trade data of all the ListedEquity instances.
 
         Parameters
         ----------
@@ -884,13 +872,7 @@ class IndexEOD(TradeEOD):
 
     @classmethod
     def update_all(cls, session):
-        """Update/create the eod trade data of all the Listed instances.
-
-        Warning
-        -------
-        The Listed.time_series_last_date attribute (or child class attribute) is
-        not updated by this method as it is the responsibility of the ``Listed``
-        class and its child classes to manage that attribute.
+        """Update the EOD data of all the Index instances.
 
         Parameters
         ----------
@@ -902,10 +884,7 @@ class IndexEOD(TradeEOD):
 
         # Get only all actively listed Listed instances so we can fetch their
         # EOD trade data
-        securities_list = (
-            session.query(asset_class).filter(
-                asset_class.status == "listed").all()
-        )
+        securities_list = session.query(asset_class).all()
 
         # Get all financial data. No form or to date is specified as the asset
         # class EOD_GET_METHOD is expected to handle that logic internally.
@@ -1158,30 +1137,13 @@ class Dividend(TimeSeriesBase):
             }
 
     @classmethod
-    def update_all(cls, session, get_method):
-        """Update/create the eod trade data of all the Listed instances.
-
-        Warning
-        -------
-        The Listed.time_series_last_date attribute (or child class attribute) is
-        not updated by this method as it is the responsibility of the ``Listed``
-        class and its child classes to manage that attribute.
+    def update_all(cls, session):
+        """Update the dividend data of all the ListedEquity instances.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        get_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all this class' constructor method arguments.
-
-        Note
-        ----
-        No object shall be destroyed, only updated or missing object created.
-
-        Note
-        ----
-        This method only updates actively listed securities.
 
         """
         # Get asset class - use the ASSET_CLASS attribute set during initialization
@@ -1195,7 +1157,7 @@ class Dividend(TimeSeriesBase):
         # Get all financial data. No form or to date is specified as the asset
         # class DIVIDEND_GET_METHOD is expected to handle that logic internally.
         get_method = asset_class.DIVIDEND_GET_METHOD
-        data_frame = get_method()
+        data_frame = get_method(securities_list)
         # Bulk add/update data.
         cls.from_data_frame(session, data_frame)
 
@@ -1284,30 +1246,13 @@ class Split(TimeSeriesBase):
         }
 
     @classmethod
-    def update_all(cls, session, get_method):
-        """Update/create the eod trade data of all the Listed instances.
-
-        Warning
-        -------
-        The Listed.time_series_last_date attribute (or child class attribute) is
-        not updated by this method as it is the responsibility of the ``Listed``
-        class and its child classes to manage that attribute.
+    def update_all(cls, session):
+        """Update the split data of all the ListedEquity instances.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        get_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all this class' constructor method arguments.
-
-        Note
-        ----
-        No object shall be destroyed, only updated or missing object created.
-
-        Note
-        ----
-        This method only updates actively listed securities.
 
         """
         # Get asset class - use the ASSET_CLASS attribute set during initialization
@@ -1321,7 +1266,7 @@ class Split(TimeSeriesBase):
         # Get all financial data. No form or to date is specified as the asset
         # class SPLIT_GET_METHOD is expected to handle that logic internally.
         get_method = asset_class.SPLIT_GET_METHOD
-        data_frame = get_method()
+        data_frame = get_method(securities_list)
         # Bulk add/update data.
         cls.from_data_frame(session, data_frame)
 

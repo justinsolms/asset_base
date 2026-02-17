@@ -1764,10 +1764,6 @@ class Listed(Share):
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         """
-
-        # Get securities for this Listed subclass
-        super().update_all(session)
-
         # Get EOD trade data for this Listed subclass.
         ListedEOD.update_all(session)
 
@@ -2548,10 +2544,6 @@ class Index(AssetBase):
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         """
-
-        # Get securities for this Index subclass
-        super().update_all(session)
-
         # Get EOD trade data.
         IndexEOD.update_all(session)
 

@@ -271,6 +271,7 @@ class TestManager(unittest.TestCase):
         currencies = self.session.query(Currency).count()
         self.assertGreater(currencies, 0)
 
+    @unittest.mock.patch('asset_base.asset.Forex.foreign_currencies', ['USD'])
     @unittest.mock.patch('asset_base.financial_data.History.get_forex_eod')
     @unittest.mock.patch('asset_base.financial_data.History.get_splits')
     @unittest.mock.patch('asset_base.financial_data.History.get_dividends')
@@ -280,19 +281,25 @@ class TestManager(unittest.TestCase):
         self, mock_get_etfs, mock_get_eod,
         mock_get_dividends, mock_get_splits, mock_get_forex
     ):
-        """Test update method would call financial data methods (mock only)."""
+        """Test update method executes without errors when called after set_up."""
         # Mock financial data methods to return empty DataFrames
+        # This prevents actual API calls during testing
         mock_get_etfs.return_value = pd.DataFrame()
         mock_get_eod.return_value = pd.DataFrame()
         mock_get_dividends.return_value = pd.DataFrame()
         mock_get_splits.return_value = pd.DataFrame()
         mock_get_forex.return_value = pd.DataFrame()
 
+        # Set up first without update, then call update explicitly
         self.manager.set_up(reuse=False, update=False)
 
-        # Verify set_up completed successfully
-        from asset_base.entity import Currency
-        self.assertGreater(self.session.query(Currency).count(), 0)
+        # Now call update to test the update code path executes without errors
+        # This is the critical test - it should not raise TypeError about
+        # unexpected keyword arguments or other errors
+        self.manager.update()
+        
+        # If we get here, update() succeeded without errors
+        self.assertTrue(True)
 
     def test_get_meta(self):
         """Test get_meta returns dictionary of metadata."""

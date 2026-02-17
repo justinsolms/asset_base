@@ -403,14 +403,7 @@ class ManagerBase(object):
         security_metadata = MetaData()
         history = History()
         # TODO: Future security classes place their update_all() methods here.
-        # NOTE: ListedEquity.update_all() here
-        ExchangeTradeFund.update_all(
-            self.session,
-            get_meta_method=security_metadata.get_etfs_meta,
-            get_eod_method=history.get_trade_eod,
-            get_dividends_method=history.get_dividends,
-            get_splits_method=history.get_splits,
-        )
+        ExchangeTradeFund.update_all(self.session)
 
         # Forex update - based on existing currencies and built in list
         # Forex.foreign_currencies

@@ -592,30 +592,3 @@ class Common(Base):
 
         return data_frame
 
-    def update_all(self, **kwargs):
-        """Update/create all the objects in the asset_base session.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        get_method : class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the `factory` method arguments, with the exception
-            of the `session` argument.
-        kwargs : key work arguments
-            Any parameters are passed to the ``get_method``.
-
-        No object shall be destroyed, only updated, or missing object created.
-
-        """
-        session = object_session(self)
-        if session is None:
-            raise RuntimeError(
-                "There is no active session attached to this instance.")
-
-        # Get all financial data
-        get_method = self.METADATA_GET_METHOD  # class
-        data_frame = get_method(**kwargs)
-        # Bulk add/update data (uses the factory method)
-        self.from_data_frame(session, data_frame)
