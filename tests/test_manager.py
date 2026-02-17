@@ -296,8 +296,8 @@ class TestManager(unittest.TestCase):
         # Now call update to test the update code path executes without errors
         # This is the critical test - it should not raise TypeError about
         # unexpected keyword arguments or other errors
-        self.manager.update()
-        
+        self.manager.update_all()
+
         # If we get here, update() succeeded without errors
         self.assertTrue(True)
 

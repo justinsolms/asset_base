@@ -352,7 +352,7 @@ class ManagerBase(object):
 
         # Check for newer data and update the database with API data.
         if update:
-            self.update()
+            self.update_all()
 
         # First commit. The update method call below will commit again
         self.commit()
@@ -386,7 +386,7 @@ class ManagerBase(object):
         # Delete database
         self.close(drop=True)
 
-    def update(self):
+    def update_all(self):
         """Update all non-static data.
 
         Uses the ``.financial_data`` module as the data source.
@@ -399,9 +399,6 @@ class ManagerBase(object):
                 "Database has not been set up. Please call set_up() first."
             )
 
-        # Check for newer securities data and update the database
-        security_metadata = MetaData()
-        history = History()
         # TODO: Future security classes place their update_all() methods here.
         ExchangeTradeFund.update_all(self.session)
 
