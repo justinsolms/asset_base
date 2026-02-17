@@ -104,7 +104,7 @@ from asset_base.entity import Currency, Exchange, Issuer
 from asset_base.common import Common
 from asset_base.industry_class import IndustryClassICB
 from asset_base.time_series import TimeSeriesBase, EODBase
-from asset_base.time_series import Dividend, Split,
+from asset_base.time_series import Dividend, Split
 from asset_base.time_series import ListedEOD, ForexEOD, IndexEOD
 
 from asset_base.time_series_processor import TimeSeriesProcessor
@@ -671,19 +671,22 @@ class Cash(Asset):
 
         return obj
 
-    def update_all(self):
-        """Update/create all the objects in the asset_base session."""
-        session = object_session(self)
-        if session is None:
-            raise RuntimeError(
-                "There is no active session attached to this instance.")
+    @classmethod
+    def update_all(cls, session):
+        """Update/create Cash instances for all currencies in the session.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        """
 
         # A cash instance for every currency
         currency_list = session.query(Currency).all()
         if len(currency_list) == 0:
             raise Exception("No Currency instances found. ")
         for currency in currency_list:
-            Cash.factory(session, currency.ticker)
+            cls.factory(session, currency.ticker)
 
     def get_eod_series(self, date_index):
         """Return the EOD time series for the Cash object.
@@ -1035,19 +1038,22 @@ class Forex(Cash):
 
         return obj
 
-    def update_all(self):
-        """Update/create all the objects in the asset_base session."""
-        session = object_session(self)
-        if session is None:
-            raise RuntimeError(
-                "There is no active session attached to this instance.")
+    @classmethod
+    def update_all(cls, session):
+        """Update/create Forex instances for configured foreign currencies.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        """
 
         # Create Forex instances as per the Forex.foreign_currencies list
         # attribute
-        foreign_currencies_list = self.foreign_currencies
+        foreign_currencies_list = cls.foreign_currencies
         foreign_currencies = (
             session.query(Currency)
-            .filter( Currency.ticker.in_(foreign_currencies_list))
+            .filter(Currency.ticker.in_(foreign_currencies_list))
             .all()
         )
         if len(foreign_currencies) == 0:
@@ -1055,10 +1061,10 @@ class Forex(Cash):
         if len(foreign_currencies_list) != len(foreign_currencies):
             raise FactoryError("Not all foreign currencies were found.")
         for price_currency in foreign_currencies:
-            Forex.factory(session, self.root_currency_ticker, price_currency.ticker)
+            cls.factory(session, cls.root_currency_ticker, price_currency.ticker)
 
         # Get EOD trade data for Forex.
-        ForexEOD.update_all()
+        ForexEOD.update_all(session)
 
     @classmethod
     def get_rates_data_frame(
@@ -1749,17 +1755,20 @@ class Listed(Share):
 
         return obj
 
-    def update_all(self):
-        """Update/create all the objects in the asset_base session."""
-        session = object_session(self)
-        if session is None:
-            raise RuntimeError(
-                "There is no active session attached to this instance.")
+    @classmethod
+    def update_all(cls, session):
+        """Update/create all Listed securities and their EOD trade data.
 
-        # Get securities
-        super().update_all()
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        """
 
-        # Get EOD trade data.
+        # Get securities for this Listed subclass
+        super().update_all(session)
+
+        # Get EOD trade data for this Listed subclass.
         ListedEOD.update_all(session)
 
     @classmethod
@@ -1796,7 +1805,7 @@ class Listed(Share):
         dumper.write(dump_dict)
 
         # Dump all security end-of-day time-series data
-        ListedEOD.dump(session, dumper, Listed)
+        ListedEOD.dump(session, dumper)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
@@ -2040,21 +2049,24 @@ class ListedEquity(Listed):
 
         return dictionary
 
-    def update_all(self):
-        """Update/create all the objects in the asset_base session. """
-        session = object_session(self)
-        if session is None:
-            raise RuntimeError(
-                "There is no active session attached to this instance.")
+    @classmethod
+    def update_all(cls, session):
+        """Update/create all ListedEquity securities and their time series.
 
-        # Get securities
-        super().update_all()
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        """
+
+        # Get securities for this ListedEquity subclass
+        super().update_all(session)
 
         # Get Dividend data.
-        Dividend.update_all()
+        Dividend.update_all(session)
 
         # Get Split data.
-        Split.update_all()
+        Split.update_all(session)
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -2079,8 +2091,8 @@ class ListedEquity(Listed):
         super().dump(session, dumper)
 
         # Dump all security dividend and split time-series data
-        Dividend.dump(session, dumper, ListedEquity)
-        Split.dump(session, dumper, ListedEquity)
+        Dividend.dump(session, dumper)
+        Split.dump(session, dumper)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
@@ -2527,18 +2539,21 @@ class Index(AssetBase):
 
         return obj
 
-    def update_all(self):
-        """Update/create all the objects in the asset_base session. """
-        session = object_session(self)
-        if session is None:
-            raise RuntimeError(
-                "There is no active session attached to this instance.")
+    @classmethod
+    def update_all(cls, session):
+        """Update/create all Index securities and their EOD trade data.
 
-        # Get securities
-        super().update_all()
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        """
+
+        # Get securities for this Index subclass
+        super().update_all(session)
 
         # Get EOD trade data.
-        IndexEOD.update_all()
+        IndexEOD.update_all(session)
 
 
 class ExchangeTradeFund(ListedEquity):

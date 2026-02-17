@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from src.asset_base.financial_data import Dump, History, MetaData, Static
+from asset_base.financial_data import Dump, History, MetaData, Static
 
 
 class DummyExchange:
@@ -211,7 +211,7 @@ class TestMetaData(unittest.TestCase):
 				{"Name": "Index B", "Code": "BBB", "Currency": "EUR"},
 			]
 		)
-		with patch("src.asset_base.financial_data.Exchanges.get_indices", return_value=mock_df):
+		with patch("asset_base.financial_data.Exchanges.get_indices", return_value=mock_df):
 			data = self.meta.get_indices()
 		self.assertEqual(["index_name", "ticker", "currency_code"], data.columns.tolist())
 		self.assertEqual(["AAA", "BBB"], data["ticker"].tolist())
@@ -233,7 +233,7 @@ class TestHistory(unittest.TestCase):
 
 	def test_get_eod_with_mock(self):
 		mock_df = _make_eod_df(tickers=["AAA", "BBB"], exchanges=["US", "JSE"])
-		with patch("src.asset_base.financial_data.MultiHistorical.get_eod", return_value=mock_df):
+		with patch("asset_base.financial_data.MultiHistorical.get_eod", return_value=mock_df):
 			data = self.history.get_trade_eod(self.assets)
 		self.assertIn("isin", data.columns)
 		self.assertIn("date_stamp", data.columns)
@@ -241,7 +241,7 @@ class TestHistory(unittest.TestCase):
 
 	def test_get_dividends_with_mock(self):
 		mock_df = _make_dividend_df(tickers=["AAA", "BBB"], exchanges=["US", "JSE"])
-		with patch("src.asset_base.financial_data.MultiHistorical.get_dividends", return_value=mock_df):
+		with patch("asset_base.financial_data.MultiHistorical.get_dividends", return_value=mock_df):
 			data = self.history.get_dividends(self.assets)
 		expected_columns = [
 			"date_stamp",
@@ -259,7 +259,7 @@ class TestHistory(unittest.TestCase):
 
 	def test_get_splits_with_mock(self):
 		mock_df = _make_split_df(tickers=["AAA", "BBB"], exchanges=["US", "JSE"])
-		with patch("src.asset_base.financial_data.MultiHistorical.get_splits", return_value=mock_df):
+		with patch("asset_base.financial_data.MultiHistorical.get_splits", return_value=mock_df):
 			data = self.history.get_splits(self.assets)
 		expected_columns = ["date_stamp", "isin", "numerator", "denominator"]
 		self.assertEqual(expected_columns, data.columns.tolist())
@@ -267,7 +267,7 @@ class TestHistory(unittest.TestCase):
 
 	def test_get_forex_with_mock(self):
 		mock_df = _make_forex_df(tickers=["USDEUR"])
-		with patch("src.asset_base.financial_data.MultiHistorical.get_forex", return_value=mock_df):
+		with patch("asset_base.financial_data.MultiHistorical.get_forex", return_value=mock_df):
 			data = self.history.get_forex_eod(self.forex)
 		expected_columns = [
 			"date_stamp",
@@ -284,7 +284,7 @@ class TestHistory(unittest.TestCase):
 
 	def test_get_indices_with_mock(self):
 		mock_df = _make_forex_df(tickers=["GSPC"])
-		with patch("src.asset_base.financial_data.MultiHistorical.get_index", return_value=mock_df):
+		with patch("asset_base.financial_data.MultiHistorical.get_index", return_value=mock_df):
 			data = self.history.get_indices_eod(self.indices)
 		expected_columns = [
 			"date_stamp",

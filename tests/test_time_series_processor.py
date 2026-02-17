@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 from io import StringIO
 
-from src.asset_base.time_series_processor import TimeSeriesProcessor
+from asset_base.time_series_processor import TimeSeriesProcessor
 
 
 class TestTimeSeriesProcessor(unittest.TestCase):

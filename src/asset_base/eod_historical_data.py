@@ -269,7 +269,19 @@ class Historical(APISessionManager):
             from_date=from_date,
             to_date=to_date,
         )
+
+        # Select only the expected dividend columns
         table = table[dividend_columns]
+
+        # Normalise dtypes to match test and downstream expectations:
+        # - date-like/reference fields stay as generic objects (string/ISO date)
+        # - numeric fields are floats
+        for col in ["declarationDate", "recordDate", "paymentDate", "period", "currency"]:
+            if col in table.columns:
+                table[col] = table[col].astype("object")
+        for col in ["value", "unadjustedValue"]:
+            if col in table.columns:
+                table[col] = table[col].astype("float64")
 
         return table
 

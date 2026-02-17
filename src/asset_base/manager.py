@@ -414,10 +414,7 @@ class ManagerBase(object):
 
         # Forex update - based on existing currencies and built in list
         # Forex.foreign_currencies
-        Forex.update_all(
-            self.session,
-            get_forex_method=history.get_forex_eod,
-        )
+        Forex.update_all(self.session)
 
         # TODO: Include Index.update_all
 

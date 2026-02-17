@@ -1175,7 +1175,7 @@ class TestCashGetTimeSeriesProcessor(TestBase):
 
     def test_get_time_series_processor_returns_processor(self):
         """Test that method returns TimeSeriesProcessor instance."""
-        from src.asset_base.time_series_processor import TimeSeriesProcessor
+        from asset_base.time_series_processor import TimeSeriesProcessor
         date_index = pd.DatetimeIndex([
             datetime.date(2024, 1, 1),
             datetime.date(2024, 1, 2),
@@ -1279,7 +1279,7 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
         self.session.commit()
 
         # Add some EOD data
-        from src.asset_base.time_series import ListedEOD
+        from asset_base.time_series import ListedEOD
         for i in range(5):
             date = datetime.date(2024, 1, 1) + datetime.timedelta(days=i)
             eod = ListedEOD(
@@ -1295,7 +1295,7 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
             self.session.add(eod)
 
         # Add some dividend data
-        from src.asset_base.time_series import Dividend
+        from asset_base.time_series import Dividend
         div = Dividend(
             base_obj=self.listed_equity,
             date_stamp=datetime.date(2024, 1, 3),
@@ -1310,7 +1310,7 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
         self.session.add(div)
 
         # Add some split data
-        from src.asset_base.time_series import Split
+        from asset_base.time_series import Split
         split = Split(
             base_obj=self.listed_equity,
             date_stamp=datetime.date(2024, 1, 4),
@@ -1323,7 +1323,7 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
 
     def test_get_time_series_processor_returns_processor(self):
         """Test that method returns TimeSeriesProcessor instance."""
-        from src.asset_base.time_series_processor import TimeSeriesProcessor
+        from asset_base.time_series_processor import TimeSeriesProcessor
         tsp = self.listed_equity.get_time_series_processor()
         self.assertIsInstance(tsp, TimeSeriesProcessor)
 

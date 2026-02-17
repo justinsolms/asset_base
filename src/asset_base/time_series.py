@@ -991,10 +991,18 @@ class ForexEOD(TradeEOD):
         """
         asset_class = cls.ASSET_CLASS
 
+        # Create Forex instances as per the Forex.foreign_currencies list
+        # attribute
+        forex_list = (
+            session.query(asset_class)
+            .filter(asset_class.ticker.in_(asset_class.foreign_currencies))
+            .all()
+        )
+
         # Get all financial data. No form or to date is specified as the asset
         # class EOD_GET_METHOD is expected to handle that logic internally.
         get_method = asset_class.EOD_GET_METHOD
-        data_frame = get_method()
+        data_frame = get_method(forex_list)
         # Bulk add/update data.
         cls.from_data_frame(session, data_frame)
 
