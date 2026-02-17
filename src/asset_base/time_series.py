@@ -791,33 +791,6 @@ class ListedEquityEOD(ListedEOD):
             f"adjusted_close={self.adjusted_close}, volume={self.volume})"
         )
 
-    # FIXME: This method is identical to ListedEOD.update_all. Consider refactoring to avoid code duplication.
-    @classmethod
-    def update_all(cls, session):
-        """Update the EOD trade data of all the ListedEquity instances.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-
-        """
-        # Get asset class
-        asset_class = cls.ASSET_CLASS
-
-        # Filter only listed ListedEquity instances so we can fetch their
-        # EOD trade data
-        securities_list = (
-            session.query(asset_class).filter(asset_class.status == "listed").all()
-        )
-
-        # Get all financial data. No form or to date is specified as the asset
-        # class EOD_GET_METHOD is expected to handle that logic internally.
-        get_method = asset_class.EOD_GET_METHOD
-        data_frame = get_method(securities_list)
-        # Bulk add/update data.
-        cls.from_data_frame(session, data_frame)
-
 
 class IndexEOD(TradeEOD):
     """A single index's date-stamped EOD trade data.
