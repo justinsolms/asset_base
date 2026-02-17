@@ -272,34 +272,62 @@ class TestManager(unittest.TestCase):
         self.assertGreater(currencies, 0)
 
     @unittest.mock.patch('asset_base.asset.Forex.foreign_currencies', ['USD'])
-    @unittest.mock.patch('asset_base.financial_data.History.get_forex_eod')
-    @unittest.mock.patch('asset_base.financial_data.History.get_splits')
-    @unittest.mock.patch('asset_base.financial_data.History.get_dividends')
-    @unittest.mock.patch('asset_base.financial_data.History.get_trade_eod')
-    @unittest.mock.patch('asset_base.financial_data.MetaData.get_etfs_meta')
-    def test_update_calls_financial_data_methods(
-        self, mock_get_etfs, mock_get_eod,
-        mock_get_dividends, mock_get_splits, mock_get_forex
-    ):
-        """Test update method executes without errors when called after set_up."""
-        # Mock financial data methods to return empty DataFrames
-        # This prevents actual API calls during testing
-        mock_get_etfs.return_value = pd.DataFrame()
-        mock_get_eod.return_value = pd.DataFrame()
-        mock_get_dividends.return_value = pd.DataFrame()
-        mock_get_splits.return_value = pd.DataFrame()
-        mock_get_forex.return_value = pd.DataFrame()
+    def test_update_calls_financial_data_methods(self):
+        """Test update_all method creates securities by calling AssetBase.update_all."""
+        from asset_base.asset import ExchangeTradeFund, AssetBase, ListedEquity
 
-        # Set up first without update, then call update explicitly
+        # Create mock ETF metadata - this avoids reading from CSV file
+        mock_etf_data = pd.DataFrame({
+            'listed_name': ['Test ETF Alpha', 'Test ETF Beta'],
+            'issuer_name': ['Test Issuer Inc', 'Test Issuer Inc'],
+            'issuer_domicile_code': ['US', 'US'],
+            'isin': ['US0378331005', 'US5949181045'],  # Valid ISIN checksums (Apple, Microsoft)
+            'mic': ['XNYS', 'XNYS'],
+            'ticker': ['TESTA', 'TESTB'],
+            'status': ['listed', 'listed']
+        })
+
+        # Set up with required static data
+        self._configure_standard_static_data(
+            currency_tickers=['USD'],
+            domicile_codes=['US'],
+            exchange_mics=['XNYS']
+        )
+
+        # Set up first without update - this creates static data
         self.manager.set_up(reuse=False, update=False)
 
-        # Now call update to test the update code path executes without errors
-        # This is the critical test - it should not raise TypeError about
-        # unexpected keyword arguments or other errors
-        self.manager.update_all()
+        # Verify no ETFs exist before update
+        etf_count_before = self.session.query(ExchangeTradeFund).count()
+        self.assertEqual(etf_count_before, 0, "No ETFs should exist before update_all")
 
-        # If we get here, update() succeeded without errors
-        self.assertTrue(True)
+        # Mock all the data retrieval methods to avoid API/file calls
+        with unittest.mock.patch.object(
+            ExchangeTradeFund, 'METADATA_GET_METHOD', return_value=mock_etf_data
+        ), unittest.mock.patch.object(
+            AssetBase, 'EOD_GET_METHOD', return_value=pd.DataFrame()
+        ), unittest.mock.patch.object(
+            ListedEquity, 'DIVIDEND_GET_METHOD', return_value=pd.DataFrame()
+        ), unittest.mock.patch.object(
+            ListedEquity, 'SPLIT_GET_METHOD', return_value=pd.DataFrame()
+        ), unittest.mock.patch.object(
+            AssetBase.HISTORY_INSTANCE, 'get_forex_eod', return_value=pd.DataFrame()
+        ):
+            # Now call update_all to test that securities are created
+            self.manager.update_all()
+
+        # Verify that ETF instances were created from our mock data
+        etf_count_after = self.session.query(ExchangeTradeFund).count()
+        self.assertEqual(etf_count_after, 2,
+            "Two ETF instances should be created after update_all calls AssetBase.update_all")
+
+        # Verify the ETFs have expected attributes from our mock data
+        etfs = self.session.query(ExchangeTradeFund).order_by(ExchangeTradeFund.ticker).all()
+        self.assertEqual(etfs[0].name, 'Test ETF Alpha')
+        self.assertEqual(etfs[0].isin, 'US0378331005')
+        self.assertEqual(etfs[0].ticker, 'TESTA')
+        self.assertEqual(etfs[1].name, 'Test ETF Beta')
+        self.assertEqual(etfs[1].ticker, 'TESTB')
 
     def test_get_meta(self):
         """Test get_meta returns dictionary of metadata."""

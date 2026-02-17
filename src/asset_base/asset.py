@@ -176,8 +176,7 @@ class AssetBase(Common):
     # populate the _series relationship for this class.
     HISTORY_INSTANCE = FinancialHistory()
 
-    # The EOD history getter methods for this class that will
-    # populate the _series relationship for this class.
+    # The financial_data EOD_GET_METHOD method overridden here
     EOD_GET_METHOD = HISTORY_INSTANCE.get_trade_eod
 
     # All historical generic time-series collection ranked by date_stamp
@@ -209,6 +208,22 @@ class AssetBase(Common):
     def currency_ticker(self):
         """ISO 4217 3-letter currency code."""
         return self.currency.ticker
+
+    @classmethod
+    def update_all(cls, session):
+        """Update the
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+
+        """
+        get_method = cls.METADATA_GET_METHOD
+        # Get all financial data
+        data_frame = get_method()
+        # Bulk add/update data (uses the factory method)
+        cls.from_data_frame(session, data_frame)
 
 
 class Asset(AssetBase):
@@ -852,7 +867,7 @@ class Forex(Cash):
     # ticker column at class initialization.
     __table_args__ = (UniqueConstraint("ticker"),)
 
-    # The financial_data METADATA_GET_METHOD method overridden here
+    # The financial_data EOD_GET_METHOD method overridden here
     EOD_GET_METHOD = AssetBase.HISTORY_INSTANCE.get_forex_eod
 
     # The reference or root ticker. Its price will always be 1.0.
@@ -1757,13 +1772,24 @@ class Listed(Share):
 
     @classmethod
     def update_all(cls, session):
-        """Update/create all Listed securities and their EOD trade data.
+        """Update/create all Listed securities.
+
+        Note
+        ----
+        It is the subclasses job to update their own time-series data i their
+        own ``update_all`` method. For example, ``ListedEquity.update_all``
+        should call ``ListedEOD.update_all``, ``Split.update_all``, and
+        ``Dividend.update_all`` to update it's end-of-day time-series data for
+        all listed equities instances.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         """
+        # The superclass will get security meta-data for all Listed subclasses.
+        super().update_all(session)
+
         # Get EOD trade data for this Listed subclass.
         ListedEOD.update_all(session)
 
@@ -2055,7 +2081,8 @@ class ListedEquity(Listed):
             A session attached to the desired database.
         """
 
-        # Get securities for this ListedEquity subclass
+        # The superclasses will get securities metadata and EOD trade data for
+        # this ListedEquity subclass
         super().update_all(session)
 
         # Get Dividend data.
@@ -2189,6 +2216,22 @@ class ListedEquity(Listed):
         else:
             return self._dividend_series[-1]
 
+    def get_last_dividend_date(self):
+        """Return the last dividend date for the listed asset.
+
+        Returns
+        -------
+        datetime.date
+            The date of the last dividend for the listed asset.
+
+        Raises
+        ------
+        DividendSeriesNoData
+            If no time series exists.
+        """
+        last_dividend = self.get_last_dividend()
+        return last_dividend.date_stamp
+
     def get_split_series(self):
         """Return the splits data series for the security.
 
@@ -2232,6 +2275,22 @@ class ListedEquity(Listed):
             raise SplitSeriesNoData(f"Expected split data for {self}")
         else:
             return self._split_series[-1]
+
+    def get_last_split_date(self):
+        """Return the last split date for the listed asset.
+
+        Returns
+        -------
+        datetime.date
+            The date of the last split for the listed asset.
+
+        Raises
+        ------
+        SplitSeriesNoData
+            If no time series exists.
+        """
+        last_split = self.get_last_split()
+        return last_split.date_stamp
 
     def get_time_series_processor(self, price_item="close"):
         """Return a TimeSeriesProcessor for this asset.
@@ -2392,7 +2451,7 @@ class Index(AssetBase):
     #  A short class name for use in naming
     _name_appendix = "Index"
 
-    # The financial_data METADATA_GET_METHOD method overridden here
+    # The financial_data EOD_GET_METHOD method overridden here
     EOD_GET_METHOD = AssetBase.HISTORY_INSTANCE.get_indices_eod
 
     def __init__(
@@ -2537,7 +2596,7 @@ class Index(AssetBase):
 
     @classmethod
     def update_all(cls, session):
-        """Update/create all Index securities and their EOD trade data.
+        """Update/create all Index securities and their EOD data.
 
         Parameters
         ----------
