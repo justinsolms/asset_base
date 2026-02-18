@@ -752,6 +752,33 @@ class Entity(Common):
 
         super().__init__(name)
 
+    @classmethod
+    def update_all(cls, session, get_method):
+        """Bulk update or create Entity subclasses from static data.
+
+        This classmethod provides a common ``update_all`` API for concrete
+        entity types such as ``Issuer`` and ``Exchange``. It expects a
+        callable ``get_method`` that returns a ``pandas.DataFrame`` whose
+        columns match the corresponding ``factory`` arguments (excluding the
+        ``session`` parameter).
+
+        Example
+        -------
+        >>> from asset_base.financial_data import Static
+        >>> static = Static()
+        >>> Exchange.update_all(session, get_method=static.get_exchange)
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            The SQLAlchemy session into which instances are loaded.
+        get_method : callable
+            A callable returning a ``pandas.DataFrame`` suitable for
+            :meth:`from_data_frame`.
+        """
+        data = get_method()
+        cls.from_data_frame(session, data)
+
     @property
     def currency(self):
         """Currency : ``Currency`` of the ``Entity`` ``Domicile``."""

@@ -52,7 +52,7 @@ def update():
     """Update the database with fresh data from the API."""
     with Manager() as abm:
         try:
-            abm.update()
+            abm.update_all()
         except NotSetUp as ex:
             logger.error(
                 "The database has not been set up. Please run the 'init' "

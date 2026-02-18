@@ -21,11 +21,11 @@ import numpy as np
 import pandas as pd
 
 # Classes to be tested
-from src.asset_base.eod_historical_data import APISessionManager, Exchanges
-from src.asset_base.eod_historical_data import Historical
-from src.asset_base.eod_historical_data import Bulk
-from src.asset_base.eod_historical_data import MultiHistorical
-from src.asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns, split_columns
+from asset_base.eod_historical_data import APISessionManager, Exchanges
+from asset_base.eod_historical_data import Historical
+from asset_base.eod_historical_data import Bulk
+from asset_base.eod_historical_data import MultiHistorical
+from asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns, split_columns
 
 
 def _make_eod_table(date_str="2020-01-02"):
@@ -163,7 +163,7 @@ class MockAPIMixin:
     def setUpClass(cls):
         super().setUpClass()
         cls._api_get_patcher = patch(
-            "src.asset_base.eod_historical_data.APISessionManager.get",
+            "asset_base.eod_historical_data.APISessionManager.get",
             new=AsyncMock(name="APISessionManager.get", side_effect=_mock_api_get),
         )
         cls._api_get_patcher.start()

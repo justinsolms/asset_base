@@ -28,13 +28,13 @@ import pandas as pd
 
 from sqlalchemy.exc import NoResultFound
 
-from src.asset_base.common import Common
-from src.asset_base.financial_data import Dump
-from src.asset_base.asset import Cash, Forex, ListedEquity
-from src.asset_base.time_series import Dividend, ListedEOD, Split
-from src.asset_base.manager import Manager, Meta, substitute_security_labels
-from src.asset_base.exceptions import TimeSeriesNoData
-from src.asset_base.time_series_processor import TimeSeriesProcessor
+from asset_base.common import Common
+from asset_base.financial_data import Dump
+from asset_base.asset import Cash, Forex, ListedEquity
+from asset_base.time_series import Dividend, ListedEOD, Split
+from asset_base.manager import Manager, Meta, substitute_security_labels
+from asset_base.exceptions import TimeSeriesNoData
+from asset_base.time_series_processor import TimeSeriesProcessor
 
 import warnings
 
@@ -94,7 +94,7 @@ class TestManager(unittest.TestCase):
         self.session = self.manager.session
 
         # Set up Static mock patcher
-        self.static_patcher = unittest.mock.patch('src.asset_base.manager.Static')
+        self.static_patcher = unittest.mock.patch('asset_base.manager.Static')
         self.mock_static_class = self.static_patcher.start()
         self.mock_static = unittest.mock.MagicMock()
         self.mock_static_class.return_value = self.mock_static
@@ -158,7 +158,7 @@ class TestManager(unittest.TestCase):
 
     def _create_listed_equity(self, num_eod=3, add_dividend=True, add_split=True):
         """Create a basic USD ListedEquity with optional EOD/dividend/split data."""
-        from src.asset_base.entity import Currency, Domicile, Issuer, Exchange
+        from asset_base.entity import Currency, Domicile, Issuer, Exchange
         import datetime
 
         usd = Currency.factory(self.session, 'USD')
@@ -235,7 +235,7 @@ class TestManager(unittest.TestCase):
 
     def test_commit_successful(self):
         """Test successful commit."""
-        from src.asset_base.manager import Meta
+        from asset_base.manager import Meta
         test_obj = Meta("test_key", "test_value")
         self.session.add(test_obj)
         # Should not raise
@@ -246,7 +246,7 @@ class TestManager(unittest.TestCase):
 
     def test_commit_rollback_on_error(self):
         """Test commit rolls back on error."""
-        from src.asset_base.manager import Meta
+        from asset_base.manager import Meta
         # Add an object
         test_obj1 = Meta("test_key1", "value1")
         self.session.add(test_obj1)
@@ -267,36 +267,71 @@ class TestManager(unittest.TestCase):
         self.manager.set_up(reuse=False, update=False)
 
         # Verify static data was created
-        from src.asset_base.entity import Currency, Domicile, Exchange
+        from asset_base.entity import Currency, Domicile, Exchange
         currencies = self.session.query(Currency).count()
         self.assertGreater(currencies, 0)
 
-    @unittest.mock.patch('src.asset_base.financial_data.History.get_forex')
-    @unittest.mock.patch('src.asset_base.financial_data.History.get_splits')
-    @unittest.mock.patch('src.asset_base.financial_data.History.get_dividends')
-    @unittest.mock.patch('src.asset_base.financial_data.History.get_eod')
-    @unittest.mock.patch('src.asset_base.financial_data.MetaData.get_etfs')
-    def test_update_calls_financial_data_methods(
-        self, mock_get_etfs, mock_get_eod,
-        mock_get_dividends, mock_get_splits, mock_get_forex
-    ):
-        """Test update method would call financial data methods (mock only)."""
-        # Mock financial data methods to return empty DataFrames
-        mock_get_etfs.return_value = pd.DataFrame()
-        mock_get_eod.return_value = pd.DataFrame()
-        mock_get_dividends.return_value = pd.DataFrame()
-        mock_get_splits.return_value = pd.DataFrame()
-        mock_get_forex.return_value = pd.DataFrame()
+    @unittest.mock.patch('asset_base.asset.Forex.foreign_currencies', ['USD'])
+    def test_update_calls_financial_data_methods(self):
+        """Test update_all method creates securities by calling AssetBase.update_all."""
+        from asset_base.asset import ExchangeTradeFund, AssetBase, ListedEquity
 
+        # Create mock ETF metadata - this avoids reading from CSV file
+        mock_etf_data = pd.DataFrame({
+            'listed_name': ['Test ETF Alpha', 'Test ETF Beta'],
+            'issuer_name': ['Test Issuer Inc', 'Test Issuer Inc'],
+            'issuer_domicile_code': ['US', 'US'],
+            'isin': ['US0378331005', 'US5949181045'],  # Valid ISIN checksums (Apple, Microsoft)
+            'mic': ['XNYS', 'XNYS'],
+            'ticker': ['TESTA', 'TESTB'],
+            'status': ['listed', 'listed']
+        })
+
+        # Set up with required static data
+        self._configure_standard_static_data(
+            currency_tickers=['USD'],
+            domicile_codes=['US'],
+            exchange_mics=['XNYS']
+        )
+
+        # Set up first without update - this creates static data
         self.manager.set_up(reuse=False, update=False)
 
-        # Verify set_up completed successfully
-        from src.asset_base.entity import Currency
-        self.assertGreater(self.session.query(Currency).count(), 0)
+        # Verify no ETFs exist before update
+        etf_count_before = self.session.query(ExchangeTradeFund).count()
+        self.assertEqual(etf_count_before, 0, "No ETFs should exist before update_all")
+
+        # Mock all the data retrieval methods to avoid API/file calls
+        with unittest.mock.patch.object(
+            ExchangeTradeFund, 'METADATA_GET_METHOD', return_value=mock_etf_data
+        ), unittest.mock.patch.object(
+            AssetBase, 'EOD_GET_METHOD', return_value=pd.DataFrame()
+        ), unittest.mock.patch.object(
+            ListedEquity, 'DIVIDEND_GET_METHOD', return_value=pd.DataFrame()
+        ), unittest.mock.patch.object(
+            ListedEquity, 'SPLIT_GET_METHOD', return_value=pd.DataFrame()
+        ), unittest.mock.patch.object(
+            AssetBase.HISTORY_INSTANCE, 'get_forex_eod', return_value=pd.DataFrame()
+        ):
+            # Now call update_all to test that securities are created
+            self.manager.update_all()
+
+        # Verify that ETF instances were created from our mock data
+        etf_count_after = self.session.query(ExchangeTradeFund).count()
+        self.assertEqual(etf_count_after, 2,
+            "Two ETF instances should be created after update_all calls AssetBase.update_all")
+
+        # Verify the ETFs have expected attributes from our mock data
+        etfs = self.session.query(ExchangeTradeFund).order_by(ExchangeTradeFund.ticker).all()
+        self.assertEqual(etfs[0].name, 'Test ETF Alpha')
+        self.assertEqual(etfs[0].isin, 'US0378331005')
+        self.assertEqual(etfs[0].ticker, 'TESTA')
+        self.assertEqual(etfs[1].name, 'Test ETF Beta')
+        self.assertEqual(etfs[1].ticker, 'TESTB')
 
     def test_get_meta(self):
         """Test get_meta returns dictionary of metadata."""
-        from src.asset_base.manager import Meta
+        from asset_base.manager import Meta
         # Add some metadata
         self.session.add(Meta("test_key", "test_value"))
         self.manager.commit()
@@ -395,7 +430,7 @@ class TestManager(unittest.TestCase):
         temp_manager2.close(drop=False)
         self.assertFalse(hasattr(temp_manager2, 'session_obj') and temp_manager2.session_obj is not None)
 
-    @unittest.mock.patch('src.asset_base.manager.Static')
+    @unittest.mock.patch('asset_base.manager.Static')
     def test_tear_down_without_delete(self, mock_static_class):
         """Test close method."""
         mock_static = unittest.mock.MagicMock()

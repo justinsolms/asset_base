@@ -60,9 +60,10 @@ import pandas as pd
 from sqlalchemy import create_engine
 from sqlalchemy import Integer, String, Date, Column, UniqueConstraint
 from sqlalchemy.orm.decl_api import DeclarativeMeta
-from sqlalchemy.orm import declarative_base, Session, declared_attr
+from sqlalchemy.orm import declarative_base, Session, declared_attr, object_session
 from sqlalchemy_utils import drop_database, database_exists, create_database  # type: ignore
 
+from .financial_data import MetaData as FinancialMetaData
 
 from asset_base import get_cache_path
 
@@ -418,6 +419,15 @@ class Common(Base):
     date_mod_stamp = Column(Date, nullable=True)
     """sqlalchemy.DateTime: Modification date stamp. May be in the past."""
 
+    # The financial_data module metadata getter method provider instance for all
+    # classes inheriting from Common.
+    METADATA_INSTANCE = FinancialMetaData()
+
+    # The metadata get method should be overridden in child classes to return
+    # the appropriate metadata get method for that class. Use the METADATA
+    # instance.
+    METADATA_GET_METHOD = None
+
     def __init__(self, name):
         """Instance initialization."""
         self.name = name
@@ -552,6 +562,9 @@ class Common(Base):
             return
 
         for i, row in data_frame.iterrows():
+            # Call class factory method. Each class factory method should be
+            # designed to handle creation of instances from the provided row
+            # data.
             cls.factory(session, **row)
 
     @classmethod
@@ -582,25 +595,3 @@ class Common(Base):
 
         return data_frame
 
-    @classmethod
-    def update_all(cls, session, get_method, **kwargs):
-        """Update/create all the objects in the asset_base session.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        get_method : class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the `factory` method arguments, with the exception
-            of the `session` argument.
-        kwargs : key work arguments
-            Any parameters are passed to the ``get_method``.
-
-        No object shall be destroyed, only updated, or missing object created.
-
-        """
-        # Get all financial data
-        data_frame = get_method(**kwargs)
-        # Bulk add/update data (uses the factory method)
-        cls.from_data_frame(session, data_frame)

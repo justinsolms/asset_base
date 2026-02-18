@@ -10,7 +10,7 @@ cash, forex pairs, shares, listed equities, and exchange-traded funds.
 Factory Method Paradigm
 ------------------------
 All asset classes in this module implement the factory method pattern with
-dual-mode behavior, similar to entity classes:
+dual-mode behaviour, similar to entity classes:
 
 **Retrieval Mode** (minimal parameters):
     When only key identifying parameters are provided, the factory attempts
@@ -80,6 +80,7 @@ from typing import ClassVar
 
 import sys
 import functools
+from flask.cli import F
 import numpy as np
 import pandas as pd
 
@@ -91,30 +92,28 @@ from scipy.signal import filtfilt
 from sqlalchemy import Float, Integer, String, Enum, Boolean, UniqueConstraint, column
 from sqlalchemy import MetaData, Column, ForeignKey
 
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import foreign, relationship
+from sqlalchemy.orm import object_session
 from sqlalchemy.orm.exc import NoResultFound
+from zmq import METADATA
 
-from .exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData, SplitSeriesNoData
-from .exceptions import ReconcileError
-from .exceptions import BadISIN
-from .financial_data import Dump
-from .entity import Currency, Exchange, Issuer
-from .common import Common
-from .industry_class import IndustryClassICB
-from .time_series import (
-    Dividend,
-    ForexEOD,
-    IndexEOD,
-    ListedEOD,
-    EODBase,
-    Split,
-    TimeSeriesBase,
-)
-from .time_series_processor import TimeSeriesProcessor
+from asset_base.exceptions import FactoryError, EODSeriesNoData, DividendSeriesNoData, SplitSeriesNoData
+from asset_base.exceptions import ReconcileError
+from asset_base.exceptions import BadISIN
+from asset_base.financial_data import Dump
+from asset_base.entity import Currency, Exchange, Issuer
+from asset_base.common import Common
+from asset_base.industry_class import IndustryClassICB
+from asset_base.time_series import TimeSeriesBase, EODBase
+from asset_base.time_series import Dividend, Split
+from asset_base.time_series import ListedEOD, ListedEquityEOD, ForexEOD, IndexEOD
+
+from asset_base.time_series_processor import TimeSeriesProcessor
+
+from asset_base.financial_data import History as FinancialHistory
 
 # Get module-named logger.
 import logging
-
 
 logger = logging.getLogger(__name__)
 # Change logging level here.
@@ -174,6 +173,17 @@ class AssetBase(Common):
     # units in case of this attribute being in cents.
     quote_units = Column(Enum("units", "cents"), nullable=False)
 
+    # The financial_data module history getter method provider that will
+    # populate the _series relationship for this class.
+    HISTORY_INSTANCE = FinancialHistory()
+
+    # The financial_data EOD_GET_METHOD method overridden here
+    EOD_GET_METHOD = HISTORY_INSTANCE.get_trade_eod
+
+    # Associated time-series class for this asset class. This must be overridden
+    # in child classes.
+    TIME_SERIES_CLASS = EODBase
+
     # All historical generic time-series collection ranked by date_stamp
     _series = relationship(
         TimeSeriesBase,
@@ -181,8 +191,6 @@ class AssetBase(Common):
         back_populates="_base_obj",
         uselist=True,
         )
-    """list: EOD historical time-series collection ranked by date_stamp."""
-
 
     def __init__(self, name, currency, quote_units="units"):
         """Instance initialization."""
@@ -206,6 +214,62 @@ class AssetBase(Common):
         """ISO 4217 3-letter currency code."""
         return self.currency.ticker
 
+    @classmethod
+    def update_meta_data(cls, session):
+        """Update/create instances of the class.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+
+        """
+        # Bulk add/update metadata uses the class factory method
+        data_frame = cls.METADATA_GET_METHOD()
+        cls.from_data_frame(session, data_frame)
+
+    @classmethod
+    def update_eod_time_series(cls, session, asset_list):
+        """Update/create the EOD data of all the Asset or child class instances.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        asset_list : list of Asset or child class instances
+            The list of asset instances to update the EOD time-series for.
+
+        """
+        # Bulk add/update time-series data uses the time-series class factory
+        # method.
+        data_frame = cls.EOD_GET_METHOD(asset_list)
+        cls.TIME_SERIES_CLASS.from_data_frame(session, cls, data_frame)
+
+    @classmethod
+    def update_all(cls, session):
+        """Update/create Listed instances and their trade time-series data.
+
+        Updates time series for only listed securities ignoring de-listed ones.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+
+        Note
+        ----
+        It will often be necessary to override this method in child classes
+        and it is possible that this instance of this method mey never be used.
+
+        """
+        # Update Listed instances metadata as per the latest data from the data source.
+        cls.update_meta_data(session)
+
+        # Only update time series for instance in the database.
+        asset_list = session.query(cls).all()
+
+        # Get EOD trade data for this Listed subclass.
+        cls.update_eod_time_series(session, asset_list)
 
 class Asset(AssetBase):
     """A financial asset.
@@ -594,7 +658,7 @@ class Cash(Asset):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
-        Factory Method Behavior
+        Factory Method Behaviour
         ------------------------
         This factory operates in two modes controlled by the ``create`` parameter:
 
@@ -669,24 +733,25 @@ class Cash(Asset):
 
     @classmethod
     def update_all(cls, session):
-        """Update/create all the objects in the asset_base session.
-
-        The existing records of the ``Currency`` instances in
-        the session are used to build a ``Cash`` instance for each
-        ``Currency`` instance.
+        """Update/create Cash instances for all currencies in the session.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
-            The database session.
+            A session attached to the desired database.
 
+        Note
+        ----
+        No time-series data is updated by this method as cash has no time-series data and
+        always has a price of 1.0 currency unit.
         """
+
         # A cash instance for every currency
         currency_list = session.query(Currency).all()
         if len(currency_list) == 0:
             raise Exception("No Currency instances found. ")
         for currency in currency_list:
-            Cash.factory(session, currency.ticker)
+            cls.factory(session, currency.ticker)
 
     def get_eod_series(self, date_index):
         """Return the EOD time series for the Cash object.
@@ -852,13 +917,20 @@ class Forex(Cash):
     # ticker column at class initialization.
     __table_args__ = (UniqueConstraint("ticker"),)
 
+    # The financial_data EOD_GET_METHOD method overridden here
+    EOD_GET_METHOD = AssetBase.HISTORY_INSTANCE.get_forex_eod
+
+    # Associated time-series class for this asset class. This must be overridden
+    # in child classes.
+    TIME_SERIES_CLASS = ForexEOD
+
     # The reference or root ticker. Its price will always be 1.0.
     root_currency_ticker = "USD"
 
     # List of top foreign currencies. Their time series are maintained as the
     # price of 1 unit of the ``root_currency_ticker``. South African ZAR is included for
     # domestic reasons.
-    foreign_currencies = [
+    foreign_currencies_list = [
         "USD",
         "EUR",
         "GBP",
@@ -937,7 +1009,7 @@ class Forex(Cash):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
-        Factory Method Behavior
+        Factory Method Behaviour
         ------------------------
         This factory operates in two modes controlled by the ``create`` parameter:
 
@@ -1036,46 +1108,55 @@ class Forex(Cash):
         return obj
 
     @classmethod
-    def update_all(cls, session, get_forex_method=None):
-        """Update/create all the objects in the asset_base session.
+    def update_meta_data(cls, session):
+        """Update/create instances of the Forex class.
 
-        The existing records of the ``Currency`` instances in
-        the session are used to build a ``Cash`` instance for each
-        ``Currency`` instance.
+        The Forex instances are created based on the list of foreign currencies
+        defined in the class attribute ``foreign_currencies_list`` and the root
+        currency defined in the class attribute ``root_currency_ticker``. The
+        method creates Forex instances for all combinations of the root currency
+        and the foreign currencies in the list.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
-            The database session.
-        get_forex_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the ``ForexEOD.factory`` method arguments. This is
-            for the securities time series trade end of day data form which the
-            ``ForexEOD`` instances shall be created. If this argument is omitted
-            then the ``ForexEOD`` time_series will not be created.
+            A session attached to the desired database.
 
         """
-        foreign_currencies_list = cls.foreign_currencies
-
         # Create Forex instances as per the Forex.foreign_currencies list
         # attribute
-        foreign_currencies = (
+        foreign_currencies_list = (
             session.query(Currency)
-            .filter(
-                Currency.ticker.in_(foreign_currencies_list),
-            )
+            .filter(Currency.ticker.in_(cls.foreign_currencies_list))
             .all()
         )
-        if len(foreign_currencies) == 0:
+        if len(foreign_currencies_list) == 0:
             raise Exception("No Currency instances found.")
-        if len(foreign_currencies_list) != len(foreign_currencies):
+        if len(cls.foreign_currencies_list) != len(foreign_currencies_list):
             raise FactoryError("Not all foreign currencies were found.")
-        for price_currency in foreign_currencies:
-            Forex.factory(session, cls.root_currency_ticker, price_currency.ticker)
 
-        # Get EOD trade data for Forex.
-        if get_forex_method is not None:
-            ForexEOD.update_all(session, get_forex_method)
+        # Bulk add/update metadata uses the class factory method
+        for price_currency in foreign_currencies_list:
+            cls.factory(session, cls.root_currency_ticker, price_currency.ticker)
+
+    @classmethod
+    def update_all(cls, session):
+        """Update/create Forex instances and their trade time-series data.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        """
+        # Bulk add/update metadata uses the class factory method an creates
+        # Forex based on Currency instances.
+        cls.update_meta_data(session)
+
+        # Get the list of foreign currencies in the database
+        foreign_currencies_list = session.query(Forex).all()
+
+        # Update EOD trade time-series data for Forex.
+        cls.update_eod_time_series(session, foreign_currencies_list)
 
     @classmethod
     def get_rates_data_frame(
@@ -1396,6 +1477,9 @@ class Listed(Share):
     #  A short class name for use in naming
     # TODO: Automate from class magic attributes.
     _name_appendix = "Listed"
+
+    # Associated time-series class override for this asset class.
+    TIME_SERIES_CLASS = ListedEOD
 
     @staticmethod
     def _check_isin(isin):
@@ -1767,37 +1851,24 @@ class Listed(Share):
         return obj
 
     @classmethod
-    def update_all(cls, session, get_meta_method, get_eod_method=None):
-        """Update/create all the objects in the asset_base session.
+    def update_all(cls, session):
+        """Update/create Listed instances and their trade time-series data.
 
-        This method also updates its class collection of ``ListedEOD``
-        instances.
+        Updates time series for only listed securities ignoring de-listed ones.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        get_meta_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the `factory` method arguments. This is for the
-            securities meta-data form which ``Listed`` instances shall be
-            created.
-        get_eod_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the ``ListedEOD.factory`` method arguments. This is
-            for the securities time series trade end of day data form which the
-            ``ListedEOD`` instances shall be created. If this argument is omitted
-            then the ``ListedEOD`` will not be created.
-
-        No object shall be destroyed, only updated, or missing object created.
-
         """
-        # Get securities
-        super().update_all(session, get_meta_method)
+        # Update Listed instances metadata as per the latest data from the data source.
+        cls.update_meta_data(session)
 
-        # Get EOD trade data.
-        if get_eod_method is not None:
-            ListedEOD.update_all(session, get_eod_method)
+        # Only update time series for listed securities ignoring de-listed ones.
+        asset_list = session.query(cls).filter(cls.status == "listed").all()
+
+        # Get EOD trade data for this Listed subclass.
+        cls.update_eod_time_series(session, asset_list)
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -1833,7 +1904,7 @@ class Listed(Share):
         dumper.write(dump_dict)
 
         # Dump all security end-of-day time-series data
-        ListedEOD.dump(session, dumper, Listed)
+        ListedEOD.dump(session, cls, dumper)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
@@ -1886,7 +1957,7 @@ class Listed(Share):
             "reinitialisation if security mete-data has changed.", class_name)
 
         # Re-use all security end-of-day time-series data
-        ListedEOD.reuse(session, dumper, Listed)
+        ListedEOD.reuse(session, cls, dumper)
 
 
 class ListedEquity(Listed):
@@ -1971,6 +2042,23 @@ class ListedEquity(Listed):
 
     #  A short class name for use in naming
     _name_appendix = "Equity"
+
+    # The financial_data METADATA_GET_METHOD method should be overridden here
+    # but as its not yet implemented there is just a comment.
+    METADATA_GET_METHOD = None  # TODO: get_listed_equity_meta to be implemented.
+
+    # Associated EOD time-series class override for this asset class.
+    TIME_SERIES_CLASS = ListedEquityEOD
+
+    # The Dividend and Split getter methods
+    DIVIDEND_GET_METHOD = AssetBase.HISTORY_INSTANCE.get_dividends
+    SPLIT_GET_METHOD = AssetBase.HISTORY_INSTANCE.get_splits
+
+    # Associated Dividend & Split time-series class for this asset
+    # class.
+    DIVIDEND_TIME_SERIES_CLASS = Dividend
+    SPLIT_TIME_SERIES_CLASS = Split
+
 
     # FIXME: The __repr__ string is printing Currency.__str__ instead of
     # Currency.__repr__
@@ -2070,61 +2158,53 @@ class ListedEquity(Listed):
         return dictionary
 
     @classmethod
-    def update_all(cls, session,
-        get_meta_method, get_eod_method=None,
-        get_dividends_method=None, get_splits_method=None):
-        """Update/create all the objects in the asset_base session.
-
-        This method updates its class collection of ``ListedEOD`` and
-        ``Dividend`` instances from the ``financial_data`` module.
-
-        This method sets the ``Listed.time_series_last_date`` attribute to
-        ``datetime.datetime.today()`` for its collection of  ``ListedEOD`` and
-        ``Dividend`` instances. This is conditional to the ``last_update``
-        argument.
+    def update_corporate_time_series(cls, session, asset_list):
+        """Update the Dividend and Split data of all the instances.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        get_meta_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to this class' ``factory`` method. This
-            is for the securities meta-data form which ``Listed`` instances
-            shall be created.
-        get_eod_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to the ``ListedEOD`` ``factory`` method.
-            This is for the securities time series trade end of day data form
-            which the ``ListedEOD`` instances shall be created. If this argument
-            is omitted then the ``ListedEOD`` will not be created.
-        get_dividend_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to the ``Dividend`` ``factory``
-            method. This is for the securities time series dividend end of day
-            data form which the ``Dividend`` instances shall be created.
-            If this argument is omitted then the ``Dividend`` will not be
-            created.
-        get_splits_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with the data items
-            in columns named according to the ``Split`` ``factory`` method. This is
-            for the securities time series split end of day data form which the
-            ``Split`` instances shall be created. If this argument is omitted
-            then the ``Split`` will not be created.
+        asset_list : list of Asset or child class instances
+            The list of asset instances to update the EOD time-series for.
 
-        No object shall be destroyed, only updated, or missing object created.
+        This is an override of the parent class method to add the update of
+        Dividend and Split time-series data. The parent class method is called
+        to update the EOD time-series data.
 
         """
-        # Get securities
-        super().update_all(session, get_meta_method, get_eod_method)
 
-        # Get Dividend data.
-        if get_dividends_method is not None:
-            Dividend.update_all(session, get_dividends_method)
+        # Bulk add/update Dividend time-series data uses the time-series class
+        # factory method.
+        dividend_data_frame = cls.DIVIDEND_GET_METHOD(asset_list)
+        cls.DIVIDEND_TIME_SERIES_CLASS.from_data_frame(session, cls, dividend_data_frame)
 
-        # Get Split data.
-        if get_splits_method is not None:
-            Split.update_all(session, get_splits_method)
+        # Bulk add/update Split time-series data uses the time-series class
+        # factory method.
+        split_data_frame = cls.SPLIT_GET_METHOD(asset_list)
+        cls.SPLIT_TIME_SERIES_CLASS.from_data_frame(session, cls, split_data_frame)
+
+    @classmethod
+    def update_all(cls, session):
+        """Update/create all ListedEquity securities and their time series.
+
+        Updates time series for only listed securities ignoring de-listed ones.
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+        """
+
+        # The superclasses will get securities metadata and EOD trade data for
+        # this ListedEquity subclass
+        super().update_all(session)
+
+        # Only update time series for listed securities ignoring de-listed ones.
+        asset_list = session.query(cls).filter(cls.status == "listed").all()
+
+        # Get Dividend and Split time-series data.
+        cls.update_corporate_time_series(session, asset_list)
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -2149,8 +2229,8 @@ class ListedEquity(Listed):
         super().dump(session, dumper)
 
         # Dump all security dividend and split time-series data
-        Dividend.dump(session, dumper, ListedEquity)
-        Split.dump(session, dumper, ListedEquity)
+        Dividend.dump(session, cls, dumper)
+        Split.dump(session, cls, dumper)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
@@ -2179,8 +2259,8 @@ class ListedEquity(Listed):
         super().reuse(session, dumper)
 
         # Re-use all security dividend and split time-series data
-        Dividend.reuse(session, dumper, ListedEquity)
-        Split.reuse(session, dumper, ListedEquity)
+        Dividend.reuse(session, cls, dumper)
+        Split.reuse(session, cls, dumper)
 
     def get_dividend_series(self):
         """Return the dividends data series for the security.
@@ -2251,6 +2331,22 @@ class ListedEquity(Listed):
         else:
             return self._dividend_series[-1]
 
+    def get_last_dividend_date(self):
+        """Return the last dividend date for the listed asset.
+
+        Returns
+        -------
+        datetime.date
+            The date of the last dividend for the listed asset.
+
+        Raises
+        ------
+        DividendSeriesNoData
+            If no time series exists.
+        """
+        last_dividend = self.get_last_dividend()
+        return last_dividend.date_stamp
+
     def get_split_series(self):
         """Return the splits data series for the security.
 
@@ -2294,6 +2390,22 @@ class ListedEquity(Listed):
             raise SplitSeriesNoData(f"Expected split data for {self}")
         else:
             return self._split_series[-1]
+
+    def get_last_split_date(self):
+        """Return the last split date for the listed asset.
+
+        Returns
+        -------
+        datetime.date
+            The date of the last split for the listed asset.
+
+        Raises
+        ------
+        SplitSeriesNoData
+            If no time series exists.
+        """
+        last_split = self.get_last_split()
+        return last_split.date_stamp
 
     def get_time_series_processor(self, price_item="close"):
         """Return a TimeSeriesProcessor for this asset.
@@ -2454,6 +2566,9 @@ class Index(AssetBase):
     #  A short class name for use in naming
     _name_appendix = "Index"
 
+    # The financial_data EOD_GET_METHOD method overridden here
+    EOD_GET_METHOD = AssetBase.HISTORY_INSTANCE.get_indices_eod
+
     def __init__(
         self, name, ticker, currency, total_return=False, static=False, **kwargs
     ):
@@ -2502,7 +2617,7 @@ class Index(AssetBase):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
-        Factory Method Behavior
+        Factory Method Behaviour
         ------------------------
         This factory operates in two modes controlled by the ``create`` parameter:
 
@@ -2595,34 +2710,20 @@ class Index(AssetBase):
         return obj
 
     @classmethod
-    def update_all(cls, session, get_meta_method, get_eod_method=None):
-        """Update/create all the objects in the asset_base session.
+    def update_all(cls, session):
+        """Update/create all Index securities and their EOD data.
+
+        # TODO: Implement index get metadata and EOD data retrieval and updating.
+
+        This is currently a placeholder method to be implemented in future
+        development work.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
-        get_meta_method : financial_data module class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the `factory` method arguments. This is for the
-            securities meta-data form which ``Index`` instances shall be
-            created.
-        get_eod_method : financial_data module class method, optional
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the ``Index.factory`` method arguments. This is
-            for the securities time series trade end of day data form which the
-            ``IndexEOD`` instances shall be created. If this argument is omitted
-            then the ``IndexEOD`` will not be created.
-
-        No object shall be destroyed, only updated, or missing object created.
-
         """
-        # Get securities
-        super().update_all(session, get_meta_method)
-
-        # Get EOD trade data.
-        if get_eod_method is not None:
-            IndexEOD.update_all(session, get_eod_method)
+        raise NotImplementedError("Index.update_all is not implemented yet.")
 
 
 class ExchangeTradeFund(ListedEquity):
@@ -2715,6 +2816,9 @@ class ExchangeTradeFund(ListedEquity):
     #  A short class name for use in naming
     _name_appendix = "ETF"
 
+    # The financial_data METADATA_GET_METHOD method is overridden here
+    METADATA_GET_METHOD = AssetBase.METADATA_INSTANCE.get_etfs_meta
+
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
 
@@ -2781,8 +2885,3 @@ class ExchangeTradeFund(ListedEquity):
             locality = "foreign"
 
         return locality
-
-
-# Initialize time series ASSET_CLASS references after all classes are defined
-from .time_series import _initialize_asset_class_references
-_initialize_asset_class_references()

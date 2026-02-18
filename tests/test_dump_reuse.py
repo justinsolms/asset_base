@@ -28,12 +28,12 @@ import pickle
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from src.asset_base.manager import Manager, Meta
-from src.asset_base.asset import ListedEquity, Listed, Cash
-from src.asset_base.time_series import ListedEOD, Dividend, Split
-from src.asset_base.financial_data import Dump, Static
-from src.asset_base.entity import Currency, Domicile, Exchange, Issuer
-from src.asset_base.common import Base
+from asset_base.manager import Manager, Meta
+from asset_base.asset import ListedEquity, Listed, Cash
+from asset_base.time_series import ListedEOD, Dividend, Split
+from asset_base.financial_data import Dump, Static
+from asset_base.entity import Currency, Domicile, Exchange, Issuer
+from asset_base.common import Base
 
 
 class TestDumpReuseRoundtrip(unittest.TestCase):
@@ -54,7 +54,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
         self.dumper._abs_data_path = self.temp_dir
 
         # Set up Static mock
-        self.static_patcher = patch('src.asset_base.manager.Static')
+        self.static_patcher = patch('asset_base.manager.Static')
         self.mock_static = self.static_patcher.start()
         self._configure_static_data()
 
@@ -263,7 +263,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
         # Verify specific data integrity
         apple_restored = self.session.query(ListedEquity).filter_by(ticker='AAPL').first()
         self.assertIsNotNone(apple_restored)
-        self.assertEqual(apple_restored.name, 'Apple Inc.')
+        self.assertEqual(apple_restored.name, 'Apple Inc. (XNYS)')
         self.assertEqual(apple_restored.isin, 'US0378331005')
 
         # Verify time series data
@@ -322,7 +322,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Reuse should populate the new database
         ListedEquity.reuse(self.session, self.dumper)
-        ListedEOD.reuse(self.session, self.dumper, ListedEquity)
+        ListedEOD.reuse(self.session, ListedEquity, self.dumper)
 
         final_count = self.session.query(ListedEOD).count()
         self.assertEqual(final_count, 10)
@@ -333,7 +333,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
         assets = self._create_test_assets(entities)
 
         # Dump data
-        ListedEOD.dump(self.session, self.dumper, ListedEquity)
+        ListedEOD.dump(self.session, ListedEquity, self.dumper)
 
         # Read dumped data
         dump_dict = self.dumper.read(['ListedEOD'])
@@ -366,7 +366,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Dump all data
         ListedEquity.dump(self.session, self.dumper)
-        ListedEOD.dump(self.session, self.dumper, ListedEquity)
+        ListedEOD.dump(self.session, ListedEquity, self.dumper)
 
         # Close entire database and create new one
         self.session.close()
@@ -381,7 +381,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Reuse dumped data
         ListedEquity.reuse(self.session, self.dumper)
-        ListedEOD.reuse(self.session, self.dumper, ListedEquity)
+        ListedEOD.reuse(self.session, ListedEquity, self.dumper)
 
         # Verify data was preserved
         restored_eod = self.session.query(ListedEOD).filter_by(
@@ -408,8 +408,8 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Dump all data
         ListedEquity.dump(self.session, self.dumper)
-        Dividend.dump(self.session, self.dumper, ListedEquity)
-        Split.dump(self.session, self.dumper, ListedEquity)
+        Dividend.dump(self.session, ListedEquity, self.dumper)
+        Split.dump(self.session, ListedEquity, self.dumper)
 
         # Close entire database and create new one
         self.session.close()
@@ -424,8 +424,8 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Reuse dumped data
         ListedEquity.reuse(self.session, self.dumper)
-        Dividend.reuse(self.session, self.dumper, ListedEquity)
-        Split.reuse(self.session, self.dumper, ListedEquity)
+        Dividend.reuse(self.session, ListedEquity, self.dumper)
+        Split.reuse(self.session, ListedEquity, self.dumper)
 
         # Verify restored data
         restored_div = self.session.query(Dividend).filter_by(
@@ -454,10 +454,10 @@ class TestManagerDumpReuse(unittest.TestCase):
         self.temp_dir = tempfile.mkdtemp()
 
         # Patch the update_all methods that set_up calls
-        self.currency_patcher = patch('src.asset_base.entity.Currency.update_all')
-        self.domicile_patcher = patch('src.asset_base.entity.Domicile.update_all')
-        self.exchange_patcher = patch('src.asset_base.entity.Exchange.update_all')
-        self.cash_patcher = patch('src.asset_base.asset.Cash.update_all')
+        self.currency_patcher = patch('asset_base.entity.Currency.update_all')
+        self.domicile_patcher = patch('asset_base.entity.Domicile.update_all')
+        self.exchange_patcher = patch('asset_base.entity.Exchange.update_all')
+        self.cash_patcher = patch('asset_base.asset.Cash.update_all')
 
         self.mock_currency_update = self.currency_patcher.start()
         self.mock_domicile_update = self.domicile_patcher.start()
@@ -520,14 +520,14 @@ class TestManagerDumpReuse(unittest.TestCase):
         """Test Manager.reuse() handles FileNotFoundError gracefully."""
         # Try to reuse without dump files (entities already created in setUp)
         # Should not raise exception, just log info
-        with patch('src.asset_base.manager.logger') as mock_logger:
+        with patch('asset_base.manager.logger') as mock_logger:
             self.manager.reuse()
             # Verify logger.info was called about missing files
             info_calls = [call for call in mock_logger.info.call_args_list
                          if 'Dump data not found' in str(call)]
             self.assertGreater(len(info_calls), 0)
 
-    @patch('src.asset_base.manager.logger')
+    @patch('asset_base.manager.logger')
     def test_manager_reuse_logs_success(self, mock_logger):
         """Test Manager.reuse() logs success when files exist."""
         # Set up and create dump

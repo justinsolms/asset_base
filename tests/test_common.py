@@ -15,7 +15,7 @@ from sqlalchemy import Column, Integer, String
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy_utils import database_exists
 
-from src.asset_base.common import _Session, TestSession, SQLiteSession, Base, Common
+from asset_base.common import _Session, TestSession, SQLiteSession, Base, Common
 
 
 class MockTable(Base):
@@ -179,7 +179,7 @@ class TestSessionClass(TestSessionBase):
         # Should not raise error
         session_manager.drop_database()
 
-    @patch('src.asset_base.common.create_engine')
+    @patch('asset_base.common.create_engine')
     def test_init_failure_cleanup(self, mock_create_engine):
         """Test that initialization failure triggers proper cleanup."""
         mock_create_engine.side_effect = SQLAlchemyError("Mock engine creation failure")
@@ -252,7 +252,7 @@ class TestSQLiteSession(TestSessionBase):
     def test_init_creates_file_database(self):
         """Test that SQLiteSession creates file-based database."""
         # Use a temporary location for testing
-        with patch('src.asset_base.common.get_cache_path') as mock_get_path:
+        with patch('asset_base.common.get_cache_path') as mock_get_path:
             mock_get_path.return_value = self.test_db_path
 
             sqlite_session = SQLiteSession(testing=False)
@@ -283,7 +283,7 @@ class TestSQLiteSession(TestSessionBase):
 
     def test_testing_mode(self):
         """Test SQLiteSession in testing mode."""
-        with patch('src.asset_base.common.get_cache_path') as mock_get_path:
+        with patch('asset_base.common.get_cache_path') as mock_get_path:
             mock_get_path.return_value = self.test_db_path
 
             sqlite_session = SQLiteSession(testing=True)
@@ -295,7 +295,7 @@ class TestSQLiteSession(TestSessionBase):
 
     def test_echo_parameter(self):
         """Test SQLiteSession with echo parameter."""
-        with patch('src.asset_base.common.get_cache_path') as mock_get_path:
+        with patch('asset_base.common.get_cache_path') as mock_get_path:
             mock_get_path.return_value = self.test_db_path
 
             sqlite_session = SQLiteSession(echo=True)
@@ -364,7 +364,7 @@ class TestSessionIntegration(TestSessionBase):
 class TestSessionErrorHandling(TestSessionBase):
     """Test error handling in session classes."""
 
-    @patch('src.asset_base.common.logger')
+    @patch('asset_base.common.logger')
     def test_del_method_warning(self, mock_logger):
         """Test that __del__ method logs warning when not properly closed."""
         session_manager = _Session(self.test_db_url, testing=True)
