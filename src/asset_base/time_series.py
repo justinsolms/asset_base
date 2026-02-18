@@ -99,16 +99,6 @@ class TimeSeriesBase(Base):
     _date_column_names = ["date_stamp"]
     """list: Columns that must be exported externally as pandas.Timestamp."""
 
-    # This attribute is not used and is here only for reference. It must be
-    # lazily initialized by ``_initialize_asset_class_references`` at the end of
-    # asset.py module file to avoid circular import and for the time-series
-    # logic to be able to reference the asset class that holds the time-series
-    # data. Each and every concrete time-series class must have this attribute
-    # set to the asset class it belongs to. For example, for ListedEOD this
-    # attribute must be set to Listed, etc.
-    # Class-level ref, not mapped by SQLAlchemy
-    ASSET_CLASS: ClassVar[Optional[object]] = None  # Abstract, do not use!
-
     def __init__(self, base_obj, date_stamp):
         """Instance initialization."""
         # Type check date_stamp - must be datetime.date but not pandas.Timestamp
@@ -116,13 +106,6 @@ class TimeSeriesBase(Base):
             raise TypeError(
                 f"The `date_stamp` must be a datetime.date instance, not "
                 f"{type(date_stamp)}. Use .date() to convert pandas.Timestamp.")
-
-        # Validate base_obj type if ASSET_CLASS is defined
-        if hasattr(self.__class__, 'ASSET_CLASS') and self.__class__.ASSET_CLASS is not None:
-            if not isinstance(base_obj, self.__class__.ASSET_CLASS):
-                raise TypeError(
-                    f"{self.__class__.__name__} requires base_obj to be an instance of "
-                    f"{self.__class__.ASSET_CLASS.__name__}, got {type(base_obj).__name__}")
 
         self._base_obj = base_obj
         self.date_stamp = date_stamp
@@ -143,7 +126,7 @@ class TimeSeriesBase(Base):
         pass
 
     @classmethod
-    def from_data_frame(cls, session, data_frame):
+    def from_data_frame(cls, session, asset_class, data_frame):
         """Upsert time-series records from a ``pandas.DataFrame``.
 
         For each row in ``data_frame`` this method:
@@ -166,6 +149,9 @@ class TimeSeriesBase(Base):
         ----------
         session : sqlalchemy.orm.Session
             The database session.
+        asset_class : .asset.Asset (or child class) class reference
+            The ``Asset`` class reference which, instances of which own the
+            time-series data (for example ``ListedEquity`` for ``ListedEOD``).
         data_frame : pandas.DataFrame
             A ``pandas.DataFrame`` with columns matching the concrete
             ``TimeSeriesBase`` subclass' constructor arguments, except that
@@ -175,8 +161,6 @@ class TimeSeriesBase(Base):
             This column is used solely to resolve the asset IDs and is dropped
             before records are created or updated.
         """
-        asset_class = cls.ASSET_CLASS
-
         # Check for zero rows of data
         if data_frame.empty:
             # No data so return
@@ -272,13 +256,16 @@ class TimeSeriesBase(Base):
             pass
 
     @classmethod
-    def to_data_frame(cls, session):
+    def to_data_frame(cls, session, asset_class):
         """Return a ``pandas.DataFrame`` with a row for each class instance.
 
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             The database session.
+        asset_class : .asset.Asset (or child class) class reference
+            The ``Asset`` class reference which, instances of which own the
+            time-series data (for example ``ListedEquity`` for ``ListedEOD``).
 
         Returns
         -------
@@ -288,8 +275,6 @@ class TimeSeriesBase(Base):
             of a column named ``listed``, instead there shall be an ``isin``
             column with the ISIN number of the ``Listed`` instance.
         """
-        asset_class = cls.ASSET_CLASS
-
         # Generate a table translating key_code to asset_class._id. The key_code
         # column label shall be the asset_class.KEY_CODE_LABEL class
         # attribute value.
@@ -350,10 +335,10 @@ class TimeSeriesBase(Base):
         return data_table
 
     @classmethod
-    def dump(cls, session, dumper: Dump):
+    def dump(cls, session, asset_class, dumper: Dump):
         """Dump time-series data for a given asset class to disk.
 
-        All instances of ``cls`` that belong to assets of ``asset_class_cls``
+        All instances of ``cls`` that belong to assets of ``asset_class``
         are exported to a :class:`pandas.DataFrame` via :meth:`to_data_frame`
         and written by ``dumper`` under the key ``cls.__name__``. The
         resulting dump contains business identifiers (for example ISIN) rather
@@ -364,6 +349,9 @@ class TimeSeriesBase(Base):
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
+        asset_class : .asset.Asset (or child class) class reference
+            The ``Asset`` class reference which, instances of which own the
+            time-series data (for example ``ListedEquity`` for ``ListedEquityEOD``).
         dumper : .financial_data.Dump
             The financial data dumper.
 
@@ -375,7 +363,7 @@ class TimeSeriesBase(Base):
         dump_dict = dict()
 
         # A table item for  all instances of this class
-        data_frame = cls.to_data_frame(session)
+        data_frame = cls.to_data_frame(session, asset_class)
 
         # Handle empty DataFrame case gracefully - still dump it but with a log message
         if data_frame.empty:
@@ -388,7 +376,7 @@ class TimeSeriesBase(Base):
         dumper.write(dump_dict)
 
     @classmethod
-    def reuse(cls, session, dumper: Dump, asset_class_cls):
+    def reuse(cls, session, asset_class, dumper: Dump):
         """Restore or refresh time-series data from a dump.
 
         The dump is expected to have been produced by :meth:`dump` and to be
@@ -410,8 +398,8 @@ class TimeSeriesBase(Base):
         dumper : .financial_data.Dump
             The financial data dumper.
         asset_class_cls : .asset.Asset (or child class) class reference
-        The ``Asset`` class reference which, when instantiated, owns the
-        time-series data (for example ``ListedEquity`` for ``ListedEOD``).
+            The ``Asset`` class reference which, when instantiated, owns the
+            time-series data (for example ``ListedEquity`` for ``ListedEOD``).
 
         See also
         --------
@@ -432,7 +420,7 @@ class TimeSeriesBase(Base):
                 session.delete(record)
             session.flush()
 
-        cls.from_data_frame(session, data_frame_dict[class_name])
+        cls.from_data_frame(session, asset_class, data_frame_dict[class_name])
 
 
 class EODBase(TimeSeriesBase):
@@ -663,16 +651,6 @@ class ListedEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # This attribute is not used and is here only for reference. It must be
-    # lazily initialized by ``_initialize_asset_class_references`` at the end of
-    # asset.py module file to avoid circular import and for the time-series
-    # logic to be able to reference the asset class that holds the time-series
-    # data. Each and every concrete time-series class must have this attribute
-    # set to the asset class it belongs to. For example, for ListedEOD this
-    # attribute must be set to Listed, etc.
-    # Class-level pointer to the asset class, not an ORM column
-    ASSET_CLASS: ClassVar[Optional["Listed"]] = None
-
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -732,15 +710,6 @@ class ListedEquityEOD(ListedEOD):
     _id = Column(Integer, ForeignKey("listed_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # This attribute is not used and is here only for reference. It must be
-    # lazily initialized by ``_initialize_asset_class_references`` at the end of
-    # asset.py module file to avoid circular import and for the time-series
-    # logic to be able to reference the asset class that holds the time-series
-    # data. Each and every concrete time-series class must have this attribute
-    # set to the asset class it belongs to. For example, for ListedEOD this
-    # attribute must be set to Listed, etc.
-    ASSET_CLASS: ClassVar[Optional["ListedEquity"]] = None
-
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -796,15 +765,6 @@ class IndexEOD(TradeEOD):
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
 
-    # This attribute is not used and is here only for reference. It must be
-    # lazily initialized by ``_initialize_asset_class_references`` at the end of
-    # asset.py module file to avoid circular import and for the time-series
-    # logic to be able to reference the asset class that holds the time-series
-    # data. Each and every concrete time-series class must have this attribute
-    # set to the asset class it belongs to. For example, for ListedEOD this
-    # attribute must be set to Listed, etc.
-    ASSET_CLASS: ClassVar[Optional["Index"]] = None
-
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
     ):
@@ -847,15 +807,6 @@ class ForexEOD(TradeEOD):
 
     _id = Column(Integer, ForeignKey("trade_eod._id"), primary_key=True)
     """ Primary key."""
-
-    # This attribute is not used and is here only for reference. It must be
-    # lazily initialized by ``_initialize_asset_class_references`` at the end of
-    # asset.py module file to avoid circular import and for the time-series
-    # logic to be able to reference the asset class that holds the time-series
-    # data. Each and every concrete time-series class must have this attribute
-    # set to the asset class it belongs to. For example, for ListedEOD this
-    # attribute must be set to Listed, etc.
-    ASSET_CLASS: ClassVar[Optional["Forex"]] = None
 
     def __init__(
         self, base_obj, date_stamp, open, close, high, low, adjusted_close, volume
@@ -901,11 +852,6 @@ class Dividend(TimeSeriesBase):
 
     _id = Column(Integer, ForeignKey("time_series_base._id"), primary_key=True)
     """ Primary key."""
-
-    # Define which asset class this time series belongs to. Will be set by
-    # _initialize_asset_class_references at the end of asset.py to avoid
-    # circular import
-    ASSET_CLASS = None
 
     # FIXME: Cannot have NULL here but some dividends are triggering tis
     currency = Column(String, nullable=True)
@@ -1051,11 +997,6 @@ class Split(TimeSeriesBase):
 
     _id = Column(Integer, ForeignKey("time_series_base._id"), primary_key=True)
     """ Primary key."""
-
-    # Define which asset class this time series belongs to. Will be set by
-    # _initialize_asset_class_references at the end of asset.py to avoid
-    # circular import
-    ASSET_CLASS = None
 
     numerator = Column(Float, nullable=False)
     """float: The numerator of the split ratio, e.g., 2 for a 2-for-1 split."""

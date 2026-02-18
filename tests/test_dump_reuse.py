@@ -322,7 +322,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Reuse should populate the new database
         ListedEquity.reuse(self.session, self.dumper)
-        ListedEOD.reuse(self.session, self.dumper, ListedEquity)
+        ListedEOD.reuse(self.session, ListedEquity, self.dumper)
 
         final_count = self.session.query(ListedEOD).count()
         self.assertEqual(final_count, 10)
@@ -333,7 +333,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
         assets = self._create_test_assets(entities)
 
         # Dump data
-        ListedEOD.dump(self.session, self.dumper)
+        ListedEOD.dump(self.session, ListedEquity, self.dumper)
 
         # Read dumped data
         dump_dict = self.dumper.read(['ListedEOD'])
@@ -366,7 +366,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Dump all data
         ListedEquity.dump(self.session, self.dumper)
-        ListedEOD.dump(self.session, self.dumper)
+        ListedEOD.dump(self.session, ListedEquity, self.dumper)
 
         # Close entire database and create new one
         self.session.close()
@@ -381,7 +381,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Reuse dumped data
         ListedEquity.reuse(self.session, self.dumper)
-        ListedEOD.reuse(self.session, self.dumper, ListedEquity)
+        ListedEOD.reuse(self.session, ListedEquity, self.dumper)
 
         # Verify data was preserved
         restored_eod = self.session.query(ListedEOD).filter_by(
@@ -408,8 +408,8 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Dump all data
         ListedEquity.dump(self.session, self.dumper)
-        Dividend.dump(self.session, self.dumper)
-        Split.dump(self.session, self.dumper)
+        Dividend.dump(self.session, ListedEquity, self.dumper)
+        Split.dump(self.session, ListedEquity, self.dumper)
 
         # Close entire database and create new one
         self.session.close()
@@ -424,8 +424,8 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
         # Reuse dumped data
         ListedEquity.reuse(self.session, self.dumper)
-        Dividend.reuse(self.session, self.dumper, ListedEquity)
-        Split.reuse(self.session, self.dumper, ListedEquity)
+        Dividend.reuse(self.session, ListedEquity, self.dumper)
+        Split.reuse(self.session, ListedEquity, self.dumper)
 
         # Verify restored data
         restored_div = self.session.query(Dividend).filter_by(

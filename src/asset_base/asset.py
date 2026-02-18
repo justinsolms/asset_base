@@ -106,7 +106,7 @@ from asset_base.common import Common
 from asset_base.industry_class import IndustryClassICB
 from asset_base.time_series import TimeSeriesBase, EODBase
 from asset_base.time_series import Dividend, Split
-from asset_base.time_series import ListedEOD, ForexEOD, IndexEOD
+from asset_base.time_series import ListedEOD, ListedEquityEOD, ForexEOD, IndexEOD
 
 from asset_base.time_series_processor import TimeSeriesProcessor
 
@@ -243,7 +243,7 @@ class AssetBase(Common):
         # Bulk add/update time-series data uses the time-series class factory
         # method.
         data_frame = cls.EOD_GET_METHOD(asset_list)
-        cls.TIME_SERIES_CLASS.from_data_frame(session, data_frame)
+        cls.TIME_SERIES_CLASS.from_data_frame(session, cls, data_frame)
 
     @classmethod
     def update_all(cls, session):
@@ -1904,7 +1904,7 @@ class Listed(Share):
         dumper.write(dump_dict)
 
         # Dump all security end-of-day time-series data
-        ListedEOD.dump(session, dumper)
+        ListedEOD.dump(session, cls, dumper)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
@@ -1957,7 +1957,7 @@ class Listed(Share):
             "reinitialisation if security mete-data has changed.", class_name)
 
         # Re-use all security end-of-day time-series data
-        ListedEOD.reuse(session, dumper, Listed)
+        ListedEOD.reuse(session, cls, dumper)
 
 
 class ListedEquity(Listed):
@@ -2177,12 +2177,12 @@ class ListedEquity(Listed):
         # Bulk add/update Dividend time-series data uses the time-series class
         # factory method.
         dividend_data_frame = cls.DIVIDEND_GET_METHOD(asset_list)
-        cls.DIVIDEND_TIME_SERIES_CLASS.from_data_frame(session, dividend_data_frame)
+        cls.DIVIDEND_TIME_SERIES_CLASS.from_data_frame(session, cls, dividend_data_frame)
 
         # Bulk add/update Split time-series data uses the time-series class
         # factory method.
         split_data_frame = cls.SPLIT_GET_METHOD(asset_list)
-        cls.SPLIT_TIME_SERIES_CLASS.from_data_frame(session, split_data_frame)
+        cls.SPLIT_TIME_SERIES_CLASS.from_data_frame(session, cls, split_data_frame)
 
     @classmethod
     def update_all(cls, session):
@@ -2229,8 +2229,8 @@ class ListedEquity(Listed):
         super().dump(session, dumper)
 
         # Dump all security dividend and split time-series data
-        Dividend.dump(session, dumper)
-        Split.dump(session, dumper)
+        Dividend.dump(session, cls, dumper)
+        Split.dump(session, cls, dumper)
 
     @classmethod
     def reuse(cls, session, dumper: Dump):
@@ -2259,8 +2259,8 @@ class ListedEquity(Listed):
         super().reuse(session, dumper)
 
         # Re-use all security dividend and split time-series data
-        Dividend.reuse(session, dumper, ListedEquity)
-        Split.reuse(session, dumper, ListedEquity)
+        Dividend.reuse(session, cls, dumper)
+        Split.reuse(session, cls, dumper)
 
     def get_dividend_series(self):
         """Return the dividends data series for the security.
@@ -2713,13 +2713,17 @@ class Index(AssetBase):
     def update_all(cls, session):
         """Update/create all Index securities and their EOD data.
 
+        # TODO: Implement index get metadata and EOD data retrieval and updating.
+
+        This is currently a placeholder method to be implemented in future
+        development work.
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         """
-        # Get EOD trade data.
-        IndexEOD.update_all(session)
+        raise NotImplementedError("Index.update_all is not implemented yet.")
 
 
 class ExchangeTradeFund(ListedEquity):

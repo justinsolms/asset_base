@@ -272,54 +272,13 @@ class TestListedEquityEOD(TestBase):
         self.assertEqual(result_dict['adjusted_close'], self.test_adjusted_close)
         self.assertEqual(result_dict['volume'], self.test_volume)
 
-    def test_asset_class_validation_success(self):
-        """Test that ListedEquityEOD accepts ListedEquity instance."""
-        self.session.add(self.listed_equity)
-        self.session.commit()
-
-        # Should not raise any exception
-        equity_eod = ListedEquityEOD(
-            base_obj=self.listed_equity,
-            date_stamp=self.test_date,
-            open=self.test_open,
-            close=self.test_close,
-            high=self.test_high,
-            low=self.test_low,
-            adjusted_close=self.test_adjusted_close,
-            volume=self.test_volume
-        )
-
-        self.assertEqual(equity_eod._base_obj, self.listed_equity)
-
-    def test_asset_class_validation_failure(self):
-        """Test that ListedEquityEOD rejects non-ListedEquity instances."""
-        # Use the Index fixture from setUp
-        self.session.add(self.index)
-        self.session.commit()
-
-        # Should raise TypeError when trying to use Index with ListedEquityEOD
-        with self.assertRaises(TypeError) as context:
-            equity_eod = ListedEquityEOD(
-                base_obj=self.index,  # Wrong type!
-                date_stamp=self.test_date,
-                open=self.test_open,
-                close=self.test_close,
-                high=self.test_high,
-                low=self.test_low,
-                adjusted_close=self.test_adjusted_close,
-                volume=self.test_volume
-            )
-
-        self.assertIn("ListedEquityEOD", str(context.exception))
-        self.assertIn("ListedEquity", str(context.exception))
-
     def test_from_data_frame(self):
         """Test creating ListedEquityEOD instances from DataFrame."""
         self.session.add(self.listed_equity)
         self.session.commit()
 
         # Use the test fixture data
-        ListedEquityEOD.from_data_frame(self.session, self.test_trade_eod_df)
+        ListedEquityEOD.from_data_frame(self.session, ListedEquity, self.test_trade_eod_df)
         self.session.commit()
 
         # Query all ListedEquityEOD instances
@@ -341,7 +300,7 @@ class TestListedEquityEOD(TestBase):
         self.session.commit()
 
         # First load - create records
-        ListedEquityEOD.from_data_frame(self.session, self.test_trade_eod_df)
+        ListedEquityEOD.from_data_frame(self.session, ListedEquity, self.test_trade_eod_df)
         self.session.commit()
 
         # Modify the DataFrame with updated values
@@ -351,7 +310,7 @@ class TestListedEquityEOD(TestBase):
         ] = 999.9
 
         # Second load - update records
-        ListedEquityEOD.from_data_frame(self.session, updated_df)
+        ListedEquityEOD.from_data_frame(self.session, ListedEquity, updated_df)
         self.session.commit()
 
         # Query the updated record
@@ -375,7 +334,7 @@ class TestListedEquityEOD(TestBase):
         empty_df = pd.DataFrame(columns=self.test_trade_eod_df.columns)
 
         # Should not raise an error
-        ListedEquityEOD.from_data_frame(self.session, empty_df)
+        ListedEquityEOD.from_data_frame(self.session, ListedEquity, empty_df)
         self.session.commit()
 
         # Should have no records
@@ -388,11 +347,11 @@ class TestListedEquityEOD(TestBase):
         self.session.commit()
 
         # Load data
-        ListedEquityEOD.from_data_frame(self.session, self.test_trade_eod_df)
+        ListedEquityEOD.from_data_frame(self.session, ListedEquity, self.test_trade_eod_df)
         self.session.commit()
 
         # Convert back to DataFrame
-        result_df = ListedEquityEOD.to_data_frame(self.session)
+        result_df = ListedEquityEOD.to_data_frame(self.session, ListedEquity)
 
         # Should have same number of rows
         self.assertEqual(len(result_df), len(self.test_trade_eod_df))
@@ -415,7 +374,7 @@ class TestListedEquityEOD(TestBase):
         self.session.add(self.listed_equity)
         self.session.commit()
 
-        result_df = ListedEquityEOD.to_data_frame(self.session)
+        result_df = ListedEquityEOD.to_data_frame(self.session, ListedEquity)
 
         # Should return empty DataFrame with proper columns
         self.assertTrue(result_df.empty)
@@ -535,10 +494,18 @@ class TestListedEquityEOD(TestBase):
             1
         )
 
-    def test_asset_class_attribute(self):
-        """Test that ASSET_CLASS attribute is properly set."""
-        self.assertEqual(ListedEquityEOD.ASSET_CLASS, ListedEquity)
-        self.assertIsNotNone(ListedEquityEOD.ASSET_CLASS)
+    def test_from_data_frame_requires_asset_class(self):
+        """Test that from_data_frame works with asset_class parameter."""
+        # This test verifies the new signature works correctly
+        self.session.add(self.listed_equity)
+        self.session.commit()
+        
+        # Should work with asset_class parameter
+        ListedEquityEOD.from_data_frame(self.session, ListedEquity, self.test_trade_eod_df)
+        self.session.commit()
+        
+        count = self.session.query(ListedEquityEOD).count()
+        self.assertEqual(count, 10)
 
 
 class TestIndexEOD(TestBase):
@@ -623,26 +590,6 @@ class TestIndexEOD(TestBase):
         self.assertEqual(result_dict['open'], self.test_open)
         self.assertEqual(result_dict['close'], self.test_close)
 
-    def test_index_eod_asset_class_validation(self):
-        """Test that IndexEOD validates asset type."""
-        self.session.add(self.listed_equity)
-        self.session.commit()
-
-        # Should raise TypeError when using wrong asset type
-        with self.assertRaises(TypeError) as context:
-            IndexEOD(
-                base_obj=self.listed_equity,  # Wrong: ListedEquity not Index
-                date_stamp=self.test_date,
-                open=self.test_open,
-                close=self.test_close,
-                high=self.test_high,
-                low=self.test_low,
-                adjusted_close=self.test_adjusted_close,
-                volume=self.test_volume
-            )
-
-        self.assertIn("Index", str(context.exception))
-
     def test_index_eod_unique_constraint(self):
         """Test unique constraint on (asset_id, date_stamp)."""
         self.session.add(self.index)
@@ -677,9 +624,27 @@ class TestIndexEOD(TestBase):
         with self.assertRaises(IntegrityError):
             self.session.commit()
 
-    def test_index_eod_asset_class_attribute(self):
-        """Test that ASSET_CLASS attribute is properly set."""
-        self.assertEqual(IndexEOD.ASSET_CLASS, Index)
+    def test_index_eod_works_with_index_class(self):
+        """Test that IndexEOD can be created with Index instances."""
+        # Verify that IndexEOD works correctly with Index asset class
+        self.session.add(self.index)
+        self.session.commit()
+        
+        index_eod = IndexEOD(
+            base_obj=self.index,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(index_eod)
+        self.session.commit()
+        
+        self.assertIsNotNone(index_eod._id)
+        self.assertEqual(index_eod._base_obj, self.index)
 
 
 class TestForexEOD(TestBase):
@@ -763,26 +728,6 @@ class TestForexEOD(TestBase):
         self.assertEqual(result_dict['open'], self.test_open)
         self.assertEqual(result_dict['close'], self.test_close)
 
-    def test_forex_eod_asset_class_validation(self):
-        """Test that ForexEOD validates asset type."""
-        self.session.add(self.index)
-        self.session.commit()
-
-        # Should raise TypeError when using wrong asset type
-        with self.assertRaises(TypeError) as context:
-            ForexEOD(
-                base_obj=self.index,  # Wrong: Index not Forex
-                date_stamp=self.test_date,
-                open=self.test_open,
-                close=self.test_close,
-                high=self.test_high,
-                low=self.test_low,
-                adjusted_close=self.test_adjusted_close,
-                volume=self.test_volume
-            )
-
-        self.assertIn("Forex", str(context.exception))
-
     def test_forex_eod_unique_constraint(self):
         """Test unique constraint on (asset_id, date_stamp)."""
         self.session.add(self.forex)
@@ -817,9 +762,27 @@ class TestForexEOD(TestBase):
         with self.assertRaises(IntegrityError):
             self.session.commit()
 
-    def test_forex_eod_asset_class_attribute(self):
-        """Test that ASSET_CLASS attribute is properly set."""
-        self.assertEqual(ForexEOD.ASSET_CLASS, Forex)
+    def test_forex_eod_works_with_forex_class(self):
+        """Test that ForexEOD can be created with Forex instances."""
+        # Verify that ForexEOD works correctly with Forex asset class
+        self.session.add(self.forex)
+        self.session.commit()
+        
+        forex_eod = ForexEOD(
+            base_obj=self.forex,
+            date_stamp=self.test_date,
+            open=self.test_open,
+            close=self.test_close,
+            high=self.test_high,
+            low=self.test_low,
+            adjusted_close=self.test_adjusted_close,
+            volume=self.test_volume
+        )
+        self.session.add(forex_eod)
+        self.session.commit()
+        
+        self.assertIsNotNone(forex_eod._id)
+        self.assertEqual(forex_eod._base_obj, self.forex)
 
 
 class TestDividend(TestBase):
@@ -904,27 +867,6 @@ class TestDividend(TestBase):
         self.assertEqual(result_dict['unadjusted_value'], self.test_dividend_unadjusted_value)
         self.assertEqual(result_dict['adjusted_value'], self.test_dividend_adjusted_value)
 
-    def test_dividend_asset_class_validation(self):
-        """Test that Dividend validates asset type."""
-        self.session.add(self.index)
-        self.session.commit()
-
-        # Should raise TypeError when using wrong asset type
-        with self.assertRaises(TypeError) as context:
-            Dividend(
-                base_obj=self.index,  # Wrong: Index not ListedEquity
-                date_stamp=self.test_date,
-                currency=self.test_dividend_currency,
-                declaration_date=self.test_dividend_declaration_date,
-                payment_date=self.test_dividend_payment_date,
-                period=self.test_dividend_period,
-                record_date=self.test_dividend_record_date,
-                unadjusted_value=self.test_dividend_unadjusted_value,
-                adjusted_value=self.test_dividend_adjusted_value
-            )
-
-        self.assertIn("ListedEquity", str(context.exception))
-
     def test_dividend_unique_constraint(self):
         """Test unique constraint on (asset_id, date_stamp)."""
         self.session.add(self.listed_equity)
@@ -984,9 +926,28 @@ class TestDividend(TestBase):
         self.assertEqual(dividend._base_obj, self.listed_equity)
         self.assertIn(dividend, self.listed_equity._series)
 
-    def test_dividend_asset_class_attribute(self):
-        """Test that ASSET_CLASS attribute is properly set."""
-        self.assertEqual(Dividend.ASSET_CLASS, ListedEquity)
+    def test_dividend_works_with_listed_equity_class(self):
+        """Test that Dividend can be created with ListedEquity instances."""
+        # Verify that Dividend works correctly with ListedEquity asset class
+        self.session.add(self.listed_equity)
+        self.session.commit()
+        
+        dividend = Dividend(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            currency="USD",
+            declaration_date=self.test_date,
+            payment_date=self.test_date,
+            period="Quarterly",
+            record_date=self.test_date,
+            unadjusted_value=1.5,
+            adjusted_value=1.5
+        )
+        self.session.add(dividend)
+        self.session.commit()
+        
+        self.assertIsNotNone(dividend._id)
+        self.assertEqual(dividend._base_obj, self.listed_equity)
 
 
 class TestSplit(TestBase):
@@ -1053,22 +1014,6 @@ class TestSplit(TestBase):
         self.assertEqual(result_dict['date_stamp'], self.test_date)
         self.assertEqual(result_dict['numerator'], self.test_split_numerator)
         self.assertEqual(result_dict['denominator'], self.test_split_denominator)
-
-    def test_split_asset_class_validation(self):
-        """Test that Split validates asset type."""
-        self.session.add(self.index)
-        self.session.commit()
-
-        # Should raise TypeError when using wrong asset type
-        with self.assertRaises(TypeError) as context:
-            Split(
-                base_obj=self.index,  # Wrong: Index not ListedEquity
-                date_stamp=self.test_date,
-                numerator=self.test_split_numerator,
-                denominator=self.test_split_denominator
-            )
-
-        self.assertIn("ListedEquity", str(context.exception))
 
     def test_split_unique_constraint(self):
         """Test unique constraint on (asset_id, date_stamp)."""
@@ -1145,9 +1090,23 @@ class TestSplit(TestBase):
         ratio = split_3_2.numerator / split_3_2.denominator
         self.assertEqual(ratio, 1.5)
 
-    def test_split_asset_class_attribute(self):
-        """Test that ASSET_CLASS attribute is properly set."""
-        self.assertEqual(Split.ASSET_CLASS, ListedEquity)
+    def test_split_works_with_listed_equity_class(self):
+        """Test that Split can be created with ListedEquity instances."""
+        # Verify that Split works correctly with ListedEquity asset class
+        self.session.add(self.listed_equity)
+        self.session.commit()
+        
+        split = Split(
+            base_obj=self.listed_equity,
+            date_stamp=self.test_date,
+            numerator=2.0,
+            denominator=1.0
+        )
+        self.session.add(split)
+        self.session.commit()
+        
+        self.assertIsNotNone(split._id)
+        self.assertEqual(split._base_obj, self.listed_equity)
 
 
 def suite():
