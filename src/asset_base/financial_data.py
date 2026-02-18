@@ -19,6 +19,7 @@ dictionaries for ease of maintenance.
 
 """
 import datetime
+from re import split
 
 import pandas as pd
 import os
@@ -143,14 +144,18 @@ class Dump(_Feed):
         super().__init__(testing=testing)
 
     def write(self, dump_dict):
-        """Write a dict of ``pandas.DataFrame`` to CSV files.
+        """Write a mapping of class names to ``pandas.DataFrame`` files.
 
-        The key is the file prefix.
+        Each entry in ``dump_dict`` is written as a pickle file named
+        ``"<key>.pandas.dataframe.pkl"`` under this dumper's data directory.
+        Keys are typically class names (for example ``"ListedEquity"``,
+        ``"ListedEOD"``) so that corresponding :meth:`read` calls can
+        reconstruct the mapping.
 
         Parameters
         ----------
         dump_dict : dict of pandas.DataFrame
-            The key shall be the CSV file prefix
+            Mapping from a string key to the DataFrame to be dumped.
         """
         for key, item in list(dump_dict.items()):
             file_name = f"{key}.pandas.dataframe.pkl"
@@ -158,23 +163,25 @@ class Dump(_Feed):
             item.to_pickle(path)
             logger.info(f"Dumped class {key} to {path}")
 
-    def read(self, name_list):
-        """Read a dict of ``pandas.DataFrame`` from CSV files.
+    def read(self, key_name_list):
+        """Read one or more dumped ``pandas.DataFrame`` objects.
 
-        The file prefix is the key.
+        For each name in ``key_name_list`` a file named
+        ``"<name>.pandas.dataframe.pkl"`` is loaded from this dumper's data
+        directory and returned in a dictionary keyed by that same name.
 
         Parameters
         ----------
-        name_list : list
-            Names of CSV file name prefixes.
+        key_name_list : list of str
+            Iterable of keys previously used in :meth:`write`.
 
         Returns
         -------
         dict of pandas.DataFrame
-            The key shall be the CSV file name prefix
+            Mapping from key name to the loaded DataFrame.
         """
         dump_dict = dict()
-        for name in name_list:
+        for name in key_name_list:
             file_name = f"{name}.pandas.dataframe.pkl"
             path = self._path(file_name)
             dump_dict[name] = pd.read_pickle(path)
@@ -208,23 +215,21 @@ class Dump(_Feed):
             os.remove(path)
             logger.debug("Deleted dump file %s", path)
 
-    def exists(self, dump_class):
-        """Verify that a dump file exits for a dumped class.
-
-        Warning
-        -------
-        An important use is to verify that dump files were created before
-        tearing down a database.
+    def exists(self, key_name):
+        """Check if dump file exists for the given key_name.
 
         Parameters
         ----------
-        dump_class : .asset.Asset or child class
-            The class for which the dump files existence must be verified. The
-            class must have a valid ``dump`` method.
-        """
-        file_name = f"{dump_class._class_name()}.pandas.dataframe.pkl"
-        path = self._path(file_name)
+        key_name : str
+            The string used for dict key in the `write()` method.
 
+        Returns
+        -------
+        bool
+            True if dump file exists for the class.
+        """
+        file_name = f"{key_name}.pandas.dataframe.pkl"
+        path = self._path(file_name)
         return os.path.exists(path)
 
 
@@ -377,12 +382,6 @@ class StaticIndices(_Feed):
         # Mark the data as static (non feed API).
         data["static"] = True
 
-        # For testing purposes only!!!
-        if "_test_ticker_list" in kwargs and kwargs["_test_ticker_list"] is not None:
-            _test_ticker_list = kwargs.pop("_test_ticker_list")
-            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data["ticker"].isin(_test_ticker_list)]
-
         return data
 
     def get_indices(self, index_list, **kwargs):
@@ -440,10 +439,20 @@ class MetaData(_Feed):
         super().__init__()
 
     def get_etfs(self, **kwargs):
-        """Fetch JSE securities mata-data from a local file."""
+        """Fetch JSE securities mata-data from a local file.
+
+        Raises
+        ------
+        ValueError
+            If duplicate entries are found in the expected unique columns of the
+            data.
+
+        """
         universe_file_name = "ETFMeta.csv"
         path = self._path(universe_file_name)
 
+        # Columns to keep and rename to a standard. This is also then a check
+        # for expected columns.
         column_dict = {
             "mic": "mic",
             "ticker": "ticker",
@@ -452,7 +461,6 @@ class MetaData(_Feed):
             "distributions": "distributions",
             "asset_class": "asset_class",
             "locality": "locality",
-            "domicile": "domicile_code",
             "quote_units": "quote_units",
             "industry_class": "industry_class",
             "industry_code": "industry_code",
@@ -468,6 +476,16 @@ class MetaData(_Feed):
             "super_sector_name": "super_sector_name",
             "ter": "ter",
         }
+        # List of columns to check for duplicates. Note these are the renamed
+        # column labels.
+        duplicate_check_list = [
+            # Delisted securities may have the same name as currently listed
+            'status.listed_name',
+            # Ticker is not unique across exchanges, but the combination of mic and ticker should be unique.
+            'mic.ticker',
+            # ISIN is the unique identifier for securities and should be unique across the data
+            'isin'
+            ]
 
         # Read the data. # Gotcha: CountryCode "NA" for Namibia in csv becomes
         # NaN.
@@ -484,19 +502,33 @@ class MetaData(_Feed):
         data = data[list(column_dict.keys())]
         data.rename(columns=column_dict, inplace=True)
 
-        # For testing purposes only!!!
-        if "_test_isin_list" in kwargs and kwargs["_test_isin_list"] is not None:
-            _test_isin_list = kwargs.pop("_test_isin_list")
-            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data["isin"].isin(_test_isin_list)]
+        # Check for duplicates in the data and raise an error if found
+        for item in duplicate_check_list:
+            if '.' in item:
+                # For columns with dot notation we need to check for duplicates
+                # in the combined column. For example 'mic.ticker' is a
+                # combination of 'mic' and 'ticker' columns.
+                sub_columns = item.split('.')
+                if data.duplicated(subset=sub_columns).any():
+                    duplicates = data[data.duplicated(subset=sub_columns, keep=False)].index.tolist()
+                    row_nums = [int(dup) + 2 for dup in duplicates]  # Adjust for header and zero indexing
+                    raise ValueError(f"Duplicate entries in rows {row_nums} found in column {item} of file {path}.")
+            else:
+                column = item
+                if data.duplicated(subset=[column]).any():
+                    duplicates = data[data.duplicated(subset=[item], keep=False)].index.tolist()
+                    row_nums = [int(dup) + 2 for dup in duplicates]  # Adjust for header and zero indexing
+                    raise ValueError(f"Duplicate entries in rows {row_nums} found in column {item} of file {path}.")
 
         return data
 
-    def get_indices(self, feed="EOD", **kwargs):
+    def get_indices(self, feed="EOD", **kwargs) -> pd.DataFrame:
         """Fetch indices mete data from the feeds."""
 
         if feed == "EOD":
             feed = Exchanges()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
             column_dict = {
                 "Name": "index_name",
                 "Code": "ticker",
@@ -507,7 +539,7 @@ class MetaData(_Feed):
             logger.debug("Got Indices meta data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to form here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -517,12 +549,6 @@ class MetaData(_Feed):
             data.rename(columns=column_dict, inplace=True)
         else:
             raise Exception("Feed {} not implemented.".format(feed))
-
-        # For testing purposes only!!!
-        if "_test_ticker_list" in kwargs and kwargs["_test_ticker_list"] is not None:
-            _test_ticker_list = kwargs.pop("_test_ticker_list")
-            # Don't confuse the ISIN column with pandas DataFrame.isin (is-in)!
-            data = data[data["ticker"].isin(_test_ticker_list)]
 
         return data
 
@@ -538,7 +564,7 @@ class History(_Feed):
 
     def get_class_data_path(self) -> str:
         """Return the class data path."""
-        return ""
+        return ""  # Undefined at tis class level
 
     def __init__(self):
         """Instance initialization."""
@@ -557,7 +583,7 @@ class History(_Feed):
             If provided then a list of `len(obj_list) * [from_date]` is
             returned. If a ``from_date`` argument is not provided then the time
             series of each ``Asset`` in the ``obj_list`` is inspected and the
-            ``from_date`` generated according to the latest available data date
+            ``from_date`` generated according to the last available data date
             of the ``Asset``'s time series.
         from_date : datetime.date
             If provided then a list of `len(obj_list) * [to_date]` is returned.
@@ -569,7 +595,13 @@ class History(_Feed):
         Returns
         -------
         from_date_list
-            The list of `from_dates` the length of ``obj_list``.
+            The list of `from_dates` the length of ``obj_list``. Each date is the
+            last available date of the relevant time series of the corresponding
+            ``Asset`` instance in ``obj_list`` if the ``from_date`` argument
+            is not provided. If the ``from_date`` argument is provided then the
+            list is `len(obj_list) * [from_date]`. If there is no data for an
+            ``Asset`` instance then the corresponding entry in the list is
+            `None`.
         to_date_list
             The list of `to_dates` the length of ``obj_list``.
 
@@ -581,14 +613,17 @@ class History(_Feed):
             from_date_list = list()
             for asset in obj_list:
                 try:
-                    if series in ["eod", "forex", "index"]:
-                        from_date = asset.get_last_eod_date()
-                    elif series in ["dividend"]:
-                        from_date = asset.get_last_dividend_date()
-                    else:
-                        raise ValueError(
+                    match series:
+                        case "eod" | "forex" | "index":
+                            from_date = asset.get_last_eod_date()
+                        case "dividend":
+                            from_date = asset.get_last_dividend_date()
+                        case "split":
+                            from_date = asset.get_last_split_date()
+                        case _:
+                            raise ValueError(
                             f"Unexpected value {series} for `series` argument."
-                        )
+                            )
                 except TimeSeriesNoData:
                     from_date = None
                 from_date_list.append(from_date)
@@ -603,7 +638,7 @@ class History(_Feed):
 
         return from_date_list, to_date_list
 
-    def get_eod(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+    def get_eod(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
@@ -621,6 +656,17 @@ class History(_Feed):
             The data feed module to use:
                 'EOD' - eod_historical_data
 
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            securities and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'isin', 'adjusted_close', 'close', 'high', 'low',
+                'open', 'volume'. The 'isin' column is the ISIN code of the
+                security. and is key to identifying the security the time series
+                belongs to.
+            The DataFrame is empty if no data was found.
+
         """
         # Generate (or default) date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
@@ -635,6 +681,8 @@ class History(_Feed):
         # Pick feed
         if feed == "EOD":
             feed = MultiHistorical()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
             column_dict = {
                 "date": "date_stamp",
                 "ticker": "ticker",
@@ -650,7 +698,7 @@ class History(_Feed):
             logger.debug("Got EOD data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to form here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -679,7 +727,7 @@ class History(_Feed):
 
         return data
 
-    def get_dividends(self, asset_list, from_date=None, to_date=None, feed="EOD"):
+    def get_dividends(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical dividends for a list of securities.
 
         This method fetches the data from the specified feed.
@@ -697,6 +745,17 @@ class History(_Feed):
             The data feed module to use:
                 'EOD' - eod_historical_data
 
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            securities and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'isin', 'declaration_date', 'payment_date',
+                'period', 'record_date', 'unadjusted_value', 'adjusted_value'.
+                The 'isin' column is the ISIN code of the security and is key to
+                identifying the security the time series belongs to.
+            The DataFrame is empty if no data was found.
+
         """
         # Generate date list with date ranges for each asset.
         from_date_list, to_date_list = self.date_preprocessor(
@@ -711,6 +770,8 @@ class History(_Feed):
         # Pick feed
         if feed == "EOD":
             feed = MultiHistorical()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
             column_dict = {
                 "date": "date_stamp",
                 "ticker": "ticker",
@@ -723,6 +784,8 @@ class History(_Feed):
                 "unadjustedValue": "unadjusted_value",
                 "value": "adjusted_value",
             }
+            # Columns to treat as dates and convert to pandas datetime format.
+            # This is also then a check for expected columns.
             date_columns_list = [
                 "date_stamp",
                 "declaration_date",
@@ -733,7 +796,7 @@ class History(_Feed):
             logger.debug("Got dividend data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to from here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -764,7 +827,104 @@ class History(_Feed):
 
         return data
 
-    def get_forex(self, forex_list, from_date=None, to_date=None, feed="EOD"):
+    def get_splits(self, asset_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
+        """Get historical splits for a list of securities.
+
+        This method fetches the data from the specified feed.
+
+        asset_list : list of .asset_base.Listed or child classes A list of
+            securities that are listed and traded.
+        from_date : datetime.date, optional
+            Inclusive start date of historical data. If not provided then the
+            date is set to the ``asset.ListedEquity.get_last_dividend_date()``
+            date for each asset in the ``asset_list`` argument.
+        to_date : datetime.date, optional
+            Inclusive end date of historical data. If not provide then the date
+            is set to today.
+        feed : str
+            The data feed module to use:
+                'EOD' - eod_historical_data
+
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            securities and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'isin', 'numerator', 'denominator'. The 'isin'
+                column is the ISIN code of the security and is key to identifying
+                the security the time series belongs to.
+            The DataFrame is empty if no data was found.
+
+        """
+        # Generate date list with date ranges for each asset.
+        from_date_list, to_date_list = self.date_preprocessor(
+            asset_list, from_date, to_date, series="split"
+        )
+
+        # Assemble symbol list
+        symbol_list = list()
+        for sec, from_date, to_date in zip(asset_list, from_date_list, to_date_list):
+            symbol_list.append((sec.ticker, sec.exchange.eod_code, from_date, to_date))
+
+        # Pick feed
+        if feed == "EOD":
+            feed = MultiHistorical()
+            # Columns to keep and rename to a standard. This is also then a check
+            # for expected columns.
+            column_dict = {
+                "date": "date_stamp",
+                "ticker": "ticker",
+                "exchange": "mic",
+                "split": "split",
+            }
+            # Columns to treats as dates and convert to pandas datetime format.
+            # This is also then a check for expected columns.
+            date_columns_list = [
+                "date_stamp",
+            ]
+            data = feed.get_splits(symbol_list)
+            logger.debug("Got splits data.")
+            # If no data then just return a simple empty pandas DataFrame.
+            if data.empty:
+                return pd.DataFrame([])
+            #  Reset the index as we need to from here on treat the index as
+            # column data. The security and date info is in the index
+            data.reset_index(inplace=True)
+            # Extract by columns name and rename to a standard. This is also
+            # then a check for expected columns.
+            data = data[list(column_dict.keys())]
+            data.rename(columns=column_dict, inplace=True)
+            # Replace EODHistoricalData.com's exchange codes (the mic column)
+            # with exchange MICs
+            eod_to_mic_dict = dict(
+                [(s.exchange.eod_code, s.exchange.mic) for s in asset_list]
+            )
+            data.replace({"mic": eod_to_mic_dict}, inplace=True)
+            # Augment the ticker-mic with the matching ISIN code using a mapping
+            # dictionary
+            mic_ticker_to_isin_dict = dict(
+                [((s.exchange.mic, s.ticker), s.isin) for s in asset_list]
+            )
+            data["_key"] = data[["mic", "ticker"]].to_records(index=False).tolist()
+            data["isin"] = data["_key"].map(mic_ticker_to_isin_dict)
+            # These columns are expected by asset_base
+            data.drop(columns=["_key", "mic", "ticker"], inplace=True)
+            # Condition date
+            for column in date_columns_list:
+                data[column] = pd.to_datetime(data[column])
+            # Extract split numerator and denominator from string
+            # representation "n:d" to two integer columns then drop the
+            # original string column
+            split_columns = data["split"].str.split("/", expand=True)
+            data["numerator"] = split_columns[0].astype(float)
+            data["denominator"] = split_columns[1].astype(float)
+            data.drop(columns=["split"], inplace=True)
+        else:
+            raise Exception("Feed {} not implemented.".format(feed))
+
+        return data
+
+    def get_forex(self, forex_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of securities.
 
         This method fetches the data from the specified feed.
@@ -781,6 +941,16 @@ class History(_Feed):
         feed : str
             The data feed module to use:
                 'EOD' - eod_historical_data
+
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            forex and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'ticker', 'adjusted_close', 'close', 'high', 'low',
+                'open', 'volume'. The 'ticker' column is the forex ticker code
+                and is key to identifying the forex the time series belongs to.
+            The DataFrame is empty if no data was found.
 
         """
         # Generate date list with date ranges for each asset.
@@ -810,7 +980,7 @@ class History(_Feed):
             logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to from here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)
@@ -825,7 +995,7 @@ class History(_Feed):
 
         return data
 
-    def get_indices(self, index_list, from_date=None, to_date=None, feed="EOD"):
+    def get_indices(self, index_list, from_date=None, to_date=None, feed="EOD") -> pd.DataFrame:
         """Get historical EOD for a specified list of indices.
 
         This method fetches the data from the specified feed.
@@ -842,6 +1012,16 @@ class History(_Feed):
         feed : str
             The data feed module to use:
                 'EOD' - eod_historical_data
+
+        Returns
+        -------
+        pandas.DataFrame
+            A pandas DataFrame with the historical data for the specified
+            indices and date ranges. The DataFrame has the following columns:
+                'date_stamp', 'ticker', 'adjusted_close', 'close', 'high', 'low',
+                'open', 'volume'. The 'ticker' column is the index ticker code
+                and is key to identifying the index the time series belongs to.
+            The DataFrame is empty if no data was found.
 
         """
         # Generate date list with date ranges for each asset.
@@ -871,7 +1051,7 @@ class History(_Feed):
             logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
-                return pd.DataFrame
+                return pd.DataFrame([])
             #  Reset the index as we need to from here on treat the index as
             # column data. The security and date info is in the index
             data.reset_index(inplace=True)

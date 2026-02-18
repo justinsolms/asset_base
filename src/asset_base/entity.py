@@ -2,10 +2,87 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-""" Define classes describing entities such as legal and natural persons.
+"""Define classes describing entities such as legal and natural persons.
 
-This module also defines currency and domicile classes that are used to manage
-currency and exchange rates.
+This module defines currency and domicile classes that are used other modules to
+manage currency and exchanges rates, as well as entity classes representing
+legal persons such as issuers and exchanges.
+
+Factory Method Paradigm
+------------------------
+All classes in this module implement a factory method pattern with dual-mode
+behavior to enforce a strict dependency hierarchy:
+
+**Dependency Hierarchy**::
+
+    Currency (base level)
+        ↓
+    Domicile (requires Currency)
+        ↓
+    Entity / Exchange (require Domicile)
+
+**Retrieval Mode** (minimal parameters):
+    When only key identifying parameters are provided, the factory attempts
+    to retrieve an existing instance. If not found, raises ``FactoryError``.
+
+    Examples::
+
+        # Retrieve existing currency (must already exist)
+        currency = Currency.factory(session, ticker="USD")
+
+        # Retrieve existing domicile (must already exist)
+        domicile = Domicile.factory(session, country_code="US")
+
+**Creation Mode** (full parameters):
+    When all required parameters are provided, the factory retrieves an
+    existing instance if found, or creates a new one if missing.
+
+    Examples::
+
+        # Create currency if missing, or return existing
+        currency = Currency.factory(
+            session, ticker="USD", name="US Dollar",
+            country_code_list=["US"]
+        )
+
+        # Create domicile if missing, or return existing
+        # Note: currency_ticker "USD" must already exist or FactoryError raised
+        domicile = Domicile.factory(
+            session, country_code="US", country_name="United States",
+            currency_ticker="USD"
+        )
+
+**Dependency Enforcement**:
+    Higher-level factories call lower-level factories in retrieval mode:
+
+    - ``Domicile.factory`` calls ``Currency.factory(session, currency_ticker)``
+      in retrieval mode, ensuring the currency must pre-exist.
+
+    - ``Entity.factory`` and ``Exchange.factory`` call
+      ``Domicile.factory(session, country_code)`` in retrieval mode, ensuring
+      the domicile (and transitively, its currency) must pre-exist.
+
+    This prevents accidental creation of foundational Currency/Domicile records
+    when creating higher-level entities.
+
+**The create Parameter**:
+    Many factory methods accept a ``create`` parameter to explicitly control
+    behaviour:
+
+    - ``create=False``: Force retrieval mode, raise ``FactoryError`` if not found
+    - ``create=True``: Allow creation if missing (default for most factories)
+
+    Example::
+
+        # Strict retrieval - raises FactoryError if exchange doesn't exist
+        exchange = Exchange.factory(
+            session, mic="XNYS", create=False
+        )
+
+See Also
+--------
+common : Base Common class and factory pattern documentation
+asset : Asset classes with factory methods
 """
 # TODO: Decide upon key_code and identity_code formats
 
@@ -114,7 +191,7 @@ class Currency(Base):
     __tablename__ = "currency"
     __table_args__ = (UniqueConstraint("ticker"),)
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    _id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
 
     # Data.
@@ -134,8 +211,8 @@ class Currency(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(ticker="{}", name="{}")'.format(
-            self.__class__.__name__, self.ticker, self.name
+        return '{}(ticker="{}", name="{}", country_code_list={!r})'.format(
+            self.__class__.__name__, self.ticker, self.name, self.country_code_list
         )
 
     @classmethod
@@ -177,26 +254,62 @@ class Currency(Base):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
+        Factory Method Behaviour
+        ------------------------
+        This factory operates in two modes based on provided parameters:
+
+        **Retrieval Mode** (ticker only):
+            When only ``ticker`` is provided, retrieves an existing Currency.
+            Raises ``FactoryError`` if not found.
+
+            Example::
+
+                # Must already exist in database
+                currency = Currency.factory(session, ticker="USD")
+
+        **Creation Mode** (ticker + name + country_code_list):
+            When all parameters provided, retrieves existing Currency or creates
+            new one if missing.
+
+            Example::
+
+                currency = Currency.factory(
+                    session, ticker="USD", name="US Dollar",
+                    country_code_list=["US"]
+                )
+
+        ``Currency`` is the base level of the dependency hierarchy and has no
+        dependencies on other classes.
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             The database session.
         ticker : str
             ISO 4217 3-letter currency code.
-        name : str
-            ISO 4217 currency names. Required if the specified currency instance
-            is not already in the session, else an exception shall be raised; as
-            the instance still needs to be created. If the instance does exist
-            then this name must match that of the instance or an  exception
-            shall be raised.
-        country_code_list : list
+        name : str, optional
+            ISO 4217 currency name. Required for creation mode. If the currency
+            already exists, this name must match or ``ReconcileError`` is raised.
+        country_code_list : list, optional
             List of ISO 3166 2-letter country codes which domicile the currency
-            (apply for domestic use).
+            (apply for domestic use). Required for creation mode.
 
-        Return
-        ------
-        .Currency
+        Returns
+        -------
+        Currency
             The single instance that is in the session.
+
+        Raises
+        ------
+        FactoryError
+            If currency not found in retrieval mode, or if required parameters
+            missing for creation.
+        ReconcileError
+            If provided name conflicts with existing currency's name.
+
+        See Also
+        --------
+        Domicile.factory : Calls this factory in retrieval mode
 
         """
         assert len(ticker) == 3, "Expected ISO 4217 3-letter currency code."
@@ -331,11 +444,11 @@ class Domicile(Base):
 
     __tablename__ = "domicile"
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
+    _id = Column(Integer, primary_key=True, autoincrement=True)
     """ int : Primary key."""
 
     # Official currency
-    _currency_id = Column(Integer, ForeignKey("currency.id"), nullable=False)
+    _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship("Currency")
 
     # Data.
@@ -363,7 +476,7 @@ class Domicile(Base):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(country_code="{}", country_code="{}", currency={!r})'.format(
+        return '{}(country_code="{}", country_name="{}", currency={!r})'.format(
             self.__class__.__name__, self.country_code, self.country_name, self.currency
         )
 
@@ -391,25 +504,67 @@ class Domicile(Base):
         The related `Currency` instance must already exist or a `FactoryError`
         exception shall be thrown.
 
+        Factory Method Behaviour
+        ------------------------
+        This factory operates in two modes based on provided parameters:
+
+        **Retrieval Mode** (country_code only):
+            When only ``country_code`` is provided, retrieves an existing
+            Domicile. Raises ``FactoryError`` if not found.
+
+            Example::
+
+                # Must already exist in database
+                domicile = Domicile.factory(session, country_code="US")
+
+        **Creation Mode** (country_code + country_name + currency_ticker):
+            When all parameters provided, retrieves existing Domicile or creates
+            new one if missing. **Important**: The specified currency must
+            already exist or ``FactoryError`` is raised.
+
+            Example::
+
+                # Currency "USD" must already exist
+                domicile = Domicile.factory(
+                    session, country_code="US",
+                    country_name="United States",
+                    currency_ticker="USD"
+                )
+
+        **Dependency Enforcement**:
+            This factory calls ``Currency.factory(session, currency_ticker)`` in
+            retrieval mode (without name parameter), ensuring the currency must
+            pre-exist. This prevents accidental creation of Currency records.
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         country_code : str(2)
             ISO 3166-1 Alpha-2 two letter country code.
-        country_name : str
-            ISO 3166-1 country name. Required to create a new instance.
-        currency_ticker : str
-            ISO 4217 3-letter currency codes. Required to create a new instance.
+        country_name : str, optional
+            ISO 3166-1 country name. Required for creation mode. If the domicile
+            already exists, this name must match or ``FactoryError`` is raised.
+        currency_ticker : str, optional
+            ISO 4217 3-letter currency code. Required for creation mode. The
+            currency must already exist in the database.
 
-        Return
-        ------
-        .Domicile
+        Returns
+        -------
+        Domicile
             The single instance that is in the session.
 
-        See also
+        Raises
+        ------
+        FactoryError
+            If domicile not found in retrieval mode, if required parameters
+            missing for creation, or if specified currency doesn't exist.
+
+        See Also
         --------
-        .Currency.factory,
+        Currency.factory : Called in retrieval mode to get currency
+        Entity.factory : Calls this factory in retrieval mode
+        Exchange.factory : Calls this factory in retrieval mode
 
         """
         assert (
@@ -579,49 +734,28 @@ class Entity(Common):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("common.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("common._id"), primary_key=True)
     """ Primary key."""
 
     # Entity's domicile. Domicile has a reference list to many domiciled Entity
     # named `entity_list`
-    _domicile_id = Column(Integer, ForeignKey("domicile.id"), nullable=False)
+    _domicile_id = Column(Integer, ForeignKey("domicile._id"), nullable=False)
     domicile = relationship("Domicile", backref="entity_list")
 
-    def __init__(self, name, domicile, **kwargs):
+    def __init__(self, name, domicile):
         """Instance initialization."""
-        super().__init__(name, **kwargs)
         self.domicile = domicile
 
         # Record the current date as the system entry date of the model.
         self.date_create = datetime.date.today()
         self.date_mod_stamp = None  # Never been modified
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return "{} is an {} in {}".format(
-            self.name, self.__class__.__name__, self.domicile.country_name
-        )
-
-    def __repr__(self):
-        """Return the official string output."""
-        return '{}(name="{}", domicile={!r})'.format(
-            self.__class__.__name__, self.name, self.domicile
-        )
+        super().__init__(name)
 
     @property
     def currency(self):
         """Currency : ``Currency`` of the ``Entity`` ``Domicile``."""
         return self.domicile.currency
-
-    @property
-    def key_code(self):
-        """A key string unique to the class instance."""
-        return self.domicile.key_code + "." + self.name
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
-        return self.domicile.identity_code + "." + self.name
 
     def to_dict(self):
         """Convert class data attributes into a factory compatible dictionary.
@@ -646,6 +780,41 @@ class Entity(Common):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
+        Factory Method Behavior
+        ------------------------
+        This factory operates in two modes controlled by the ``create`` parameter:
+
+        **Retrieval Mode** (create=False):
+            Retrieves an existing Entity with the specified name and domicile.
+            Raises ``FactoryError`` if not found.
+
+            Example::
+
+                # Must already exist in database
+                entity = Entity.factory(
+                    session, entity_name="Acme Corp",
+                    country_code="US", create=False
+                )
+
+        **Creation Mode** (create=True, default):
+            Retrieves existing Entity or creates new one if missing.
+            **Important**: The specified domicile must already exist or
+            ``FactoryError`` is raised.
+
+            Example::
+
+                # Domicile "US" must already exist
+                entity = Entity.factory(
+                    session, entity_name="Acme Corp",
+                    country_code="US"
+                )
+
+        **Dependency Enforcement**:
+            This factory calls ``Domicile.factory(session, country_code)`` in
+            retrieval mode (without country_name or currency_ticker), ensuring
+            the domicile must pre-exist. This prevents accidental creation of
+            Domicile records (and transitively, Currency records).
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
@@ -653,7 +822,8 @@ class Entity(Common):
         entity_name : str
             Entity full name.
         country_code : str(2)
-            ISO 3166-1 Alpha-2 two letter country code.
+            ISO 3166-1 Alpha-2 two letter country code for the entity's domicile.
+            The domicile must already exist in the database.
         children : dict, optional
             A dictionary of entity holding weights. The specified child `Entity`
             instances must already exist in the session or an exception shall be
@@ -662,30 +832,36 @@ class Entity(Common):
             Build the dictionary as follows::
 
                 children = {
-                    'entity1.id': weight1,
+                    'entity1._id': weight1,
                     ...,
-                    `entityN.id`: weightN,
+                    `entityN._id`: weightN,
                 }
 
         create : bool, optional
-            If `False` then the factory shall expect the specified `Entity` to
-            already exist in the session or it shall raise an exception instead
-            of creating a first instance.
+            If False, raises ``FactoryError`` if entity doesn't exist. If True
+            (default), creates entity if missing. Default is True.
+        **kwargs
+            Additional class-specific keyword arguments.
+
+        Returns
+        -------
+        Entity
+            The single instance that is in the session.
+
+        Raises
+        ------
+        FactoryError
+            If entity not found when create=False, or if specified domicile
+            doesn't exist.
+
+        See Also
+        --------
+        Domicile.factory : Called in retrieval mode to get domicile
 
         Note
         ----
         The entity's domicile (and by implication the related currency) must
         already exist in the session or an exception shall be raised.
-
-
-        Return
-        ------
-        .Entity
-            The single instance that is in the session.
-
-        See also
-        --------
-        .Domicile.factory
 
         """
         # TODO: It is debatable whether or not this factory method should exist
@@ -722,7 +898,7 @@ class Entity(Common):
             for id, value in children.items():
                 # Query (find) and add.
                 try:
-                    item = session.query(Entity).filter(Entity.id == id).one()
+                    item = session.query(Entity).filter(Entity._id == id).one()
                 except NoResultFound:
                     raise FactoryError("Child Entity, id=%i, not found." % id)
                 else:
@@ -762,12 +938,12 @@ class Institution(Entity):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("entity.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("entity._id"), primary_key=True)
     """ Primary key."""
 
-    def __init__(self, name, domicile, **kwargs):
+    def __init__(self, name, domicile):
         """Instance initialization."""
-        super().__init__(name=name, domicile=domicile, **kwargs)
+        super().__init__(name=name, domicile=domicile)
 
 
 class Issuer(Institution):
@@ -791,7 +967,7 @@ class Issuer(Institution):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("institution.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("institution._id"), primary_key=True)
     """ Primary key."""
 
     # Collection of the issued Model instances.
@@ -800,6 +976,33 @@ class Issuer(Institution):
     def __init__(self, name, domicile, **kwargs):
         """Instance initialization."""
         super().__init__(name=name, domicile=domicile, **kwargs)
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return "{} is an {} in {}".format(
+            self.name, self.__class__.__name__, self.domicile.country_name
+        )
+
+    def __repr__(self):
+        """Return the official string output."""
+        return '{}(name="{}", domicile={!r})'.format(
+            self.__class__.__name__, self.name, self.domicile
+        )
+
+    @property
+    def key_code(self):
+        """A key string unique to the class instance."""
+        return f"{self.name}:{self.domicile.country_code}"
+
+    @property
+    def identity_code(self):
+        """A human readable string unique to the class instance."""
+        return f"{self.name}:{self.domicile.country_code}"
+
+    @property
+    def long_name(self):
+        """Return the long name of the issuer."""
+        return f"{self.name} ({self.domicile.country_code})"
 
 
 class Exchange(Institution):
@@ -846,7 +1049,7 @@ class Exchange(Institution):
         "polymorphic_identity": __tablename__,
     }
 
-    id = Column(Integer, ForeignKey("institution.id"), primary_key=True)
+    _id = Column(Integer, ForeignKey("institution._id"), primary_key=True)
     """ Primary key."""
 
     # List of listed Shares on the Exchange
@@ -856,7 +1059,7 @@ class Exchange(Institution):
     mic = Column(String(4), nullable=False)
     eod_code = Column(String(6), nullable=True)
 
-    key_code_name = "mic"
+    KEY_CODE_LABEL = "mic"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
     tables of key codes."""
@@ -868,7 +1071,7 @@ class Exchange(Institution):
         if "eod_code" in kwargs:
             self.eod_code = kwargs.pop("eod_code")
 
-        super().__init__(name, domicile, **kwargs)
+        super().__init__(name, domicile)
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
@@ -878,8 +1081,8 @@ class Exchange(Institution):
 
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", domicile={!r}, mic="{}")'.format(
-            self.__class__.__name__, self.name, self.domicile, self.mic
+        return '{}(name="{}", domicile={!r}, mic="{}", eod_code="{}")'.format(
+            self.__class__.__name__, self.name, self.domicile, self.mic, self.eod_code,
         )
 
     @property
@@ -892,6 +1095,11 @@ class Exchange(Institution):
         """A human readable string unique to the class instance."""
         return self.mic
 
+    @property
+    def long_name(self):
+        """Return the long name of the exchange."""
+        return f"{self.name} ({self.mic})"
+
     @classmethod
     def factory(
         cls, session, mic, exchange_name=None, country_code=None, create=True, **kwargs
@@ -901,47 +1109,91 @@ class Exchange(Institution):
         If a record of the specified class instance does not exist then add it,
         else do nothing. Then return the instance.
 
+        Factory Method Behavior
+        ------------------------
+        This factory operates in two modes controlled by the ``create`` parameter:
+
+        **Retrieval Mode** (create=False or mic only):
+            Retrieves an existing Exchange by MIC code. Raises ``FactoryError``
+            if not found.
+
+            Example::
+
+                # Must already exist in database
+                exchange = Exchange.factory(
+                    session, mic="XNYS", create=False
+                )
+
+        **Creation Mode** (create=True with full parameters):
+            Retrieves existing Exchange or creates new one if missing.
+            **Important**: The specified domicile must already exist or
+            ``FactoryError`` is raised.
+
+            Example::
+
+                # Domicile "US" must already exist
+                exchange = Exchange.factory(
+                    session, mic="XNYS",
+                    exchange_name="New York Stock Exchange",
+                    country_code="US"
+                )
+
+        **Dependency Enforcement**:
+            This factory calls ``Domicile.factory(session, country_code)`` in
+            retrieval mode (without country_name or currency_ticker), ensuring
+            the domicile must pre-exist. This prevents accidental creation of
+            Domicile records (and transitively, Currency records).
+
         Parameters
         ----------
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         mic : str
             ISO 10383 MIC (Market Identifier Code) of the exchange.
-        exchange_name : str
-            Entity full name. If the instance does not exist in the session then
-            this parameter must be provided to create the instance otherwise an
-            exception shall be raised.
-        country_code : str(2)
-            ISO 3166-1 Alpha-2 two letter country code. If the instance does not
-            exist in the session then this parameter must be provided to create
-            the instance otherwise an exception shall be raised.
+        exchange_name : str, optional
+            Entity full name. Required for creation mode. If the exchange
+            already exists, this name must match or ``ReconcileError`` is raised.
+        country_code : str(2), optional
+            ISO 3166-1 Alpha-2 two letter country code for the exchange's domicile.
+            Required for creation mode. The domicile must already exist.
         eod_code : str, optional
             EODHistoricalData.com exchange code. See
             https://eodhistoricaldata.com/financial-apis/list-supported-exchanges/
         create : bool, optional
-            If `False` then the factory shall expect the specified `Entity` to
-            already exist in the session or it shall raise an exception instead
-            of creating a first instance.
+            If False, raises ``FactoryError`` if exchange doesn't exist. If True
+            (default), creates exchange if missing. Default is True.
+        **kwargs
+            Additional keyword arguments (e.g., eod_code).
 
+        Returns
+        -------
+        Exchange
+            The single instance that is in the session.
+
+        Raises
+        ------
+        FactoryError
+            If exchange not found when create=False, or if specified domicile
+            doesn't exist.
+        ReconcileError
+            If provided parameters conflict with existing exchange data.
+
+        See Also
+        --------
+        Domicile.factory : Called in retrieval mode to get domicile
+
+        Notes
+        -----
         To only retrieve an exchange instance from the session one the following
         parameter combinations are required to be specified:
 
             * The ``mic`` parameter alone.
             * The ``country_code`` and the ``exchange_name``.
 
-        If the instance does not exist then and exception shall be raised.
+        If the instance does not exist then an exception shall be raised.
 
         To add a new exchange to the session all three parameters must be
         specified.
-
-        Return
-        ------
-        .Exchange
-            The single instance that is in the session.
-
-        See also
-        --------
-        .Exchange.factory
 
         """
         # Check if exchange exists in the session and if not then add it.

@@ -13,6 +13,7 @@ distributed without the express permission of Justin Solms.
 import asyncio
 from io import StringIO
 import unittest
+from unittest.mock import AsyncMock, patch
 import aiounittest
 
 import datetime
@@ -24,7 +25,153 @@ from src.asset_base.eod_historical_data import APISessionManager, Exchanges
 from src.asset_base.eod_historical_data import Historical
 from src.asset_base.eod_historical_data import Bulk
 from src.asset_base.eod_historical_data import MultiHistorical
-from src.asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns
+from src.asset_base.eod_historical_data import date_index_name, eod_columns, dividend_columns, split_columns
+
+
+def _make_eod_table(date_str="2020-01-02"):
+    return pd.DataFrame(
+        [
+            {
+                "date": date_str,
+                "open": 100.0,
+                "close": 101.0,
+                "high": 102.0,
+                "low": 99.0,
+                "adjusted_close": 100.5,
+                "volume": 1000000,
+            }
+        ]
+    )
+
+
+def _make_dividend_table(date_str="2020-01-02"):
+    return pd.DataFrame(
+        [
+            {
+                "date": date_str,
+                "declarationDate": "2020-01-01",
+                "recordDate": "2020-01-02",
+                "paymentDate": "2020-01-03",
+                "period": "2020-01",
+                "value": 0.5,
+                "unadjustedValue": 0.5,
+                "currency": "USD",
+            }
+        ]
+    )
+
+
+def _make_split_table(date_str="2020-01-02"):
+    return pd.DataFrame(
+        [
+            {
+                "date": date_str,
+                "split": "2/1",
+            }
+        ]
+    )
+
+
+def _make_bulk_eod_table(date_str="2020-12-31", exchange="US", tickers=None):
+    if tickers is None:
+        tickers = ["AAPL", "MCD"]
+    rows = []
+    for ticker in tickers:
+        rows.append(
+            {
+                "date": date_str,
+                "code": ticker,
+                "exchange_short_name": exchange,
+                "open": 100.0,
+                "high": 102.0,
+                "low": 99.0,
+                "close": 101.0,
+                "adjusted_close": 100.5,
+                "volume": 1000000,
+                "prev_close": 99.5,
+                "change": 1.5,
+                "change_p": 1.5,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _make_bulk_dividend_table(date_str="2020-02-07", exchange="US"):
+    return pd.DataFrame(
+        [
+            {
+                "date": date_str,
+                "code": "AAPL",
+                "exchange_short_name": exchange,
+                "dividend": 0.2,
+                "currency": "USD",
+                "declarationDate": "2020-02-01",
+                "recordDate": "2020-02-02",
+                "paymentDate": "2020-02-03",
+                "period": "2020-02",
+                "unadjustedValue": 0.2,
+            }
+        ]
+    )
+
+
+def _make_bulk_split_table(date_str="2021-09-15", exchange="US"):
+    return pd.DataFrame(
+        [
+            {
+                "date": date_str,
+                "code": "AAPL",
+                "exchange_short_name": exchange,
+                "split": "2/1",
+            }
+        ]
+    )
+
+
+async def _mock_api_get(endpoint, params):
+    if "BAD" in endpoint:
+        raise Exception("Ticker not found")
+
+    if "/api/eod-bulk-last-day/" in endpoint:
+        exchange = endpoint.rsplit("/", 1)[-1]
+        bulk_type = params.get("type")
+        symbols = params.get("symbols")
+        if symbols:
+            tickers = [item.split(".")[0] for item in symbols.split(",")]
+        else:
+            tickers = None
+        if bulk_type == "dividends":
+            return _make_bulk_dividend_table(exchange=exchange)
+        if bulk_type == "splits":
+            return _make_bulk_split_table(exchange=exchange)
+        return _make_bulk_eod_table(exchange=exchange, tickers=tickers)
+
+    if "/api/div/" in endpoint:
+        return _make_dividend_table()
+
+    if "/api/splits/" in endpoint:
+        return _make_split_table()
+
+    if "/api/eod/" in endpoint:
+        return _make_eod_table()
+
+    return pd.DataFrame()
+
+
+class MockAPIMixin:
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls._api_get_patcher = patch(
+            "src.asset_base.eod_historical_data.APISessionManager.get",
+            new=AsyncMock(name="APISessionManager.get", side_effect=_mock_api_get),
+        )
+        cls._api_get_patcher.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._api_get_patcher.stop()
+        super().tearDownClass()
 
 
 def assert_date_index(tester, df):
@@ -34,7 +181,6 @@ def assert_date_index(tester, df):
     tester.assertEqual(date_index_name, df.index.name)
     tester.assertTrue(df.index.is_unique)
 
-
 def assert_date_ticker_index(tester, df):
     """Test datetime, ticker index."""
     index_columns = [date_index_name, "ticker"]
@@ -43,7 +189,6 @@ def assert_date_ticker_index(tester, df):
     pd.testing.assert_series_equal(test_df, df.index.dtypes)
     tester.assertTrue(df.index.is_unique)
 
-
 def assert_date_ticker_exchange_index(tester, df):
     """Test datetime, ticker, exchange index."""
     index_columns = [date_index_name, "ticker", "exchange"]
@@ -51,7 +196,6 @@ def assert_date_ticker_exchange_index(tester, df):
     test_df = pd.Series(index_types, index=index_columns)  #
     pd.testing.assert_series_equal(test_df, df.index.dtypes)
     tester.assertTrue(df.index.is_unique)
-
 
 def assert_eod_columns(tester, df):
     """Test EOD DataFame columns."""
@@ -67,7 +211,6 @@ def assert_eod_columns(tester, df):
     ]
     test_df = pd.Series(column_types, index=eod_columns)  #
     pd.testing.assert_series_equal(test_df, df.dtypes)
-
 
 def assert_dividend_columns(tester, df):
     """Test dividend DataFame columns."""
@@ -85,13 +228,25 @@ def assert_dividend_columns(tester, df):
     test_df = pd.Series(column_types, index=dividend_columns)  #
     pd.testing.assert_series_equal(test_df, df.dtypes)
 
+def assert_split_columns(tester, df):
+    """Test split DataFame columns."""
+    tester.assertIsInstance(df, pd.DataFrame)
+    # Test columns
+    column_types = [
+        np.dtype("object"),
+    ]
+    test_df = pd.Series(column_types, index=split_columns)  #
+    pd.testing.assert_series_equal(test_df, df.dtypes)
 
-class TestAPI(aiounittest.AsyncTestCase):
+
+class TestAPISessionManager(aiounittest.AsyncTestCase):
     """Direct API query, response and result checking."""
+    # TODO: Write tests for retries and error handling.
 
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
+        super().setUpClass()
         domain = "eodhistoricaldata.com"
         service = "/api/eod"
         ticker1 = "STX40"
@@ -124,7 +279,7 @@ class TestAPI(aiounittest.AsyncTestCase):
     @classmethod
     def tearDownClass(cls):
         """Tear down class test fixtures."""
-        pass
+        super().tearDownClass()
 
     def setUp(self):
         """Set up one test."""
@@ -180,18 +335,18 @@ class TestAPI(aiounittest.AsyncTestCase):
         self.assert_df(df2)
 
 
-class TestHistorical(aiounittest.AsyncTestCase):
+class TestHistorical(MockAPIMixin, aiounittest.AsyncTestCase):
     """Using security AAPL.US (Apple Inc.)."""
 
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
-        pass
+        super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
         """Tear down class test fixtures."""
-        pass
+        super().tearDownClass()
 
     def setUp(self):
         """Set up one test."""
@@ -222,9 +377,20 @@ class TestHistorical(aiounittest.AsyncTestCase):
         to_date = datetime.datetime.strptime("2020-11-06", "%Y-%m-%d")
         # Get
         async with Historical() as historical:
-            df = await historical.get_dividends("US", "AAPL", from_date, to_date)
+            df = await historical.get_dividends("JSE", "STX40", from_date, to_date)
         assert_date_index(self, df)
         assert_dividend_columns(self, df)
+
+    async def test_get_splits(self):
+        """Get daily, split historical over a date range."""
+        # Test data
+        from_date = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        to_date = datetime.datetime.strptime("2021-12-31", "%Y-%m-%d")
+        # Get
+        async with Historical() as historical:
+            df = await historical.get_splits("US", "AAPL", from_date, to_date)
+        assert_date_index(self, df)
+        assert_split_columns(self, df)
 
     async def test_get_forex(self):
         """Get daily, EOD historial forex (USD based) over a date range."""
@@ -239,18 +405,18 @@ class TestHistorical(aiounittest.AsyncTestCase):
         assert_eod_columns(self, df)
 
 
-class TestBulk(aiounittest.AsyncTestCase):
+class TestBulk(MockAPIMixin, aiounittest.AsyncTestCase):
     """Using security AAPL.US (Apple Inc.) and MCD.US (McDonald's Inc.)."""
 
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
-        pass
+        super().setUpClass()
 
     @classmethod
     def tearDownClass(cls):
         """Tear down class test fixtures."""
-        pass
+        super().tearDownClass()
 
     def setUp(self):
         """Set up one test."""
@@ -375,7 +541,9 @@ class TestExchanges(unittest.TestCase):
             "CountryISO2",
             "CountryISO3",
         ]
-        test_row = ["USA Stocks", "US", "XNAS, XNYS", "USA", "USD", "US", "USA"]
+        # NOTE: Here XNAS, XNYS, OTCM are the OperatingMICs for USA Stocks and
+        # are a comma-separated string.
+        test_row = ['USA Stocks', 'US', 'XNAS, XNYS, OTCM', 'USA', 'USD', 'US', 'USA']
         table = self.exchanges.get_exchanges()
         self.assertEqual(test_columns, table.columns.tolist())
         self.assertEqual(
@@ -436,12 +604,13 @@ class TestExchanges(unittest.TestCase):
         pd.testing.assert_frame_equal(test_df, df)
 
 
-class TestMultiHistorical(unittest.TestCase):
+class TestMultiHistorical(MockAPIMixin, unittest.TestCase):
     """Get bulk histories across exchanges, securities and date ranges."""
 
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
+        super().setUpClass()
         cls.historical = MultiHistorical()
         cls.symbol_list = (("AAPL", "US"), ("MCD", "US"), ("STX40", "JSE"))
         cls.forex_list = ("USDEUR", "USDGBP", "USDUSD")
@@ -456,7 +625,7 @@ class TestMultiHistorical(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         """Tear down class test fixtures."""
-        pass
+        super().tearDownClass()
 
     def setUp(self):
         """Set up one test."""
@@ -557,6 +726,17 @@ class TestMultiHistorical(unittest.TestCase):
         assert_date_ticker_exchange_index(self, df)
         assert_dividend_columns(self, df)
 
+    def test_get_splits(self):
+        """Get historical data for a list of securities."""
+        # Test data
+        to_date = datetime.datetime.strptime("2021-12-31", "%Y-%m-%d")
+        # Longer date range test causes a decision to use the EOD API service
+        from_date1 = datetime.datetime.strptime("2020-01-01", "%Y-%m-%d")
+        symbol_list = [(s[0], s[1], from_date1, to_date) for s in self.symbol_list]
+        df = self.historical.get_splits(symbol_list)
+        assert_date_ticker_exchange_index(self, df)
+        assert_split_columns(self, df)
+
     def test_get_forex(self):
         """Get daily, EOD historial forex."""
         # Test data
@@ -588,7 +768,7 @@ class Suite(object):
         suite = unittest.TestSuite()
 
         test_classes = [
-            TestAPI,
+            TestAPISessionManager,
             TestHistorical,
             TestBulk,
             TestMultiHistorical,
