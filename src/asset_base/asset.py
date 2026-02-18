@@ -1516,14 +1516,14 @@ class Listed(Share):
             name = f"{name} ({status})"
 
         # Some shares carry the same name as the issuer, if so we append the
-        # exchange MIC of the exchange to the name for uniqueness and clarity.
-        # For example, if the share name is "ABC Ltd" and the exchange is
-        # "Johannesburg Stock Exchange" then the name of the instance will be
-        # "ABC Ltd (Johannesburg Stock Exchange)". This is because there may be
-        # a need to have the same share listed on multiple exchanges in the
-        # database at the same time.
+        # widely used eodhistoricaldata.com, exchange code to the name for
+        # uniqueness and clarity. For example, if the share name is "ABC Ltd"
+        # and the exchange is "Johannesburg Stock Exchange" then the name of the
+        # instance will be "ABC Ltd (Johannesburg Stock Exchange)". This is
+        # because there may be a need to have the same share listed on multiple
+        # exchanges in the database at the same time.
         if name == issuer.name:
-            name = f"{name} ({exchange.mic})"
+            name = f"{name} ({exchange.eod_code})"
 
         # The currency is that of the exchange domicile. This is because the
         # price of a share is that of the exchange listing, and the exchange
@@ -1549,11 +1549,14 @@ class Listed(Share):
 
         super().__init__(name, issuer, currency, **kwargs)
 
-        # Ticker is added for human readability and convenience, but the unique
-        # identifier is the ISIN. The ticker is not necessarily unique across
-        # exchanges, but the combination of exchange MIC and ticker is unique.
-        # The ISIN is unique across all exchanges.
-        self.identity_code = self.isin + "." + self.ticker
+        # The identity code is the combination of the ticker and the widely used
+        # eodhistoricaldata.com exchange code. This is because the ticker is not
+        # unique across all exchanges, but the combination of ticker and
+        # exchange code is unique. For example, if there are two shares with the
+        # same ticker "ABC" listed on two different exchanges with codes "X" and
+        # "Y", then their identity codes will be "ABC.X" and "ABC.Y"
+        # respectively, which are unique.
+        self.identity_code = self.ticker + "." + self.exchange.eod_code
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""

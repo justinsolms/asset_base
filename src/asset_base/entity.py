@@ -1097,6 +1097,12 @@ class Exchange(Institution):
 
         if "eod_code" in kwargs:
             self.eod_code = kwargs.pop("eod_code")
+        else:
+            logger.warning(
+                "No eod_code provided for exchange {}, mic={}. Defaulting to mic.".format(
+                    name, mic
+                ))
+            self.eod_code = mic  # Default to mic if eod_code not provided
 
         super().__init__(name, domicile)
 
