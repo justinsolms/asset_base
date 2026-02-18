@@ -339,10 +339,10 @@ class TestForex(TestBase):
 
     def test_foreign_currencies_list(self):
         """Test that foreign_currencies class attribute is a list."""
-        self.assertIsInstance(Forex.foreign_currencies, list)
-        self.assertIn("USD", Forex.foreign_currencies)
-        self.assertIn("EUR", Forex.foreign_currencies)
-        self.assertIn("GBP", Forex.foreign_currencies)
+        self.assertIsInstance(Forex.foreign_currencies_list, list)
+        self.assertIn("USD", Forex.foreign_currencies_list)
+        self.assertIn("EUR", Forex.foreign_currencies_list)
+        self.assertIn("GBP", Forex.foreign_currencies_list)
 
     def test_update_all_creates_forex_for_foreign_currencies(self):
         """Test update_all creates Forex instances for foreign currencies."""

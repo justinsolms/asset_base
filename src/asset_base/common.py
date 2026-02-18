@@ -562,6 +562,9 @@ class Common(Base):
             return
 
         for i, row in data_frame.iterrows():
+            # Call class factory method. Each class factory method should be
+            # designed to handle creation of instances from the provided row
+            # data.
             cls.factory(session, **row)
 
     @classmethod
