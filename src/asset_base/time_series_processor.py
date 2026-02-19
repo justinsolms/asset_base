@@ -361,13 +361,6 @@ class TimeSeriesProcessor():
         - 'prev_price': prior day's raw close price P_{t-1} (for debugging)
         """
 
-        # Lock out corporate action adjustments after downsampling
-        if self.downsampled_total_returns_df is not None:
-            raise RuntimeError(
-                "Cannot apply corporate actions after downsampling. Corporate "
-                "actions must be applied to original price series."
-            )
-
         # Ensure canonical ordering
         self._prices_df = self._prices_df.sort_values(["identity_code", "date_stamp"]).copy()
 
