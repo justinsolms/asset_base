@@ -362,7 +362,7 @@ class TestManager(unittest.TestCase):
         # Use identity_code for manager-level time series processor
         tsp = self.manager.get_time_series_processor([listed.identity_code])
         self.assertIsInstance(tsp, TimeSeriesProcessor)
-        self.assertGreater(len(tsp.prices_df), 0)
+        self.assertGreater(len(tsp._prices_df), 0)
 
     def test_get_time_series_processor_with_listed_equity_and_cash(self):
         """Test get_time_series_processor with ListedEquity and cash asset."""
@@ -373,10 +373,10 @@ class TestManager(unittest.TestCase):
         tsp = self.manager.get_time_series_processor(
             [listed.identity_code], cash_currency_ticker='USD')
         self.assertIsInstance(tsp, TimeSeriesProcessor)
-        self.assertGreater(len(tsp.prices_df), 0)
+        self.assertGreater(len(tsp._prices_df), 0)
 
         # Expect both listed equity and USD cash identity codes present
-        identity_codes = set(tsp.prices_df["identity_code"].unique())
+        identity_codes = set(tsp._prices_df["identity_code"].unique())
         self.assertIn(listed.identity_code, identity_codes)
         self.assertIn('USD', identity_codes)
 

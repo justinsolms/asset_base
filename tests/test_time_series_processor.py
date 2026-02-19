@@ -97,15 +97,15 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         """Test TimeSeriesProcessor initialization."""
         self.assertIsInstance(self.tsp_dirty, TimeSeriesProcessor)
         pd.testing.assert_frame_equal(
-            self.tsp_dirty.prices_df.reset_index(drop=True),
+            self.tsp_dirty._prices_df.reset_index(drop=True),
             self.dirty_test_price_df.reset_index(drop=True)
         )
         pd.testing.assert_frame_equal(
-            self.tsp_dirty.dividends_df.reset_index(drop=True),
+            self.tsp_dirty._dividends_df.reset_index(drop=True),
             self.test_dividend_df.reset_index(drop=True)
         )
         pd.testing.assert_frame_equal(
-            self.tsp_dirty.splits_df.reset_index(drop=True),
+            self.tsp_dirty._splits_df.reset_index(drop=True),
             self.test_split_df.reset_index(drop=True)
         )
 
@@ -120,7 +120,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             'date_stamp': pd.date_range(start='2021-01-01', periods=5),
             'price': [100.0, 50.0, 30.0, 200.0, np.nan]
         })
-        self.tsp_dirty.prices_df = invalid_price_df
+        self.tsp_dirty._prices_df = invalid_price_df
         self.tsp_dirty._validate_prices()
 
         # Test non-numeric prices
@@ -129,7 +129,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             'date_stamp': pd.date_range(start='2021-01-01', periods=5),
             'price': [100.0, 50.0, 'abc', 200.0, np.nan]
         })
-        self.tsp_dirty.prices_df = invalid_price_df
+        self.tsp_dirty._prices_df = invalid_price_df
         with self.assertRaises(TypeError):
             self.tsp_dirty._validate_prices()
 
@@ -139,7 +139,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             'date_stamp': pd.date_range(start='2021-01-01', periods=5),
             'price': [100.0, -50.0, 30.0, 200.0, np.nan]
         })
-        self.tsp_dirty.prices_df = invalid_price_df
+        self.tsp_dirty._prices_df = invalid_price_df
         with self.assertRaises(ValueError):
             self.tsp_dirty._validate_prices()
 
@@ -148,23 +148,23 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Create business daily prices
         self.tsp_dirty._validate_sampling_frequency()
         # Tests that the frequency is set to daily
-        self.assertEqual(pd.infer_freq(self.tsp_dirty.prices_df['date_stamp']), 'D')
+        self.assertEqual(pd.infer_freq(self.tsp_dirty._prices_df['date_stamp']), 'D')
 
     def test_validate_business_daily_sampling_frequency(self):
         """Test sampling frequency validation method with business daily ("B"|"C") data."""
         # Create business daily prices by resampling.
         business_daily_df = self.clean_test_price_df.set_index('date_stamp').resample('B').last().reset_index()
-        self.tsp_dirty.prices_df = business_daily_df
+        self.tsp_dirty._prices_df = business_daily_df
         # Validate business daily data
         self.tsp_dirty._validate_sampling_frequency()
         # Tests that the frequency is set to daily
-        self.assertEqual(pd.infer_freq(self.tsp_dirty.prices_df['date_stamp']), 'B')
+        self.assertEqual(pd.infer_freq(self.tsp_dirty._prices_df['date_stamp']), 'B')
 
     def test_validate_too_high_sampling_frequency(self):
         """Test sampling frequency validation method with high-frequency data."""
         # Create hourly prices by upsampling fixture data with ffill
         hourly_price_df = self.clean_test_price_df.set_index('date_stamp').resample('H').ffill().reset_index()
-        self.tsp_dirty.prices_df = hourly_price_df
+        self.tsp_dirty._prices_df = hourly_price_df
         # Validate failure on high-frequency data
         with self.assertRaises(ValueError):
             self.tsp_dirty._validate_sampling_frequency()
@@ -175,28 +175,28 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         self.tsp_dirty._dropna_prices()
         self.tsp_dirty._validate_sampling_frequency()
         # Tests that the frequency is set to daily
-        self.assertEqual(pd.infer_freq(self.tsp_dirty.prices_df['date_stamp']), None)
+        self.assertEqual(pd.infer_freq(self.tsp_dirty._prices_df['date_stamp']), None)
 
     def test_dropna_prices(self):
         """Test dropping NaN prices method."""
         # Count NaNs before dropping
-        nan_count_before = self.tsp_dirty.prices_df['price'].isna().sum()
+        nan_count_before = self.tsp_dirty._prices_df['price'].isna().sum()
         self.tsp_dirty._dropna_prices()
         # Count NaNs after dropping
-        nan_count_after = self.tsp_dirty.prices_df['price'].isna().sum()
+        nan_count_after = self.tsp_dirty._prices_df['price'].isna().sum()
         # Test that NaN count decreased
         self.assertLess(nan_count_after, nan_count_before)
         # Test that there are no NaNs after dropping
-        self.assertFalse(self.tsp_dirty.prices_df['price'].isna().any())
+        self.assertFalse(self.tsp_dirty._prices_df['price'].isna().any())
 
     def test_normalize_and_order_dates(self):
         """Test date normalization and ordering method."""
         # Shuffle the price DataFrame by random sampling to test ordering
         shuffled_price_df = self.clean_test_price_df.sample(frac=1).reset_index(drop=True)
-        self.tsp_dirty.prices_df = shuffled_price_df
+        self.tsp_dirty._prices_df = shuffled_price_df
         self.tsp_dirty._normalize_and_order_dates()
         pd.testing.assert_frame_equal(
-            self.tsp_dirty.prices_df.reset_index(drop=True),
+            self.tsp_dirty._prices_df.reset_index(drop=True),
             self.clean_test_price_df.sort_values(by=['identity_code', 'date_stamp']).reset_index(drop=True)
         )
 
@@ -209,9 +209,9 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Drop NaNs first then identify outliers
         self.tsp_dirty._dropna_prices()
         # Test that there are no NaNs after dropping
-        self.assertFalse(self.tsp_dirty.prices_df['price'].isna().any())
+        self.assertFalse(self.tsp_dirty._prices_df['price'].isna().any())
         # Calculate price differences
-        price_diff = self.tsp_dirty.prices_df['price'].diff()
+        price_diff = self.tsp_dirty._prices_df['price'].diff()
         # Test first diff should be a NaN
         self.assertTrue(np.isnan(price_diff.iloc[0]))
         # Test two more differences for correctness
@@ -229,9 +229,9 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Drop NaNs first then identify outliers
         self.tsp_dirty._dropna_prices()
         # Test that there are no NaNs after dropping
-        self.assertFalse(self.tsp_dirty.prices_df['price'].isna().any())
+        self.assertFalse(self.tsp_dirty._prices_df['price'].isna().any())
         # Calculate modified z-scores
-        prices = self.tsp_dirty.prices_df['price']
+        prices = self.tsp_dirty._prices_df['price']
         mod_z_scores = TimeSeriesProcessor._modified_z_score(prices)
         # First one should be NaN
         self.assertTrue(np.isnan(mod_z_scores[0]))
@@ -276,20 +276,20 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp._apply_corporate_actions()
 
         # Should have dividend and split_ratio columns filled with defaults
-        self.assertIn('dividend', tsp.prices_df.columns)
-        self.assertIn('split_ratio', tsp.prices_df.columns)
-        self.assertIn('total_return', tsp.prices_df.columns)
+        self.assertIn('dividend', tsp._prices_df.columns)
+        self.assertIn('split_ratio', tsp._prices_df.columns)
+        self.assertIn('total_return', tsp._prices_df.columns)
 
         # All dividends should be 0.0
-        self.assertTrue((tsp.prices_df['dividend'] == 0.0).all())
+        self.assertTrue((tsp._prices_df['dividend'] == 0.0).all())
         # All split_ratios should be 1.0
-        self.assertTrue((tsp.prices_df['split_ratio'] == 1.0).all())
+        self.assertTrue((tsp._prices_df['split_ratio'] == 1.0).all())
 
         # Total return should be simple price return (no dividends/splits)
         # G_t = 1.0 * (P_t + 0) / P_{t-1} = P_t / P_{t-1}
         expected_returns = [np.nan, 101.0/100.0, 102.0/101.0, 103.0/102.0, 104.0/103.0]
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['total_return'].values,
+            tsp._prices_df['total_return'].values,
             expected_returns,
             decimal=6
         )
@@ -313,7 +313,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Check dividend column
         expected_divs = [0.0, 0.0, 2.0, 0.0, 0.0]
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['dividend'].values,
+            tsp._prices_df['dividend'].values,
             expected_divs,
             decimal=6
         )
@@ -326,7 +326,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Day 5: 1.0 * (104 + 0) / 103 = 1.009709
         expected_returns = [np.nan, 1.01, 104.0/101.0, 103.0/102.0, 104.0/103.0]
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['total_return'].values,
+            tsp._prices_df['total_return'].values,
             expected_returns,
             decimal=6
         )
@@ -351,7 +351,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Check split_ratio column
         expected_splits = [1.0, 1.0, 2.0, 1.0, 1.0]
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['split_ratio'].values,
+            tsp._prices_df['split_ratio'].values,
             expected_splits,
             decimal=6
         )
@@ -364,7 +364,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Day 5: 1.0 * (52 + 0) / 51 = 1.019608
         expected_returns = [np.nan, 1.01, 2.0*50.5/101.0, 51.0/50.5, 52.0/51.0]
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['total_return'].values,
+            tsp._prices_df['total_return'].values,
             expected_returns,
             decimal=6
         )
@@ -396,10 +396,10 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         expected_divs = [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]
         expected_splits = [1.0, 1.0, 1.0, 2.0, 1.0, 1.0]
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['dividend'].values, expected_divs, decimal=6
+            tsp._prices_df['dividend'].values, expected_divs, decimal=6
         )
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['split_ratio'].values, expected_splits, decimal=6
+            tsp._prices_df['split_ratio'].values, expected_splits, decimal=6
         )
 
         # Check total returns
@@ -418,7 +418,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             53.0/52.0
         ]
         np.testing.assert_array_almost_equal(
-            tsp.prices_df['total_return'].values,
+            tsp._prices_df['total_return'].values,
             expected_returns,
             decimal=6
         )
@@ -447,13 +447,13 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp._apply_corporate_actions()
 
         # TEST:A should have dividend on day 2
-        test_a = tsp.prices_df[tsp.prices_df['identity_code'] == 'TEST:A']
+        test_a = tsp._prices_df[tsp._prices_df['identity_code'] == 'TEST:A']
         np.testing.assert_array_almost_equal(
             test_a['dividend'].values, [0.0, 1.0, 0.0], decimal=6
         )
 
         # TEST:B should have split on day 2
-        test_b = tsp.prices_df[tsp.prices_df['identity_code'] == 'TEST:B']
+        test_b = tsp._prices_df[tsp._prices_df['identity_code'] == 'TEST:B']
         np.testing.assert_array_almost_equal(
             test_b['split_ratio'].values, [1.0, 2.0, 1.0], decimal=6
         )
@@ -484,7 +484,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # G_3 = s_3 * (P_3 + D_3) / P_2 = 2.0 * (51 + 2) / 101 = 106/101
         expected_return_day3 = 2.0 * (51.0 + 2.0) / 101.0
         np.testing.assert_almost_equal(
-            tsp.prices_df.iloc[2]['total_return'],
+            tsp._prices_df.iloc[2]['total_return'],
             expected_return_day3,
             decimal=6
         )
@@ -506,7 +506,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp._apply_corporate_actions()
 
         # Should aggregate to 1.5
-        self.assertAlmostEqual(tsp.prices_df.iloc[1]['dividend'], 1.5, places=6)
+        self.assertAlmostEqual(tsp._prices_df.iloc[1]['dividend'], 1.5, places=6)
 
     def test_apply_corporate_actions_reverse_split(self):
         """Test corporate actions with a reverse split (1-for-5)."""
@@ -526,10 +526,10 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp._apply_corporate_actions()
 
         # Check split_ratio = 1/5 = 0.2
-        self.assertAlmostEqual(tsp.prices_df.iloc[2]['split_ratio'], 0.2, places=6)
+        self.assertAlmostEqual(tsp._prices_df.iloc[2]['split_ratio'], 0.2, places=6)
 
         # Total return on day 3: 0.2 * 55 / 11 = 11/11 = 1.0
-        self.assertAlmostEqual(tsp.prices_df.iloc[2]['total_return'], 1.0, places=6)
+        self.assertAlmostEqual(tsp._prices_df.iloc[2]['total_return'], 1.0, places=6)
 
     def test_apply_corporate_actions_invalid_splits(self):
         """Test corporate actions with invalid split data (non-positive)."""
@@ -582,16 +582,16 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Verify that all expected columns exist
         expected_cols = ['dividend', 'split_ratio', 'total_return', 'prev_price']
         for col in expected_cols:
-            self.assertIn(col, tsp.prices_df.columns)
+            self.assertIn(col, tsp._prices_df.columns)
 
         # Check that we have some valid total returns computed
-        total_returns = tsp.prices_df['total_return']
+        total_returns = tsp._prices_df['total_return']
         valid_returns = total_returns.dropna()
         self.assertGreater(len(valid_returns), 0, "Should have at least some valid total returns")
 
         # For rows where both price and prev_price are valid, total_return should be valid
-        both_valid = tsp.prices_df[
-            tsp.prices_df['price'].notna() & tsp.prices_df['prev_price'].notna()
+        both_valid = tsp._prices_df[
+            tsp._prices_df['price'].notna() & tsp._prices_df['prev_price'].notna()
         ]
         if len(both_valid) > 0:
             self.assertFalse(
@@ -600,7 +600,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             )
 
         # Check that dividends are applied on expected dates
-        dividend_dates = tsp.prices_df[tsp.prices_df['dividend'] > 0]['date_stamp'].values
+        dividend_dates = tsp._prices_df[tsp._prices_df['dividend'] > 0]['date_stamp'].values
         # Filter test_dividend_df to only rows with actual dividend values
         expected_dividend_dates = self.test_dividend_df[
             self.test_dividend_df['unadjusted_value'].notna()
@@ -608,7 +608,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         np.testing.assert_array_equal(dividend_dates, expected_dividend_dates)
 
         # Check that splits are applied on expected dates
-        split_dates = tsp.prices_df[tsp.prices_df['split_ratio'] != 1.0]['date_stamp'].values
+        split_dates = tsp._prices_df[tsp._prices_df['split_ratio'] != 1.0]['date_stamp'].values
         # Filter test_split_df to only rows with actual split values
         expected_split_dates = self.test_split_df[
             (self.test_split_df['numerator'].notna()) &
@@ -1016,10 +1016,10 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Verify result
         self.assertIsInstance(tsp_combined, TimeSeriesProcessor)
-        self.assertEqual(len(tsp_combined.prices_df), 6)
-        self.assertEqual(tsp_combined.prices_df['identity_code'].nunique(), 2)
-        self.assertIn('TEST:A', tsp_combined.prices_df['identity_code'].values)
-        self.assertIn('TEST:B', tsp_combined.prices_df['identity_code'].values)
+        self.assertEqual(len(tsp_combined._prices_df), 6)
+        self.assertEqual(tsp_combined._prices_df['identity_code'].nunique(), 2)
+        self.assertIn('TEST:A', tsp_combined._prices_df['identity_code'].values)
+        self.assertIn('TEST:B', tsp_combined._prices_df['identity_code'].values)
 
     def test_concat_with_dividends(self):
         """Test concatenation when dividends are present."""
@@ -1053,10 +1053,10 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
 
         # Verify dividends are combined
-        self.assertIsNotNone(tsp_combined.dividends_df)
-        self.assertEqual(len(tsp_combined.dividends_df), 2)
-        self.assertIn('TEST:A', tsp_combined.dividends_df['identity_code'].values)
-        self.assertIn('TEST:B', tsp_combined.dividends_df['identity_code'].values)
+        self.assertIsNotNone(tsp_combined._dividends_df)
+        self.assertEqual(len(tsp_combined._dividends_df), 2)
+        self.assertIn('TEST:A', tsp_combined._dividends_df['identity_code'].values)
+        self.assertIn('TEST:B', tsp_combined._dividends_df['identity_code'].values)
 
     def test_concat_with_splits(self):
         """Test concatenation when splits are present."""
@@ -1092,10 +1092,10 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
 
         # Verify splits are combined
-        self.assertIsNotNone(tsp_combined.splits_df)
-        self.assertEqual(len(tsp_combined.splits_df), 2)
-        self.assertIn('TEST:A', tsp_combined.splits_df['identity_code'].values)
-        self.assertIn('TEST:B', tsp_combined.splits_df['identity_code'].values)
+        self.assertIsNotNone(tsp_combined._splits_df)
+        self.assertEqual(len(tsp_combined._splits_df), 2)
+        self.assertIn('TEST:A', tsp_combined._splits_df['identity_code'].values)
+        self.assertIn('TEST:B', tsp_combined._splits_df['identity_code'].values)
 
     def test_concat_mixed_dividends_and_splits(self):
         """Test concatenation with mixed dividend/split presence."""
@@ -1138,11 +1138,11 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b, tsp_c])
 
         # Verify combined data
-        self.assertEqual(len(tsp_combined.prices_df), 9)
-        self.assertIsNotNone(tsp_combined.dividends_df)
-        self.assertIsNotNone(tsp_combined.splits_df)
-        self.assertEqual(len(tsp_combined.dividends_df), 1)
-        self.assertEqual(len(tsp_combined.splits_df), 1)
+        self.assertEqual(len(tsp_combined._prices_df), 9)
+        self.assertIsNotNone(tsp_combined._dividends_df)
+        self.assertIsNotNone(tsp_combined._splits_df)
+        self.assertEqual(len(tsp_combined._dividends_df), 1)
+        self.assertEqual(len(tsp_combined._splits_df), 1)
 
     def test_concat_single_processor(self):
         """Test concatenation with a single processor."""
@@ -1158,10 +1158,10 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Should be equivalent to original
         self.assertIsInstance(tsp_combined, TimeSeriesProcessor)
-        self.assertEqual(len(tsp_combined.prices_df), 3)
+        self.assertEqual(len(tsp_combined._prices_df), 3)
         pd.testing.assert_frame_equal(
-            tsp_combined.prices_df.sort_values(['identity_code', 'date_stamp']).reset_index(drop=True),
-            tsp.prices_df.sort_values(['identity_code', 'date_stamp']).reset_index(drop=True)
+            tsp_combined._prices_df.sort_values(['identity_code', 'date_stamp']).reset_index(drop=True),
+            tsp._prices_df.sort_values(['identity_code', 'date_stamp']).reset_index(drop=True)
         )
 
     def test_concat_overlapping_assets(self):
@@ -1186,11 +1186,11 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
 
         # Should have 6 rows for same asset
-        self.assertEqual(len(tsp_combined.prices_df), 6)
-        self.assertEqual(tsp_combined.prices_df['identity_code'].nunique(), 1)
+        self.assertEqual(len(tsp_combined._prices_df), 6)
+        self.assertEqual(tsp_combined._prices_df['identity_code'].nunique(), 1)
 
         # Verify all dates are present
-        test_a_data = tsp_combined.prices_df[tsp_combined.prices_df['identity_code'] == 'TEST:A']
+        test_a_data = tsp_combined._prices_df[tsp_combined._prices_df['identity_code'] == 'TEST:A']
         self.assertEqual(len(test_a_data), 6)
 
     def test_concat_invalid_type(self):
@@ -1244,16 +1244,16 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp_combined = TimeSeriesProcessor.concat([tsp_a, tsp_b])
 
         # Verify prices
-        self.assertEqual(len(tsp_combined.prices_df), 8)
+        self.assertEqual(len(tsp_combined._prices_df), 8)
 
         # Verify dividends
-        self.assertEqual(len(tsp_combined.dividends_df), 2)
-        self.assertEqual(tsp_combined.dividends_df['unadjusted_value'].sum(), 3.0)
+        self.assertEqual(len(tsp_combined._dividends_df), 2)
+        self.assertEqual(tsp_combined._dividends_df['unadjusted_value'].sum(), 3.0)
 
         # Verify splits
-        self.assertEqual(len(tsp_combined.splits_df), 1)
+        self.assertEqual(len(tsp_combined._splits_df), 1)
         self.assertAlmostEqual(
-            tsp_combined.splits_df.iloc[0]['numerator'] / tsp_combined.splits_df.iloc[0]['denominator'],
+            tsp_combined._splits_df.iloc[0]['numerator'] / tsp_combined._splits_df.iloc[0]['denominator'],
             2.0,
             places=6
         )
@@ -1273,8 +1273,8 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp_combined = TimeSeriesProcessor.concat(processors)
 
         # Verify
-        self.assertEqual(len(tsp_combined.prices_df), 9)
-        self.assertEqual(tsp_combined.prices_df['identity_code'].nunique(), 3)
+        self.assertEqual(len(tsp_combined._prices_df), 9)
+        self.assertEqual(tsp_combined._prices_df['identity_code'].nunique(), 3)
         for code in ['TEST:A', 'TEST:B', 'TEST:C']:
-            self.assertIn(code, tsp_combined.prices_df['identity_code'].values)
+            self.assertIn(code, tsp_combined._prices_df['identity_code'].values)
 

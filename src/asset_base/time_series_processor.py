@@ -7,12 +7,7 @@ import scipy.stats as sp_stats
 
 class TimeSeriesProcessor():
     """ Clean and transform raw trade-daily price series into statistically
-    usable return series.
-
-    This class prepares raw price data for downstream return and risk analysis.
-    Its primary purpose is to normalize the data such that there would otherwise
-    be biases in the estimates of statistical quantities such as mean returns,
-    volatility, and cross-asset correlations.
+    usable price return series.
 
     Parameters
     ----------
@@ -28,70 +23,19 @@ class TimeSeriesProcessor():
         ``['identity_code', 'date_stamp', 'numerator', 'denominator']``.
         Default is ``None``.
 
-    Note
-    ----
-    The 'identity_code' column is typically the ``asset.Asset.identity_code`` by
-    convention, but any unique asset identifier may be used as long as it is
-    consistent across prices, dividends, and splits DataFrames.
+    This class prepares raw price data for downstream return and risk analysis
+    by performing a series of cleaning and transformation steps. The main processing steps include:
+    1. Validate that prices are strictly positive and numeric.
+    2. Validate that price frequency is trade or daily, and set to daily.
+    3. Normalize and order dates, ensuring proper datetime types and sorting.
+    4. Drop samples with NaN prices.
+    5. Check that sample size is adequate for reliable correlation matrix estimation.
+    6. Apply corporate actions (splits and dividends) to compute total returns.
+    7. Add a total return index (TRI) column.
+    8. Add adjusted price columns anchored to the first and last price.
 
-    Internal processing steps are executed upon each individual price series
-    to maintain independence across series and avoid cross-asset contamination
-    of data artifacts which cold arise when all series are processed jointly as
-    columns of single DataFrame.
-
-    Notes
-    -----
-    The ``identity_code`` column denotes a unique security identifier (e.g. ISIN).
-    Depending on the database schema, this may also correspond to an ``isin``,
-    an ``asset.Asset`` instance, or any other unique asset identifier used within
-    the system.
-
-    Processing steps
-    ----------------
-    The following operations are applied in a well-defined order:
-
-    1. **Price validity checks**
-    Ensures all prices are strictly positive. Non-positive prices are removed,
-    as they invalidate geometric return calculations.
-
-    1. **Sampling frequency validation**
-    Ensures the input price series is sampled at *trade-daily* frequency.
-    Lower-frequency inputs (e.g., weekly or monthly) are rejected with a
-    ``ValueError``.
-
-    1. **Date handling and ordering**
-    - Ensures the ``date_stamp`` column is of pandas datetime type.
-    - Sorts observations in ascending date order.
-    - Removes duplicate dates, keeping the first occurrence.
-
-    1. **Drop NaN prices**
-    Removes any samples with NaN prices from the price DataFrame. Note that this
-    step is performed after validating the sampling frequency to ensure that
-    the frequency check is not affected by missing data,
-
-    1. **Sample size adequacy check**
-    Verifies that the each price series has sufficient observations for
-    reliable estimation of the correlation matrix. As a rule of thumb, at
-    least 10x as many observations as assets are required. Insufficient data
-    results in a ``ValueError``. This check is performed after NaN removal to
-    ensure that only valid data points are counted.
-
-    1. **Corporate action adjustments**
-    If dividend and/or split data are provided, total-return adjustments are
-    applied to compute a total-return price series. This involves merging
-    dividend and split data onto the price series, computing total return
-    factors, and constructing a total return index (TRI). An adjusted price
-    series is also computed, scaled to either the first or last raw price
-    based on the ``adj_price_anchor`` setting.
-
-    1. **Downsampling**
-    If a resampling period is specified (e.g., weekly or monthly), prices are
-    downsampled by taking the last available price in each period. This is
-    equivalent to compounding geometric returns over the period and avoids
-    distortions associated with arithmetic averaging.
-
-    Outlier identification
-    ----------------------
+    TODO: Outlier Identification Proposal
+    -------------------------------------
     Outliers are not removed automatically. Instead, they are identified and
     flagged in the output DataFrame for manual review. This is to avoid
     inadvertent removal of genuine market jumps which are critical to risk
@@ -161,30 +105,29 @@ class TimeSeriesProcessor():
                 raise ValueError(f"splits_df is missing required columns: {missing}")
 
         # Assign attributes with explicit type hints
-        self.prices_df: pd.DataFrame = prices_df.copy()
-        self.dividends_df: pd.DataFrame | None = (
+        self._prices_df: pd.DataFrame = prices_df.copy()
+        self._dividends_df: pd.DataFrame | None = (
             dividends_df.copy() if dividends_df is not None else None
         )
-        self.splits_df: pd.DataFrame | None = (
+        self._splits_df: pd.DataFrame | None = (
             splits_df.copy() if splits_df is not None else None
         )
-        self.downsampled_total_returns_df: pd.DataFrame | None = None
 
         # Normalize date column types where possible
         try:
-            self.prices_df["date_stamp"] = pd.to_datetime(self.prices_df["date_stamp"])
+            self._prices_df["date_stamp"] = pd.to_datetime(self._prices_df["date_stamp"])
         except Exception:
             raise TypeError("prices_df.date_stamp must be convertible to pandas datetime")
 
-        if self.dividends_df is not None:
+        if self._dividends_df is not None:
             try:
-                self.dividends_df["date_stamp"] = pd.to_datetime(self.dividends_df["date_stamp"])
+                self._dividends_df["date_stamp"] = pd.to_datetime(self._dividends_df["date_stamp"])
             except Exception:
                 raise TypeError("dividends_df.date_stamp must be convertible to pandas datetime")
 
-        if self.splits_df is not None:
+        if self._splits_df is not None:
             try:
-                self.splits_df["date_stamp"] = pd.to_datetime(self.splits_df["date_stamp"])
+                self._splits_df["date_stamp"] = pd.to_datetime(self._splits_df["date_stamp"])
             except Exception:
                 raise TypeError("splits_df.date_stamp must be convertible to pandas datetime")
 
@@ -195,9 +138,11 @@ class TimeSeriesProcessor():
         1. Validate prices
         2. Validate sampling frequency
         3. Normalize and order dates
-        4. Drop NaN prices
-        5. Check sample size adequacy
-        6. Apply corporate actions
+        4. Drop NaN prices per security
+        5. Check sample size adequacy potentially for correlation estimation
+        6. Apply corporate actions (splits and dividends) to compute total returns
+        7. Add total return index
+        8. Add adjusted price columns for first and last price anchors
 
         """
         # Complete processing steps
@@ -207,15 +152,17 @@ class TimeSeriesProcessor():
         self._dropna_prices()
         self._check_sample_size_adequacy()
         self._apply_corporate_actions()
+        self._add_total_return_index()
+        self._add_adjusted_price_columns()
 
     def _validate_prices(self) -> None:
         """Validate that prices are strictly positive and numeric. """
         # Check for non-numeric prices
-        if not pd.api.types.is_numeric_dtype(self.prices_df['price']):
+        if not pd.api.types.is_numeric_dtype(self._prices_df['price']):
             raise TypeError("prices_df.price must be numeric")
 
         # Remove non-positive prices
-        invalid_prices = self.prices_df[self.prices_df['price'] <= 0]
+        invalid_prices = self._prices_df[self._prices_df['price'] <= 0]
         if not invalid_prices.empty:
             raise ValueError(
                 f"Found non-positive prices in prices_df for identity_codes: "
@@ -227,7 +174,7 @@ class TimeSeriesProcessor():
         """Validate price frequency is trade or daily then set to daily. """
         # Validate pandas.Dataframe sampling frequency for each identity_code
         # Group by identity_code and check sampling frequency for each group
-        for identity_code, group in self.prices_df.groupby('identity_code'):
+        for identity_code, group in self._prices_df.groupby('identity_code'):
             # Sort by date to ensure proper frequency inference
             group = group.sort_values('date_stamp')
 
@@ -275,23 +222,23 @@ class TimeSeriesProcessor():
     def _dropna_prices(self) -> None:
         """Drop samples with NaN prices."""
         group_list = []
-        for identity_code, group in self.prices_df.groupby('identity_code'):
+        for identity_code, group in self._prices_df.groupby('identity_code'):
             group = group.dropna(subset=['price'])
             # Do not use update as it will not remove rows from the main DataFrame.
             # Instead create a brand new DataFrame without NaNs and assign it back.
             group_list.append(group)
-        self.prices_df = pd.concat(group_list, ignore_index=True)
+        self._prices_df = pd.concat(group_list, ignore_index=True)
 
     def _normalize_and_order_dates(self) -> None:
         """Normalize `date_stamp` types, sort and deduplicate dates. """
         # Ensure date_stamp is datetime type
-        self.prices_df['date_stamp'] = pd.to_datetime(self.prices_df['date_stamp'])
+        self._prices_df['date_stamp'] = pd.to_datetime(self._prices_df['date_stamp'])
 
         # Sort by identity_code and date_stamp
-        self.prices_df = self.prices_df.sort_values(by=['identity_code', 'date_stamp'])
+        self._prices_df = self._prices_df.sort_values(by=['identity_code', 'date_stamp'])
 
         # Remove duplicate dates, keeping the first occurrence
-        self.prices_df = self.prices_df.drop_duplicates(
+        self._prices_df = self._prices_df.drop_duplicates(
             subset=['identity_code', 'date_stamp'], keep='first'
         )
 
@@ -359,7 +306,7 @@ class TimeSeriesProcessor():
         """
         # Check for price outliers in each group and create an outlier index
         group_list = []
-        for identity_code, group in self.prices_df.groupby('identity_code'):
+        for identity_code, group in self._prices_df.groupby('identity_code'):
             # Sort by date as proper sequence is critical
             group = group.sort_values('date_stamp')
             prices = group['price'].copy()
@@ -376,10 +323,10 @@ class TimeSeriesProcessor():
         matrix estimation. A rule of thumb is at least 10x as many
         observations as assets.
         """
-        num_assets = self.prices_df['identity_code'].nunique()
+        num_assets = self._prices_df['identity_code'].nunique()
 
         # Check each series has enough observations
-        for identity_code, group in self.prices_df.groupby('identity_code'):
+        for identity_code, group in self._prices_df.groupby('identity_code'):
             num_observations = group['date_stamp'].nunique()
             if num_observations < min_samples_factor * num_assets:
                 raise ValueError(
@@ -422,13 +369,13 @@ class TimeSeriesProcessor():
             )
 
         # Ensure canonical ordering
-        self.prices_df = self.prices_df.sort_values(["identity_code", "date_stamp"]).copy()
+        self._prices_df = self._prices_df.sort_values(["identity_code", "date_stamp"]).copy()
 
         # -----------------------
         # Build dividend series
         # -----------------------
-        if self.dividends_df is not None and not self.dividends_df.empty:
-            div = self.dividends_df.copy()
+        if self._dividends_df is not None and not self._dividends_df.empty:
+            div = self._dividends_df.copy()
 
             # Ensure expected column exists (constructor enforces it)
             # Aggregate in case multiple dividends on one date (rare but possible)
@@ -443,8 +390,8 @@ class TimeSeriesProcessor():
         # -----------------------
         # Build split ratio series
         # -----------------------
-        if self.splits_df is not None and not self.splits_df.empty:
-            spl = self.splits_df.copy()
+        if self._splits_df is not None and not self._splits_df.empty:
+            spl = self._splits_df.copy()
 
             # Basic validation / safety
             for col in ("numerator", "denominator"):
@@ -474,7 +421,7 @@ class TimeSeriesProcessor():
         # -----------------------
         # Merge corporate actions onto prices
         # -----------------------
-        df = self.prices_df.copy()
+        df = self._prices_df.copy()
 
         if div is not None:
             df = df.merge(div, on=["identity_code", "date_stamp"], how="left")
@@ -522,11 +469,63 @@ class TimeSeriesProcessor():
 
         df_out = pd.concat(out_groups, ignore_index=True)
 
-        # NOTE: Drop helper column if you don't want it hanging around
-        # (I keep it because it's useful for debugging and validation.)
-        # df_out = df_out.drop(columns=["prev_price"])
+        # Drop helper column if you don't want it hanging around
+        df_out = df_out.drop(columns=["prev_price"])
 
-        self.prices_df = df_out
+        self._prices_df = df_out
+
+    def _add_total_return_index(self) -> None:
+        """Add a total return index (TRI) column. """
+        # Verify that the processing step has been applied
+        if 'total_return' not in self._prices_df.columns:
+            raise RuntimeError(
+                "Total returns not yet computed. Please run process() to apply "
+                "corporate actions first."
+            )
+        group_list = []
+        for identity_code, group in self._prices_df.groupby('identity_code'):
+            group["tri"] = group["total_return"].fillna(1.0).cumprod()
+            group_list.append(group)
+        # Add the new adj_price columns to the main prices_df DataFrame
+        df_out = pd.concat(group_list, ignore_index=True)
+        # Write adj_price_first and adj_price_last back to main DataFrame
+        self._prices_df = df_out
+
+    def _add_adjusted_price_columns(self) -> None:
+        """Add adjusted price columns anchored to the first and last price.
+
+        Adds two new columns to `self.prices_df`:
+        - 'adj_price_first': Adjusted price series scaled to the first raw price.
+        - 'adj_price_last': Adjusted price series scaled to the last raw price.
+        """
+        # Verify that the processing step has been applied
+        if 'total_return' not in self._prices_df.columns:
+            raise RuntimeError(
+                "Corporate actions not yet applied. Please run process() to apply "
+                "corporate actions first."
+            )
+
+        out_groups = []
+        for identity_code, group in self._prices_df.groupby('identity_code'):
+            # Add adjusted price based on first price
+            first_price = self._prices_df[
+                self._prices_df['identity_code'] == identity_code
+            ]['price'].iloc[0]
+            group['adj_price_first'] = group['total_return'].fillna(1.0).cumprod() * first_price
+
+            # Add adjusted price based on last price
+            last_price = self._prices_df[
+                self._prices_df['identity_code'] == identity_code
+            ]['price'].iloc[-1]
+            last_tri = group['total_return'].fillna(1.0).cumprod().iloc[-1]
+            group['adj_price_last'] = group['total_return'].fillna(1.0).cumprod() * (last_price / last_tri)
+
+            out_groups.append(group)
+
+        # Add the new adj_price columns to the main prices_df DataFrame
+        df_out = pd.concat(out_groups, ignore_index=True)
+        # Write adj_price_first and adj_price_last back to main DataFrame
+        self._prices_df = df_out
 
     def get_date_index(self) -> pd.DatetimeIndex:
         """Get unique sorted date index across all identity_codes.
@@ -537,158 +536,60 @@ class TimeSeriesProcessor():
             DatetimeIndex of unique sorted dates across all identity_codes.
         """
         date_index: pd.DatetimeIndex = pd.DatetimeIndex(
-            sorted(self.prices_df['date_stamp'].unique())
+            sorted(self._prices_df['date_stamp'].unique())
         )
         return date_index
 
-    def get_total_return(self) -> pd.DataFrame:
-        """Get total return DataFrame.
+    def get_raw_price_info_dataframe(self) -> pd.DataFrame:
+        """Get the internal price information DataFrame.
 
         Returns
         -------
         pandas.DataFrame
-            DataFrame with total returns with columns:
-            ``['identity_code', 'date_stamp', 'total_return']``.
+            The internal price information DataFrame containing columns such as
+            the security's 'identity_code', 'date_stamp', 'price', 'dividend',
+            'split_ratio', and if corporate actions have been applied then also
+            'total_return', 'tri', 'adj_price_first', and 'adj_price_last'.
+
+        Note
+        ----
+        This DataFrame is the result of processing the raw price data and may
+        include additional columns depending on if the ``process`` method has
+        been executed. It is recommended to run the ``process`` method before
+        calling this method to ensure that the returned DataFrame includes all
+        processed and adjusted price information.
         """
-        # Verify that the processing step has been applied
-        if 'total_return' not in self.prices_df.columns:
-            raise RuntimeError(
-                "Total returns not yet computed. Please run process() to apply "
-                "corporate actions first."
-            )
-        total_returns_df: pd.DataFrame = self.prices_df[
-            ['identity_code', 'date_stamp', 'total_return']
-        ].copy()
-        return total_returns_df
+        return self._prices_df.copy()
 
-    def get_total_return_index(self) -> pd.DataFrame:
-        """Get total return index DataFrame.
+    def get_pivoted_price_info_dataframes_dict(self) -> dict[str, pd.DataFrame]:
+        """Pivot price info to date_stamp index and identity_code columns labels.
 
-        Returns
-        -------
-        pandas.DataFrame
-            DataFrame with total return index with columns:
-            ``['identity_code', 'date_stamp', 'tri']``.
-        """
-        # Verify that the processing step has been applied
-        if 'total_return' not in self.prices_df.columns:
-            raise RuntimeError(
-                "Total returns not yet computed. Please run process() to apply "
-                "corporate actions first."
-            )
-        group_list = []
-        for identity_code, group in self.prices_df.groupby('identity_code'):
-            group["tri"] = group["total_return"].fillna(1.0).cumprod()
-            group_list.append(group)
-        tri_df: pd.DataFrame = pd.concat(group_list, ignore_index=True)[
-            ['identity_code', 'date_stamp', 'tri']
-        ]
-        return tri_df
-
-    def get_adjusted_price(self, anchor="first") -> pd.DataFrame:
-        """Get adjusted prices DataFrame.
-
-        Returns
-        -------
-        pandas.DataFrame
-            DataFrame with adjusted prices with columns:
-            ``['identity_code', 'date_stamp', 'adj_price']``.
-        """
-        # Verify that the processing step has been applied
-        if 'total_return' not in self.prices_df.columns:
-            raise RuntimeError(
-                "Corporate actions not yet applied. Please run process() to apply "
-                "corporate actions first."
-            )
-        tri = self.get_total_return_index()
-
-        group_list = []
-        for identity_code, group in tri.groupby('identity_code'):
-            if anchor == "first":
-                first_price = self.prices_df[
-                    self.prices_df['identity_code'] == identity_code
-                ]['price'].iloc[0]
-                group['adj_price'] = group['tri'] * first_price
-            elif anchor == "last":
-                last_price = self.prices_df[
-                    self.prices_df['identity_code'] == identity_code
-                ]['price'].iloc[-1]
-                last_tri = group['tri'].iloc[-1]
-                group['adj_price'] = group['tri'] * (last_price / last_tri)
-            else:
-                raise ValueError("anchor must be 'first' or 'last'")
-            group_list.append(group)
-        adj_prices_df: pd.DataFrame = pd.concat(group_list, ignore_index=True)[
-            ['identity_code', 'date_stamp', 'adj_price']
-        ]
-        return adj_prices_df
-
-    def get_downsampled_total_return(self, frequency: str = "W") -> None:
-        """Downsample prices according to `downsample_period_str` if set.
-
-        Returns
-        -------
-        pandas.DataFrame
-            DataFrame with downsampled total returns with columns:
-            ``['identity_code', 'date_stamp', 'total_return']``.
-
-        Downsampling is performed by compounding total returns over the
-        specified period. This avoids distortions associated with arithmetic
-        averaging of prices.
-        """
-        # Verify that the processing step has been applied
-        if 'total_return' not in self.prices_df.columns:
-            raise RuntimeError(
-                "Total returns not yet computed. Please run process() to apply "
-                "corporate actions first."
-            )
-
-        # Type check frequency is a pandas frequency string
-        if not isinstance(frequency, str):
-            raise TypeError("frequency must be a pandas frequency string.")
-
-        group_list = []
-        for identity_code, group in self.prices_df.groupby('identity_code'):
-            # Set date_stamp as index for resampling
-            group = group.set_index('date_stamp')
-            # Resample total_returns
-            total_return = group[['total_return']]  # Double brackets to keep as DataFrame
-            # Compound total returns over the downsample period
-            downsampled = total_return.resample(frequency).prod()
-            # Reset index to restore date_stamp as a column
-            downsampled = downsampled.reset_index()
-            downsampled['identity_code'] = identity_code  # Re-add identity_code column
-            group_list.append(downsampled)
-
-        downsampled_total_returns_df: pd.DataFrame = pd.concat(group_list, ignore_index=True)
-        return downsampled_total_returns_df
-
-    @staticmethod
-    def pivot_dataframes(df: pd.DataFrame) -> dict[str, pd.DataFrame]:
-        """Pivot DataFrame to date_stamp index and identity_code columns labels.
-
-        Takes a DataFrame with 'identity_code' and 'date_stamp' columns plus
-        additional data columns, and creates a separate pivoted DataFrame for
-        each data column. The pivoted DataFrames have 'date_stamp' as the index,
-        'identity_code' values as column labels, and the data column values
-        as the cell values.
+        Takes the internal prices information DataFrame with 'identity_code' and
+        'date_stamp' columns plus additional data columns, and returns a
+        separate pivoted DataFrame for each data column in a dict with the price
+        information columns as keys. The pivoted DataFrames have 'date_stamp' as
+        the index, 'identity_code' values as column labels, and the data column
+        values as the cell values.
 
         This is useful for transforming long-format time series data (as produced
         by the get_* methods) into wide-format matrices suitable for correlation
         analysis, visualization, or other cross-sectional operations.
 
-        Parameters
-        ----------
-        df : pandas.DataFrame
-            DataFrame containing at least 'identity_code' and 'date_stamp' columns,
-            plus one or more additional data columns to pivot.
-
         Returns
         -------
         dict[str, pd.DataFrame]
             Dictionary mapping column names to pivoted DataFrames. Each pivoted
-            DataFrame has 'date_stamp' as index, 'identity_code' values as columns,
-            and the corresponding data column as values.
+            DataFrame has 'date_stamp' as index, 'identity_code' values as
+            columns, and the corresponding price information data column labels
+            as values.
+
+        Note
+        ----
+        If the ``process`` method has not been run yet, the pivoted DataFrames
+        will be based on the raw price data without corporate action
+        adjustments. It is recommended to run the ``process`` method before
+        calling this method to ensure that the pivoted DataFrames include the
+        fully processed and adjusted price series.
 
         Raises
         ------
@@ -713,14 +614,9 @@ class TimeSeriesProcessor():
         2020-01-01     100.0  200.0
         2020-01-02     101.0  202.0
         """
-        # Validate input
-        if not isinstance(df, pd.DataFrame):
-            raise TypeError("df must be a pandas.DataFrame")
+        df = self.get_raw_price_info_dataframe()
 
         required_cols = {'identity_code', 'date_stamp'}
-        if not required_cols.issubset(set(df.columns)):
-            missing = required_cols - set(df.columns)
-            raise ValueError(f"DataFrame is missing required columns: {missing}")
 
         # Identify data columns (everything except identity_code and date_stamp)
         data_columns = [col for col in df.columns if col not in required_cols]
@@ -776,19 +672,19 @@ class TimeSeriesProcessor():
         if not tsp_list:
             raise ValueError("tsp_list cannot be empty after removing None items")
 
-        combined_prices = pd.concat([tsp.prices_df for tsp in tsp_list], ignore_index=True)
+        combined_prices = pd.concat([tsp._prices_df for tsp in tsp_list], ignore_index=True)
 
         combined_dividends = None
-        if any(tsp.dividends_df is not None for tsp in tsp_list):
+        if any(tsp._dividends_df is not None for tsp in tsp_list):
             dividend_dfs = [
-                tsp.dividends_df for tsp in tsp_list if tsp.dividends_df is not None
+                tsp._dividends_df for tsp in tsp_list if tsp._dividends_df is not None
             ]
             combined_dividends = pd.concat(dividend_dfs, ignore_index=True)
 
         combined_splits = None
-        if any(tsp.splits_df is not None for tsp in tsp_list):
+        if any(tsp._splits_df is not None for tsp in tsp_list):
             split_dfs = [
-                tsp.splits_df for tsp in tsp_list if tsp.splits_df is not None
+                tsp._splits_df for tsp in tsp_list if tsp._splits_df is not None
             ]
             combined_splits = pd.concat(split_dfs, ignore_index=True)
 

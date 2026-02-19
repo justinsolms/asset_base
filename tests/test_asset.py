@@ -1208,7 +1208,7 @@ class TestCashGetTimeSeriesProcessor(TestBase):
             datetime.date(2024, 1, 2)
         ])
         tsp = self.cash.get_time_series_processor(date_index)
-        self.assertIsNotNone(tsp.prices_df)
+        self.assertIsNotNone(tsp._prices_df)
 
     def test_get_time_series_processor_invalid_price_item_raises_error(self):
         """Test that non-'price' price_item raises ValueError."""
@@ -1223,7 +1223,7 @@ class TestCashGetTimeSeriesProcessor(TestBase):
             datetime.date(2024, 1, 2)
         ])
         tsp = self.cash.get_time_series_processor(date_index)
-        self.assertIn('identity_code', tsp.prices_df.columns)
+        self.assertIn('identity_code', tsp._prices_df.columns)
 
     def test_get_time_series_processor_prices_are_one(self):
         """Test that cash prices are 1.0 for 'units' quote_units."""
@@ -1234,7 +1234,7 @@ class TestCashGetTimeSeriesProcessor(TestBase):
         ])
         tsp = self.cash.get_time_series_processor(date_index)
         # All prices should be 1.0
-        prices = tsp.prices_df['price'].values
+        prices = tsp._prices_df['price'].values
         self.assertTrue(all(p == 1.0 for p in prices))
 
     def test_get_time_series_processor_date_index_length_matches(self):
@@ -1248,7 +1248,7 @@ class TestCashGetTimeSeriesProcessor(TestBase):
         # Should have 3 rows (excluding identity_code row if added that way)
         # Based on code, identity_code is set via .loc which may add a row
         # Check that we have at least the expected dates
-        self.assertGreaterEqual(len(tsp.prices_df), len(date_index))
+        self.assertGreaterEqual(len(tsp._prices_df), len(date_index))
 
 
 class TestListedEquityGetTimeSeriesProcessor(TestBase):
@@ -1331,25 +1331,25 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
         """Test that default price_item is 'close'."""
         tsp = self.listed_equity.get_time_series_processor()
         # Should have 'price' column (renamed from 'close')
-        self.assertIn('price', tsp.prices_df.columns)
+        self.assertIn('price', tsp._prices_df.columns)
 
     def test_get_time_series_processor_with_open_price_item(self):
         """Test that price_item='open' works."""
         tsp = self.listed_equity.get_time_series_processor(price_item='open')
-        self.assertIsNotNone(tsp.prices_df)
-        self.assertIn('price', tsp.prices_df.columns)
+        self.assertIsNotNone(tsp._prices_df)
+        self.assertIn('price', tsp._prices_df.columns)
 
     def test_get_time_series_processor_with_high_price_item(self):
         """Test that price_item='high' works."""
         tsp = self.listed_equity.get_time_series_processor(price_item='high')
-        self.assertIsNotNone(tsp.prices_df)
-        self.assertIn('price', tsp.prices_df.columns)
+        self.assertIsNotNone(tsp._prices_df)
+        self.assertIn('price', tsp._prices_df.columns)
 
     def test_get_time_series_processor_with_low_price_item(self):
         """Test that price_item='low' works."""
         tsp = self.listed_equity.get_time_series_processor(price_item='low')
-        self.assertIsNotNone(tsp.prices_df)
-        self.assertIn('price', tsp.prices_df.columns)
+        self.assertIsNotNone(tsp._prices_df)
+        self.assertIn('price', tsp._prices_df.columns)
 
     def test_get_time_series_processor_invalid_price_item_raises_error(self):
         """Test that invalid price_item raises ValueError."""
@@ -1359,45 +1359,45 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
     def test_get_time_series_processor_includes_identity_code(self):
         """Test that processor includes identity_code column."""
         tsp = self.listed_equity.get_time_series_processor()
-        self.assertIn('identity_code', tsp.prices_df.columns)
+        self.assertIn('identity_code', tsp._prices_df.columns)
 
     def test_get_time_series_processor_has_dividends(self):
         """Test that processor includes dividends DataFrame."""
         tsp = self.listed_equity.get_time_series_processor()
-        self.assertIsNotNone(tsp.dividends_df)
-        self.assertGreater(len(tsp.dividends_df), 0)
+        self.assertIsNotNone(tsp._dividends_df)
+        self.assertGreater(len(tsp._dividends_df), 0)
 
     def test_get_time_series_processor_dividends_renamed_correctly(self):
         """Test that dividend column is added (copy of unadjusted_value)."""
         tsp = self.listed_equity.get_time_series_processor()
-        self.assertIn('dividend', tsp.dividends_df.columns)
-        self.assertIn('unadjusted_value', tsp.dividends_df.columns)
+        self.assertIn('dividend', tsp._dividends_df.columns)
+        self.assertIn('unadjusted_value', tsp._dividends_df.columns)
         # Verify dividend equals unadjusted_value
         import numpy as np
         np.testing.assert_array_equal(
-            tsp.dividends_df['dividend'].values,
-            tsp.dividends_df['unadjusted_value'].values
+            tsp._dividends_df['dividend'].values,
+            tsp._dividends_df['unadjusted_value'].values
         )
 
     def test_get_time_series_processor_has_splits(self):
         """Test that processor includes splits DataFrame."""
         tsp = self.listed_equity.get_time_series_processor()
-        self.assertIsNotNone(tsp.splits_df)
-        self.assertGreater(len(tsp.splits_df), 0)
+        self.assertIsNotNone(tsp._splits_df)
+        self.assertGreater(len(tsp._splits_df), 0)
 
     def test_get_time_series_processor_splits_have_numerator_denominator(self):
         """Test that splits DataFrame has numerator and denominator columns."""
         tsp = self.listed_equity.get_time_series_processor()
-        self.assertIn('numerator', tsp.splits_df.columns)
-        self.assertIn('denominator', tsp.splits_df.columns)
+        self.assertIn('numerator', tsp._splits_df.columns)
+        self.assertIn('denominator', tsp._splits_df.columns)
 
     def test_get_time_series_processor_price_column_renamed(self):
         """Test that selected price_item is renamed to 'price'."""
         tsp = self.listed_equity.get_time_series_processor(price_item='open')
         # Should have 'price' column but not 'open' column
-        self.assertIn('price', tsp.prices_df.columns)
+        self.assertIn('price', tsp._prices_df.columns)
         # The original 'open' should not be in the columns after filtering
-        self.assertNotIn('open', tsp.prices_df.columns)
+        self.assertNotIn('open', tsp._prices_df.columns)
 
 
 class TestForexUpdateMethods(TestBase):
