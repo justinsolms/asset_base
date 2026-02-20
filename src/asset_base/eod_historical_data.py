@@ -32,6 +32,7 @@ the classes that use this class' data to converts date strings.
 
 
 """
+import os
 import asyncio
 import aiohttp
 import sys
@@ -70,7 +71,7 @@ class APISessionManager:
 
     # API domain and security token
     _DOMAIN = "eodhistoricaldata.com"
-    _API_TOKEN = "60802039419943.54316578"
+    _API_TOKEN = os.environ.get("EOD_HISTORICAL_DATA_API_TOKEN")
 
     # Limiting connection pool size
     _CONNECTION_LIMIT = 4
