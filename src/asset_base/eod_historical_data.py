@@ -23,6 +23,14 @@ All tabular data are returned as a ``pandas.DataFrame``.
 The module uses the Python ``requests`` package. This also means we can use
 ``datetime.datetime`` interchangeably date ``str`` objects for dates.
 
+Note
+----
+The eodhistoricaldata.com API is a paid service. To use this module you must
+have an API token which you can get by subscribing to the service. Once you have
+the token, set it as an environment variable with the name
+`EOD_HISTORICAL_DATA_API_TOKEN` and the value of the token. The module will read
+the token from the environment variable and use it in the API calls.
+
 Warning
 -------
 Date fields are kept as they are received as date strings `YYYY-MM-DD`. They are
