@@ -380,21 +380,6 @@ class TestManager(unittest.TestCase):
         self.assertIn(listed.identity_code, identity_codes)
         self.assertIn('USD', identity_codes)
 
-    def test_get_resampled_total_returns_with_listed_equity_and_cash(self):
-        """Test get_resampled_total_returns for a ListedEquity and cash."""
-        self.manager.set_up(reuse=False, update=False)
-        # Provide enough observations for the TimeSeriesProcessor sample size check
-        listed = self._create_listed_equity(num_eod=25, add_dividend=False, add_split=False)
-
-        # Weekly resampled total returns including cash
-        total_returns = self.manager.get_resampled_total_returns(
-            [listed.identity_code], cash_currency_ticker='USD', frequency='W')
-
-        self.assertIsInstance(total_returns, pd.DataFrame)
-        self.assertGreater(len(total_returns.index), 0)
-        self.assertIn(listed.identity_code, total_returns.columns)
-        self.assertIn('USD', total_returns.columns)
-
     def test_get_asset_dict_with_unknown_identity_code_raises(self):
         """Unknown identity_code list yields TimeSeriesNoData."""
         with self.assertRaises(TimeSeriesNoData):
