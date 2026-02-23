@@ -63,7 +63,7 @@ from sqlalchemy.orm.decl_api import DeclarativeMeta
 from sqlalchemy.orm import declarative_base, Session, declared_attr, object_session
 from sqlalchemy_utils import drop_database, database_exists, create_database  # type: ignore
 
-from .financial_data import MetaData as FinancialMetaData
+from asset_base.financial_data import MetaData as FinancialMetaData
 
 from asset_base import get_cache_path
 

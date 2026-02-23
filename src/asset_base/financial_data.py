@@ -29,9 +29,9 @@ import abc
 
 from typing import Optional
 
-from .eod_historical_data import Exchanges, MultiHistorical
-from .exceptions import _BaseException, TimeSeriesNoData
-from .__init__ import get_data_path
+from asset_base.eod_historical_data import Exchanges, MultiHistorical
+from asset_base.exceptions import _BaseException, TimeSeriesNoData
+from asset_base.__init__ import get_data_path
 
 # Get module-named logger.
 import logging

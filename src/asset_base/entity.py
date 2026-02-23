@@ -97,8 +97,8 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from .common import Base, Common
-from .exceptions import FactoryError, ReconcileError
+from asset_base.common import Base, Common
+from asset_base.exceptions import FactoryError, ReconcileError
 
 # Get module-named logger.
 import logging
