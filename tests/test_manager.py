@@ -271,7 +271,7 @@ class TestManager(unittest.TestCase):
         currencies = self.session.query(Currency).count()
         self.assertGreater(currencies, 0)
 
-    @unittest.mock.patch('asset_base.asset.Forex.foreign_currencies', ['USD'])
+    @unittest.mock.patch('asset_base.asset.Forex.foreign_currencies_list', ['USD'])
     def test_update_calls_financial_data_methods(self):
         """Test update_all method creates securities by calling AssetBase.update_all."""
         from asset_base.asset import ExchangeTradeFund, AssetBase, ListedEquity

@@ -421,7 +421,7 @@ class TestListedEquity(TestBase):
 
     def test_identity_code_property(self):
         """Test identity_code property returns isin.ticker format."""
-        expected = f"{self.isin}.{self.ticker_symbol}"
+        expected = f"{self.ticker_symbol}.{self.exchange.eod_code}"
         self.assertEqual(self.listed_equity.identity_code, expected)
 
     def test_domicile_property(self):
@@ -997,7 +997,7 @@ class TestExchangeTradeFund(TestBase):
 
     def test_identity_code_property(self):
         """Test identity_code property returns isin.ticker format."""
-        expected = f"{self.etf_isin}.{self.etf_ticker}"
+        expected = f"{self.etf_ticker}.{self.exchange.eod_code}"
         self.assertEqual(self.etf.identity_code, expected)
 
     def test_domicile_property(self):
