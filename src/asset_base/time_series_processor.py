@@ -1,9 +1,18 @@
+import sys
 from operator import is_
 from flask import g
+from lark import logger
 import numpy as np
 import pandas as pd
 
 import scipy.stats as sp_stats
+
+# Get module-named logger.
+import logging
+
+logger = logging.getLogger(__name__)
+# Change logging level here.
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
 class TimeSeriesProcessor():
     """ Clean and transform raw trade-daily price series into statistically
@@ -211,7 +220,7 @@ class TimeSeriesProcessor():
                 median_diff = date_diffs.median()
                 # Check if median_diff corresponds to daily frequency
                 if median_diff > pd.Timedelta(days=1):
-                    raise ValueError(
+                    logger.warning(
                         f"Prices for identity_code {identity_code} are not "
                         f"sampled at daily frequency. Found median difference of "
                         f"{median_diff}. You may need longer price series or higher "
@@ -326,15 +335,27 @@ class TimeSeriesProcessor():
         num_assets = self._prices_df['identity_code'].nunique()
 
         # Check each series has enough observations
+        group_list = []
         for identity_code, group in self._prices_df.groupby('identity_code'):
             num_observations = group['date_stamp'].nunique()
             if num_observations < min_samples_factor * num_assets:
-                raise ValueError(
-                    f"Insufficient data for {identity_code}: "
+                logger.warning(
+                    f"Dropping {identity_code} for insufficient data: "
                     f"{num_observations} observations for {num_assets} assets. "
                     f"At least {min_samples_factor} times {num_assets} "
                     "observations are required for reliable correlation estimation."
                 )
+                # Drop the group with insufficient data
+                continue
+            else:
+                group_list.append(group)
+        if not group_list:
+            raise ValueError(
+                "No identity_code has sufficient data for reliable correlation estimation. "
+                f"At least one identity_code must have at least {min_samples_factor} times "
+                f"{num_assets} observations."
+            )
+        self._prices_df = pd.concat(group_list, ignore_index=True)
 
     def _apply_corporate_actions(self) -> None:
         """Apply corporate actions (dividends & splits) to compute total returns.
@@ -665,19 +686,28 @@ class TimeSeriesProcessor():
         if not tsp_list:
             raise ValueError("tsp_list cannot be empty after removing None items")
 
-        combined_prices = pd.concat([tsp._prices_df for tsp in tsp_list], ignore_index=True)
+        # Exclude DataFrame concatenation with empty or all-NA entries
+        prices_dfs = [
+            tsp._prices_df for tsp in tsp_list if tsp._prices_df
+            is not None and not tsp._prices_df.empty
+        ]
+        if not prices_dfs:
+            raise ValueError("At least one TimeSeriesProcessor must have a non-empty prices_df")
+        combined_prices = pd.concat(prices_dfs, ignore_index=True)
 
         combined_dividends = None
         if any(tsp._dividends_df is not None for tsp in tsp_list):
             dividend_dfs = [
-                tsp._dividends_df for tsp in tsp_list if tsp._dividends_df is not None
+                tsp._dividends_df for tsp in tsp_list if tsp._dividends_df
+                is not None and not tsp._dividends_df.empty
             ]
             combined_dividends = pd.concat(dividend_dfs, ignore_index=True)
 
         combined_splits = None
         if any(tsp._splits_df is not None for tsp in tsp_list):
             split_dfs = [
-                tsp._splits_df for tsp in tsp_list if tsp._splits_df is not None
+                tsp._splits_df for tsp in tsp_list if tsp._splits_df
+                is not None and not tsp._splits_df.empty
             ]
             combined_splits = pd.concat(split_dfs, ignore_index=True)
 

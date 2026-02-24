@@ -185,11 +185,13 @@ class AssetBase(Common):
     TIME_SERIES_CLASS = EODBase
 
     # All historical generic time-series collection ranked by date_stamp
+    # TODO: Rename this to _time_series_single_item as it is only for single item time-series such as EOD, Dividend, Split etc.
     _series = relationship(
         TimeSeriesBase,
         order_by=TimeSeriesBase.date_stamp,
         back_populates="_base_obj",
         uselist=True,
+        lazy='selectin',
         )
 
     def __init__(self, name, currency, quote_units="units"):
@@ -447,10 +449,43 @@ class Asset(AssetBase):
         EODSeriesNoData
             If no time series exists.
         """
-        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
-        if len(trade_eod_dict_list) == 0:
+        # Use direct SQL query for better performance than ORM
+        from sqlalchemy import text
+        session = object_session(self)
+
+        query = text("""
+        SELECT
+            tsb.date_stamp,
+            eod.price,
+            teod.open,
+            teod.close,
+            teod.high,
+            teod.low,
+            teod.adjusted_close,
+            teod.volume
+        FROM time_series_base tsb
+        LEFT JOIN simple_eod eod ON tsb._id = eod._id
+        LEFT JOIN trade_eod teod ON eod._id = teod._id
+        WHERE tsb._asset_id = :asset_id
+            AND tsb._discriminator IN ('simple_eod', 'trade_eod', 'listed_eod',
+                                       'listed_equity_eod', 'index_eod', 'forex_eod')
+        ORDER BY tsb.date_stamp ASC
+        """)
+
+        data_frame = pd.read_sql(query, session.bind, params={'asset_id': self._id})
+
+        if len(data_frame) == 0:
             raise EODSeriesNoData(f"Expected EOD data for {self.identity_code}.")
-        data_frame = pd.DataFrame(trade_eod_dict_list)
+
+        # Handle quote_units conversion
+        price_columns = ['price', 'open', 'close', 'high', 'low', 'adjusted_close']
+        if self.quote_units == "cents":
+            for col in price_columns:
+                if col in data_frame.columns and data_frame[col].notna().any():
+                    data_frame[col] = data_frame[col] / 100.0
+
+        # Keep only non-null columns (depends on which type of EOD record)
+        data_frame = data_frame.dropna(axis=1, how='all')
         data_frame["date_stamp"] = pd.to_datetime(data_frame["date_stamp"])
         data_frame.set_index("date_stamp", inplace=True)
         data_frame.sort_index(inplace=True)  # Assure ascending
@@ -2279,10 +2314,31 @@ class ListedEquity(Listed):
         DividendSeriesNoData
             If no time series exists.
         """
-        dividend_dict_list = [s.to_dict() for s in self._dividend_series]
+        # Use direct SQL query for better performance than ORM
+        from sqlalchemy import text
+        session = object_session(self)
+
+        query = text("""
+        SELECT
+            tsb.date_stamp,
+            d.currency,
+            d.declaration_date,
+            d.payment_date,
+            d.period,
+            d.record_date,
+            d.unadjusted_value,
+            d.adjusted_value
+        FROM time_series_base tsb
+        INNER JOIN dividend d ON tsb._id = d._id
+        WHERE tsb._asset_id = :asset_id
+            AND tsb._discriminator = 'dividend'
+        ORDER BY tsb.date_stamp ASC
+        """)
+
+        series = pd.read_sql(query, session.bind, params={'asset_id': self._id})
 
         # If no dividend records exist
-        if len(dividend_dict_list) == 0:
+        if len(series) == 0:
             # If distributions are expected then raise an explicit exception
             # so that callers can decide how to handle missing data.
             if self.distributions:
@@ -2302,12 +2358,17 @@ class ListedEquity(Listed):
         # Warn if no distributions are expected but data is found. This is not
         # an exception as the distributions attribute may be incorrectly set to
         # False or there may be special distribution events.
-        if not self.distributions and len(dividend_dict_list) > 0:
+        if not self.distributions and len(series) > 0:
             logger.warning(
                 f"Found dividend data for {self.identity_code} but `distributions` attribute "
                 "is False. Check if `distributions` is correctly set.")
 
-        series = pd.DataFrame(dividend_dict_list)
+        # Handle quote_units conversion for dividend values
+        if self.quote_units == "cents":
+            for col in ['unadjusted_value', 'adjusted_value']:
+                if col in series.columns and series[col].notna().any():
+                    series[col] = series[col] / 100.0
+
         series["date_stamp"] = pd.to_datetime(series["date_stamp"])
         series.set_index("date_stamp", inplace=True)
         series.sort_index(inplace=True)  # Assure ascending
@@ -2364,10 +2425,27 @@ class ListedEquity(Listed):
         SplitSeriesNoData
             If no time series exists.
         """
-        split_dict_list = [s.to_dict() for s in self._split_series]
-        if len(split_dict_list) == 0:
+        # Use direct SQL query for better performance than ORM
+        from sqlalchemy import text
+        session = object_session(self)
+
+        query = text("""
+        SELECT
+            tsb.date_stamp,
+            s.numerator,
+            s.denominator
+        FROM time_series_base tsb
+        INNER JOIN split s ON tsb._id = s._id
+        WHERE tsb._asset_id = :asset_id
+            AND tsb._discriminator = 'split'
+        ORDER BY tsb.date_stamp ASC
+        """)
+
+        series = pd.read_sql(query, session.bind, params={'asset_id': self._id})
+
+        if len(series) == 0:
             raise SplitSeriesNoData(f"Expected split data for {self.identity_code}")
-        series = pd.DataFrame(split_dict_list)
+
         series["date_stamp"] = pd.to_datetime(series["date_stamp"])
         series.set_index("date_stamp", inplace=True)
         series.sort_index(inplace=True)  # Assure ascending
