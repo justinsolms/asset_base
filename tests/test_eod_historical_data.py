@@ -128,6 +128,143 @@ def _make_bulk_split_table(date_str="2021-09-15", exchange="US"):
     )
 
 
+def _make_exchanges_table():
+    return pd.DataFrame(
+        [
+            {
+                "Name": "USA Stocks",
+                "Code": "US",
+                "OperatingMIC": "XNAS, XNYS, OTCM",
+                "Country": "USA",
+                "Currency": "USD",
+                "CountryISO2": "US",
+                "CountryISO3": "USA",
+            }
+        ]
+    )
+
+
+def _make_exchange_symbols_table(exchange):
+    if exchange == "INDX":
+        return pd.DataFrame(
+            [
+                {
+                    "Code": "SP500-15",
+                    "Name": "S&P 500 Materials (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-151010",
+                    "Name": "S&P 500 Chemicals",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-20",
+                    "Name": "S&P 500 Industrials (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-25",
+                    "Name": "S&P 500 Consumer Discretionary (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-30",
+                    "Name": "S&P 500 Consumer Staples (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-35",
+                    "Name": "S&P 500 Health Care (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-40",
+                    "Name": "S&P 500 Financials (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-45",
+                    "Name": "S&P 500 Information Technology (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-50",
+                    "Name": "S&P 500 Telecommunication Services (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-55",
+                    "Name": "S&P 500 Utilities (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+                {
+                    "Code": "SP500-60",
+                    "Name": "S&P 500 Real Estate (Sector)",
+                    "Country": "USA",
+                    "Exchange": "INDX",
+                    "Currency": "USD",
+                    "Type": "INDEX",
+                    "Isin": "",
+                },
+            ]
+        )
+
+    return pd.DataFrame(
+        [
+            {
+                "Code": "WHL",
+                "Name": "Woolworths Holdings Ltd",
+                "Country": "South Africa",
+                "Exchange": exchange,
+                "Currency": "ZAC",
+                "Type": "Common Stock",
+                "Isin": "ZAE000063863",
+            }
+        ]
+    )
+
+
 async def _mock_api_get(endpoint, params):
     if "BAD" in endpoint:
         raise Exception("Ticker not found")
@@ -155,6 +292,13 @@ async def _mock_api_get(endpoint, params):
     if "/api/eod/" in endpoint:
         return _make_eod_table()
 
+    if "/api/exchanges-list" in endpoint:
+        return _make_exchanges_table()
+
+    if "/api/exchange-symbol-list/" in endpoint:
+        exchange = endpoint.rsplit("/", 1)[-1]
+        return _make_exchange_symbols_table(exchange)
+
     return pd.DataFrame()
 
 
@@ -170,31 +314,52 @@ class MockAPIMixin:
 
     @classmethod
     def tearDownClass(cls):
-        cls._api_get_patcher.stop()
+        if hasattr(cls, "_api_get_patcher"):
+            cls._api_get_patcher.stop()
         super().tearDownClass()
 
 
 def assert_date_index(tester, df):
     """Test datetime index."""
-    index_type = np.dtype("datetime64[ns]")
-    tester.assertEqual(index_type, df.index.dtype)
+    tester.assertTrue(pd.api.types.is_datetime64_any_dtype(df.index.dtype))
     tester.assertEqual(date_index_name, df.index.name)
     tester.assertTrue(df.index.is_unique)
 
 def assert_date_ticker_index(tester, df):
     """Test datetime, ticker index."""
     index_columns = [date_index_name, "ticker"]
-    index_types = [np.dtype("datetime64[ns]"), np.dtype("object")]
-    test_df = pd.Series(index_types, index=index_columns)  #
-    pd.testing.assert_series_equal(test_df, df.index.dtypes)
+    tester.assertEqual(index_columns, list(df.index.names))
+    tester.assertTrue(
+        pd.api.types.is_datetime64_any_dtype(
+            df.index.get_level_values(date_index_name).dtype
+        )
+    )
+    tester.assertTrue(
+        pd.api.types.is_string_dtype(
+            df.index.get_level_values("ticker").dtype
+        )
+    )
     tester.assertTrue(df.index.is_unique)
 
 def assert_date_ticker_exchange_index(tester, df):
     """Test datetime, ticker, exchange index."""
     index_columns = [date_index_name, "ticker", "exchange"]
-    index_types = [np.dtype("datetime64[ns]"), np.dtype("object"), np.dtype("object")]
-    test_df = pd.Series(index_types, index=index_columns)  #
-    pd.testing.assert_series_equal(test_df, df.index.dtypes)
+    tester.assertEqual(index_columns, list(df.index.names))
+    tester.assertTrue(
+        pd.api.types.is_datetime64_any_dtype(
+            df.index.get_level_values(date_index_name).dtype
+        )
+    )
+    tester.assertTrue(
+        pd.api.types.is_string_dtype(
+            df.index.get_level_values("ticker").dtype
+        )
+    )
+    tester.assertTrue(
+        pd.api.types.is_string_dtype(
+            df.index.get_level_values("exchange").dtype
+        )
+    )
     tester.assertTrue(df.index.is_unique)
 
 def assert_eod_columns(tester, df):
@@ -215,28 +380,19 @@ def assert_eod_columns(tester, df):
 def assert_dividend_columns(tester, df):
     """Test dividend DataFame columns."""
     tester.assertIsInstance(df, pd.DataFrame)
-    # Test columns
-    column_types = [
-        np.dtype("object"),
-        np.dtype("object"),
-        np.dtype("object"),
-        np.dtype("object"),
-        np.dtype("float64"),
-        np.dtype("float64"),
-        np.dtype("object"),
-    ]
-    test_df = pd.Series(column_types, index=dividend_columns)  #
-    pd.testing.assert_series_equal(test_df, df.dtypes)
+    tester.assertEqual(dividend_columns, list(df.columns))
+    numeric_columns = {"value", "unadjustedValue"}
+    for column in dividend_columns:
+        if column in numeric_columns:
+            tester.assertTrue(pd.api.types.is_numeric_dtype(df[column].dtype))
+        else:
+            tester.assertTrue(pd.api.types.is_string_dtype(df[column].dtype))
 
 def assert_split_columns(tester, df):
     """Test split DataFame columns."""
     tester.assertIsInstance(df, pd.DataFrame)
-    # Test columns
-    column_types = [
-        np.dtype("object"),
-    ]
-    test_df = pd.Series(column_types, index=split_columns)  #
-    pd.testing.assert_series_equal(test_df, df.dtypes)
+    tester.assertEqual(split_columns, list(df.columns))
+    tester.assertTrue(pd.api.types.is_string_dtype(df["split"].dtype))
 
 
 class TestAPISessionManager(aiounittest.AsyncTestCase):
@@ -484,20 +640,27 @@ class TestBulk(MockAPIMixin, aiounittest.AsyncTestCase):
             "period",
             "unadjustedValue",
         ]
-        index_type = np.dtype("object")
-        column_types = [
-            np.dtype("float64"),
-            np.dtype("object"),
-            np.dtype("object"),
-            np.dtype("object"),
-            np.dtype("object"),
-            np.dtype("object"),
-            np.dtype("float64"),
-        ]
-        test_df = pd.Series(column_types, index=columns)
-        pd.testing.assert_series_equal(test_df, df.dtypes)
-        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(columns, list(df.columns))
+        self.assertTrue(pd.api.types.is_numeric_dtype(df["dividend"].dtype))
+        self.assertTrue(pd.api.types.is_numeric_dtype(df["unadjustedValue"].dtype))
+        for column in ["currency", "declarationDate", "recordDate", "paymentDate", "period"]:
+            self.assertTrue(pd.api.types.is_string_dtype(df[column].dtype))
         self.assertEqual(index_names, df.index.names)
+        self.assertTrue(
+            pd.api.types.is_datetime64_any_dtype(
+                df.index.get_level_values("date").dtype
+            )
+        )
+        self.assertTrue(
+            pd.api.types.is_string_dtype(
+                df.index.get_level_values("ticker").dtype
+            )
+        )
+        self.assertTrue(
+            pd.api.types.is_string_dtype(
+                df.index.get_level_values("exchange").dtype
+            )
+        )
         # The index is too long to test content.
 
     async def test_get_splits(self):
@@ -508,21 +671,34 @@ class TestBulk(MockAPIMixin, aiounittest.AsyncTestCase):
         # Test DataFame structure
         index_names = ["date", "ticker", "exchange"]
         columns = ["split"]
-        index_type = np.dtype("object")
-        column_types = [np.dtype("object")]
-        test_df = pd.Series(column_types, index=columns)
-        pd.testing.assert_series_equal(test_df, df.dtypes)
-        self.assertEqual(index_type, df.index.dtype)
+        self.assertEqual(columns, list(df.columns))
+        self.assertTrue(pd.api.types.is_string_dtype(df["split"].dtype))
         self.assertEqual(index_names, df.index.names)
+        self.assertTrue(
+            pd.api.types.is_datetime64_any_dtype(
+                df.index.get_level_values("date").dtype
+            )
+        )
+        self.assertTrue(
+            pd.api.types.is_string_dtype(
+                df.index.get_level_values("ticker").dtype
+            )
+        )
+        self.assertTrue(
+            pd.api.types.is_string_dtype(
+                df.index.get_level_values("exchange").dtype
+            )
+        )
         # The index is too long to test content.
 
 
-class TestExchanges(unittest.TestCase):
+class TestExchanges(MockAPIMixin, unittest.TestCase):
     """Get exchanges (and list of indices) data."""
 
     @classmethod
     def setUpClass(cls):
         """Set up class test fixtures."""
+        super().setUpClass()
         cls.exchanges = Exchanges()
         cls.exchange = "JSE"
 

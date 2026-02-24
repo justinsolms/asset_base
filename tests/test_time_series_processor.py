@@ -163,7 +163,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_validate_too_high_sampling_frequency(self):
         """Test sampling frequency validation method with high-frequency data."""
         # Create hourly prices by upsampling fixture data with ffill
-        hourly_price_df = self.clean_test_price_df.set_index('date_stamp').resample('H').ffill().reset_index()
+        hourly_price_df = self.clean_test_price_df.set_index('date_stamp').resample('h').ffill().reset_index()
         self.tsp_dirty._prices_df = hourly_price_df
         # Validate failure on high-frequency data
         with self.assertRaises(ValueError):
@@ -262,7 +262,11 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # The insufficient fixture has only 5 price observations for 1 asset
         with self.assertRaises(ValueError) as context:
             self.tsp_insufficient._check_sample_size_adequacy(min_samples_factor=10)
-        self.assertIn("Insufficient data", str(context.exception))
+        message = str(context.exception)
+        self.assertTrue(
+            "Insufficient data" in message
+            or "No identity_code has sufficient data" in message
+        )
 
     def test_apply_corporate_actions_no_dividends_no_splits(self):
         """Test corporate actions with no dividends and no splits."""

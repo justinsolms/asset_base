@@ -605,15 +605,15 @@ class TradeEOD(EODBase):
         # Use SQLAlchemy inspect to check what's loaded without triggering lazy loads
         insp = sa_inspect(self)
         obj_dict = self.__dict__
-        
+
         # Get values from __dict__ first, fall back to attribute access only if not in __dict__
-        date_stamp = obj_dict.get('date_stamp')
-        open_price = obj_dict.get('open')
-        close_price = obj_dict.get('close')
-        high_price = obj_dict.get('high')
-        low_price = obj_dict.get('low')
-        adjusted_close_price = obj_dict.get('adjusted_close')
-        volume = obj_dict.get('volume')
+        date_stamp = obj_dict['date_stamp'] if 'date_stamp' in obj_dict else self.date_stamp
+        open_price = obj_dict['open'] if 'open' in obj_dict else self.open
+        close_price = obj_dict['close'] if 'close' in obj_dict else self.close
+        high_price = obj_dict['high'] if 'high' in obj_dict else self.high
+        low_price = obj_dict['low'] if 'low' in obj_dict else self.low
+        adjusted_close_price = obj_dict['adjusted_close'] if 'adjusted_close' in obj_dict else self.adjusted_close
+        volume = obj_dict['volume'] if 'volume' in obj_dict else self.volume
 
         if self._base_obj.quote_units == "cents":
             return {
