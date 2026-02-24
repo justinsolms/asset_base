@@ -711,21 +711,27 @@ class ManagerBase(object):
             polymorphic child) instances found in the current session.
             Unknown or malformed identity codes are skipped with a warning.
         """
-        asset_dict = {}
-        for identity_code in identity_code_list:
-            # Attempt to resolve the asset for the identity code. If not found
-            # then log a warning and skip to the next code.
-            try:
-                asset = self.session.query(Asset).filter_by(
-                    identity_code=identity_code).one()
-            except NoResultFound:
-                logger.warning(
-                    "No asset found for identity_code %s", identity_code)
-            except MultipleResultsFound:
-                logger.warning(
-                    "Multiple assets found for identity_code %s", identity_code)
-            else:
-                asset_dict[identity_code] = asset
+        # Bulk query all assets at once with optimized polymorphic loading
+        from sqlalchemy.orm import with_polymorphic
+
+        # Use with_polymorphic to optimize joined table inheritance queries
+        # This did not really speed things up much.
+        poly_asset = with_polymorphic(Asset, '*')
+        assets = self.session.query(poly_asset).filter(
+            poly_asset.identity_code.in_(identity_code_list)
+        ).all()
+
+        # Build dict from results
+        asset_dict = {asset.identity_code: asset for asset in assets}
+
+        # Check for missing identity codes and log warnings
+        found_codes = set(asset_dict.keys())
+        requested_codes = set(identity_code_list)
+        missing_codes = requested_codes - found_codes
+
+        for missing_code in missing_codes:
+            logger.warning(
+                "No asset found for identity_code %s", missing_code)
 
         # Raise an error if no assets were found for any of the provided
         # identity codes
