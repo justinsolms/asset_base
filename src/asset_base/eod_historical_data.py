@@ -44,6 +44,7 @@ from collections import defaultdict
 
 # Get module-named logger.
 import logging
+import os
 
 logging.basicConfig(stream=sys.stderr)
 logger = logging.getLogger(__name__)
@@ -68,9 +69,11 @@ split_columns = [
 class APISessionManager:
     """Direct API query, response and result checking."""
 
-    # API domain and security token
+    # API domain
     _DOMAIN = "eodhistoricaldata.com"
-    _API_TOKEN = "60802039419943.54316578"
+
+    # Get API token from environment variable EOD_HISTORICAL_DATA_API_TOKEN
+    _API_TOKEN = os.environ.get("EOD_HISTORICAL_DATA_API_TOKEN")
 
     # Limiting connection pool size
     _CONNECTION_LIMIT = 4
