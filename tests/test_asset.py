@@ -29,6 +29,7 @@ class TestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up class-wide test fixtures."""
+        super().setUpClass()
         cls.name = "Test Asset"
         cls.currency_ticker = "USD"
         cls.domicile_ticker = "US"
@@ -38,6 +39,7 @@ class TestBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # Each test with a clean sqlite in-memory database
         self.test_session = TestSession()
         self.session = self.test_session.session
@@ -56,6 +58,7 @@ class TestBase(unittest.TestCase):
     def tearDown(self) -> None:
         """Tear down test case fixtures."""
         self.test_session.close()
+        super().tearDown()
 
 
 class TestCash(TestBase):

@@ -12,6 +12,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up class-wide test fixtures."""
+        super().setUpClass()
         cls.identity_code = "XNYS:ABC"  # ABC Inc. identity code as example
 
         # Price data fixture - days of trade data with holidays and anomalies In
@@ -66,6 +67,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures for each test method."""
+        super().setUp()
         # Create fresh copies of the test data for each test
         self.tsp_clean = TimeSeriesProcessor(
             self.clean_test_price_df.copy(),
@@ -85,6 +87,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         """Clean up after each test method."""
         # Clear any instance variables
         pass
+        super().tearDown()
 
     def test_show_price_df_fixture(self):
         """Print the price fixture DataFrame for visual inspection."""

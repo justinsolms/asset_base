@@ -23,6 +23,7 @@ class TestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up class-wide test fixtures."""
+        super().setUpClass()
         cls.name = "Test Asset"
         cls.currency_ticker = "USD"
         cls.domicile_ticker = "US"
@@ -105,6 +106,7 @@ class TestBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # -------------------- Entity Classes --------------------
         # Each test with a clean sqlite in-memory database
         self.test_session = TestSession()
@@ -142,6 +144,7 @@ class TestBase(unittest.TestCase):
     def tearDown(self) -> None:
         """Tear down test case fixtures."""
         self.test_session.close()
+        super().tearDown()
 
 
 class TestListedEquityEOD(TestBase):
@@ -499,11 +502,11 @@ class TestListedEquityEOD(TestBase):
         # This test verifies the new signature works correctly
         self.session.add(self.listed_equity)
         self.session.commit()
-        
+
         # Should work with asset_class parameter
         ListedEquityEOD.from_data_frame(self.session, ListedEquity, self.test_trade_eod_df)
         self.session.commit()
-        
+
         count = self.session.query(ListedEquityEOD).count()
         self.assertEqual(count, 10)
 
@@ -629,7 +632,7 @@ class TestIndexEOD(TestBase):
         # Verify that IndexEOD works correctly with Index asset class
         self.session.add(self.index)
         self.session.commit()
-        
+
         index_eod = IndexEOD(
             base_obj=self.index,
             date_stamp=self.test_date,
@@ -642,7 +645,7 @@ class TestIndexEOD(TestBase):
         )
         self.session.add(index_eod)
         self.session.commit()
-        
+
         self.assertIsNotNone(index_eod._id)
         self.assertEqual(index_eod._base_obj, self.index)
 
@@ -767,7 +770,7 @@ class TestForexEOD(TestBase):
         # Verify that ForexEOD works correctly with Forex asset class
         self.session.add(self.forex)
         self.session.commit()
-        
+
         forex_eod = ForexEOD(
             base_obj=self.forex,
             date_stamp=self.test_date,
@@ -780,7 +783,7 @@ class TestForexEOD(TestBase):
         )
         self.session.add(forex_eod)
         self.session.commit()
-        
+
         self.assertIsNotNone(forex_eod._id)
         self.assertEqual(forex_eod._base_obj, self.forex)
 
@@ -931,7 +934,7 @@ class TestDividend(TestBase):
         # Verify that Dividend works correctly with ListedEquity asset class
         self.session.add(self.listed_equity)
         self.session.commit()
-        
+
         dividend = Dividend(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
@@ -945,7 +948,7 @@ class TestDividend(TestBase):
         )
         self.session.add(dividend)
         self.session.commit()
-        
+
         self.assertIsNotNone(dividend._id)
         self.assertEqual(dividend._base_obj, self.listed_equity)
 
@@ -1095,7 +1098,7 @@ class TestSplit(TestBase):
         # Verify that Split works correctly with ListedEquity asset class
         self.session.add(self.listed_equity)
         self.session.commit()
-        
+
         split = Split(
             base_obj=self.listed_equity,
             date_stamp=self.test_date,
@@ -1104,7 +1107,7 @@ class TestSplit(TestBase):
         )
         self.session.add(split)
         self.session.commit()
-        
+
         self.assertIsNotNone(split._id)
         self.assertEqual(split._base_obj, self.listed_equity)
 

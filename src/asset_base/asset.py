@@ -555,6 +555,7 @@ class Asset(AssetBase):
                 f"Expected one of {list(eod.columns)}.")
 
         prices_df = eod.reset_index()
+        # FIXME: Consider using the asset instance itself as the identity code in the TimeSeriesProcessor instead of a string code. DO this for all get_time_series_processor methods across all asset classes.
         prices_df["identity_code"] = self.identity_code
         columns_to_keep = ["identity_code", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]

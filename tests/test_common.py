@@ -31,6 +31,7 @@ class TestSessionBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # Create a temporary directory for test databases
         self.temp_dir = tempfile.mkdtemp()
         self.test_db_path = os.path.join(self.temp_dir, "test.db")
@@ -48,6 +49,7 @@ class TestSessionBase(unittest.TestCase):
             os.rmdir(self.temp_dir)
         except OSError:
             pass
+        super().tearDown()
 
 
 class TestSessionClass(TestSessionBase):
@@ -436,10 +438,12 @@ class TestCommon(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up test class fixtures."""
+        super().setUpClass()
         cls.name = "Concrete common instance"
 
     def setUp(self):
         """Set up test case fixtures."""
+        super().setUp()
         # Test with TestSession
         self.test_session = TestSession()
         self.session = self.test_session.session
@@ -449,6 +453,7 @@ class TestCommon(unittest.TestCase):
     def tearDown(self):
         """Tear down test case fixtures."""
         self.test_session.close()
+        super().tearDown()
 
     def test_class_name_abstract_method(self):
         """Test that class_name property returns the class name."""

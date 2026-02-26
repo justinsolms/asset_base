@@ -597,6 +597,7 @@ class ManagerBase(object):
           adjustment and resampling on a per-asset basis.
 
         """
+        # FIXME: Switch to using a list of Asset instances instead of identity codes. This would avoid the time-consuming need to resolve identity codes
         if not identity_code_list:
             raise ValueError("Argument `identity_code_list` may not be empty.")
 
@@ -684,15 +685,15 @@ class ManagerBase(object):
 
         # Combine all listed TimeSeriesProcessors and derive the common
         # date index for building the cash series.
-        tsp_non_cash = TimeSeriesProcessor.concat(tsp_list)
+        non_cash_tsp = TimeSeriesProcessor.concat(tsp_list)
         if cash_asset is not None:
-            date_index = tsp_non_cash.get_date_index()
+            date_index = non_cash_tsp.get_date_index()
             cash_tsp = cash_asset.get_time_series_processor(
                 date_index=date_index, price_item="price"
             )
-            tsp_all = TimeSeriesProcessor.concat([tsp_non_cash, cash_tsp])
+            tsp_all = TimeSeriesProcessor.concat([non_cash_tsp, cash_tsp])
         else:
-            tsp_all = tsp_non_cash
+            tsp_all = non_cash_tsp
 
         return tsp_all
 

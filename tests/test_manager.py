@@ -89,6 +89,7 @@ class TestManager(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # Create a memory database manager for testing
         self.manager = Manager(dialect='memory', testing=True)
         self.session = self.manager.session
@@ -107,6 +108,7 @@ class TestManager(unittest.TestCase):
         self.static_patcher.stop()
         if hasattr(self, 'manager'):
             self.manager.close()
+        super().tearDown()
 
     def _configure_static_mock(self, mock_static, currency_tickers, domicile_codes, exchange_mics):
         """Helper to configure Static mock with basic currency/domicile/exchange data."""

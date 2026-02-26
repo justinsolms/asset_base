@@ -439,11 +439,11 @@ class TestAPISessionManager(aiounittest.AsyncTestCase):
 
     def setUp(self):
         """Set up one test."""
-        pass
+        super().setUp()
 
     def tearDown(self):
         """tear down test case fixtures."""
-        pass
+        super().tearDown()
 
     def assert_df(self, df):
         # Set up for testing
@@ -506,7 +506,7 @@ class TestHistorical(MockAPIMixin, aiounittest.AsyncTestCase):
 
     def setUp(self):
         """Set up one test."""
-        pass
+        super().setUp()
 
     async def test___init__(self):
         """Test Initialization."""
@@ -576,7 +576,7 @@ class TestBulk(MockAPIMixin, aiounittest.AsyncTestCase):
 
     def setUp(self):
         """Set up one test."""
-        pass
+        super().setUp()
 
     async def test___init__(self):
         """Test Initialization."""
@@ -704,7 +704,7 @@ class TestExchanges(MockAPIMixin, unittest.TestCase):
 
     def setUp(self):
         """Set up one test."""
-        pass
+        super().setUp()
 
     def test_get_exchanges(self):
         """Get the full list of supported exchanges."""
@@ -805,7 +805,7 @@ class TestMultiHistorical(MockAPIMixin, unittest.TestCase):
 
     def setUp(self):
         """Set up one test."""
-        pass
+        super().setUp()
 
     def test___init__(self):
         """Test Initialization."""
