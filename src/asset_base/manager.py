@@ -555,19 +555,18 @@ class ManagerBase(object):
     # dataframe of mixed currency time series.
 
     def get_time_series_processor(
-        self, identity_code_list, cash_currency_ticker=None, price_item="close"):
+        self, asset_list, cash_currency_ticker=None, price_item="close"):
         """Get a time series processor for a list of assets.
 
         Parameters
         ----------
-        identity_code_list : list of str
-            List of identity codes corresponding to ``Asset.identity_code``
-            (or polymorph) instances.
+        asset_list : list of asset_base.asset.AssetBase
+            List of ``Asset`` (or polymorph) instances.
         cash_currency_ticker : str, optional
             ISO 4217 3-letter currency ticker for the single cash asset to
             include. There must be exactly none or one ``Cash`` asset in this
             currency and its currency must match that of all assets referenced
-            in the ``identity_code_list``. If not provided then no cash asset is
+            in the ``asset_list``. If not provided then no cash asset is
             included.
         price_item : str, optional
             The price item to use for listed assets. These could be 'open',
@@ -578,7 +577,7 @@ class ManagerBase(object):
         -------
         TimeSeriesProcessor
             A TimeSeriesProcessor instance with time-series data loaded for all
-            assets referenced in the ``identity_code_list`` and the cash asset
+            assets referenced in ``asset_list`` and the cash asset
             if specified by ``cash_currency_ticker``. The time-series data is
             not yet processed or adjusted for corporate actions. This is left to
             the caller to run the full processing pipeline via
@@ -586,8 +585,8 @@ class ManagerBase(object):
 
         Notes
         -----
-        - Unknown identity codes or assets with missing time-series data are
-          skipped and a warning is logged and the method proceeds with the
+                - Assets with missing time-series data are skipped and a warning is
+                    logged and the method proceeds with the
           remaining assets. If no assets with usable time-series data are found
           then a ``TimeSeriesNoData`` exception is raised.
         - All listed assets and the cash asset must share the same price
@@ -597,19 +596,11 @@ class ManagerBase(object):
           adjustment and resampling on a per-asset basis.
 
         """
-        # FIXME: Switch to using a list of Asset instances instead of identity codes. This would avoid the time-consuming need to resolve identity codes
-        if not identity_code_list:
-            raise ValueError("Argument `identity_code_list` may not be empty.")
-
-        # Resolve listed assets from identity codes. Note that the
-        # get_asset_dict method logs warnings and skips unknown identity codes
-        # so that we can proceed with the valid ones. We will raise an error
-        # later if no valid assets are found for any of the provided identity codes.
-        asset_dict = self.get_asset_dict(identity_code_list)
-        listed_assets = list(asset_dict.values())
+        if not asset_list:
+            raise ValueError("Argument `asset_list` may not be empty.")
 
         # Enforce common currency across all assets (listed + cash)
-        currency_tickers = {asset.currency.ticker for asset in listed_assets}
+        currency_tickers = {asset.currency.ticker for asset in asset_list}
         if len(currency_tickers) != 1:
             raise ValueError(
                 f"Mixed asset currencies detected {currency_tickers}. "
@@ -653,6 +644,7 @@ class ManagerBase(object):
             # Enforce common currency between cash asset and listed assets
             currency_tickers.add(cash_asset.currency.ticker)
             if len(currency_tickers) != 1:
+                # TODO: In a future implementation we may wish to allow mixed-currency portfolios and perform currency transformation to a common currency within the time series processor. For now we reject mixed-currency portfolios with an error.
                 raise ValueError(
                     f"Mixed asset currencies detected {currency_tickers}. "
                     "All listed assets and the cash asset must share the "
@@ -664,7 +656,7 @@ class ManagerBase(object):
         # Build TimeSeriesProcessor objects for listed assets, handling
         # missing time-series data on a per-asset basis.
         tsp_list = []
-        for asset in listed_assets:
+        for asset in asset_list:
             try:
                 tsp = asset.get_time_series_processor(price_item=price_item)
             except EODSeriesNoData:
@@ -680,7 +672,7 @@ class ManagerBase(object):
         if not tsp_list:
             raise TimeSeriesNoData(
                 "No usable listed assets with time-series data for the "
-                "provided identity_code_list."
+                "provided asset_list."
             )
 
         # Combine all listed TimeSeriesProcessors and derive the common

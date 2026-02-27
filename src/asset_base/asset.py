@@ -211,6 +211,10 @@ class AssetBase(Common):
         """Use primarily key ``id`` for sorting. (See Note in class docstring)."""
         return self._id < other._id
 
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return self.identity_code
+
     @property
     def currency_ticker(self):
         """ISO 4217 3-letter currency code."""
@@ -544,8 +548,8 @@ class Asset(AssetBase):
         -------
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
-            asset which includes only the EOD time series and `identity_code`
-            columns set to the ``Asset.identity_code``.
+            asset which includes only the EOD time series and `identity`
+            columns set to this ``Asset`` instance.
         """
         # Check price item is valid
         eod = self.get_eod_series()
@@ -555,9 +559,8 @@ class Asset(AssetBase):
                 f"Expected one of {list(eod.columns)}.")
 
         prices_df = eod.reset_index()
-        # FIXME: Consider using the asset instance itself as the identity code in the TimeSeriesProcessor instead of a string code. DO this for all get_time_series_processor methods across all asset classes.
-        prices_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df["identity"] = self
+        columns_to_keep = ["identity", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -619,12 +622,6 @@ class Cash(Asset):
         super().__init__(name, currency, quote_units="units")
 
         self.identity_code = self.ticker
-
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        msg = "{}({})".format(self.__class__.__name__, self.currency.ticker)
-
-        return msg
 
     def __repr__(self):
         """Return the official string output."""
@@ -858,8 +855,8 @@ class Cash(Asset):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset which includes only the Cash EOD time series of price = 1.0
-            with dates from the `date_index` argument and `identity_code`
-            columns set to the ``Cash.identity_code``.
+            with dates from the `date_index` argument and `identity`
+            columns set to this ``Cash`` instance.
         """
         # Check that the price_item argument is 'price for this Cash class
         if price_item != 'price':
@@ -868,8 +865,8 @@ class Cash(Asset):
                 "Expected 'price' for this asset class.")
 
         prices_df = self.get_eod_series(date_index).reset_index()
-        prices_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df["identity"] = self
+        columns_to_keep = ["identity", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -1593,12 +1590,6 @@ class Listed(Share):
         # "Y", then their identity codes will be "ABC.X" and "ABC.Y"
         # respectively, which are unique.
         self.identity_code = self.ticker + "." + self.exchange.eod_code
-
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
-            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
-        )
 
     def __repr__(self):
         """Return the official string output."""
@@ -2504,8 +2495,8 @@ class ListedEquity(Listed):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset with the end-of-day prices, dividends, and splits data
-            series. The `identity_code` column is set to the value of the
-            ``ListedEquity.identity_code`` attribute.
+            series. The `identity` column is set to this
+            ``ListedEquity`` instance.
 
         Raises
         ------
@@ -2525,8 +2516,8 @@ class ListedEquity(Listed):
 
         # Get prices, select price item, and rename to "price" for the processor.
         prices_df = eod.reset_index()
-        prices_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df["identity"] = self
+        columns_to_keep = ["identity", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
         columns_to_rename = {price_item: "price"}
         prices_df.rename(columns=columns_to_rename, inplace=True)
@@ -2541,8 +2532,8 @@ class ListedEquity(Listed):
                 "Distributions were expected but Dividend series will be empty.")
             dividends_df = None
         else:
-            dividends_df["identity_code"] = self.identity_code
-            columns_to_keep = ["identity_code", "date_stamp", "unadjusted_value"]
+            dividends_df["identity"] = self
+            columns_to_keep = ["identity", "date_stamp", "unadjusted_value"]
             dividends_df = dividends_df[columns_to_keep]
             # Add dividend column as a copy of unadjusted_value
             dividends_df["dividend"] = dividends_df["unadjusted_value"]
@@ -2553,8 +2544,8 @@ class ListedEquity(Listed):
         except SplitSeriesNoData:
             splits_df = None
         else:
-            splits_df["identity_code"] = self.identity_code
-            columns_to_keep = ["identity_code", "date_stamp", "numerator", "denominator"]
+            splits_df["identity"] = self
+            columns_to_keep = ["identity", "date_stamp", "numerator", "denominator"]
             splits_df = splits_df[columns_to_keep]
 
         # Create and return the processor
@@ -2665,12 +2656,6 @@ class Index(AssetBase):
         # This is a big assumption but it is necessary for the key_code to be j
         # ust the ticker.
         self.identity_code = self.ticker
-
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return '{}(name="{}", ticker="{}")'.format(
-            self.__class__.__name__, self.name, self.ticker
-        )
 
     def __repr__(self):
         """Return the official string output."""

@@ -11,7 +11,7 @@ all entities and assets inherit from.
 Factory Method Paradigm
 ------------------------
 All classes inheriting from ``Common`` implement a factory method pattern
-with dual-mode behavior:
+with dual-mode behaviour:
 
 **Retrieval Mode** (minimal parameters):
     When only key identifying parameters are provided, the factory attempts
