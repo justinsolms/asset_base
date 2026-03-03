@@ -30,6 +30,7 @@ from sqlalchemy import UniqueConstraint
 
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm import object_session
+from sqlalchemy import inspect as sa_inspect
 
 # Used to avoid ImportError (most likely due to a circular import)
 from typing import TYPE_CHECKING, ClassVar, Optional
@@ -473,15 +474,21 @@ class EODBase(TimeSeriesBase):
             date_stamp : datetime.date
             close : float (in currency units)
         """
+        # Use __dict__ to access already-loaded column values directly,
+        # avoiding repeated SQLAlchemy lazy-load operations
+        obj_dict = self.__dict__
+        date_stamp = obj_dict['date_stamp'] if 'date_stamp' in obj_dict else self.date_stamp
+        price = obj_dict['price'] if 'price' in obj_dict else self.price
+
         if self._base_obj.quote_units == "cents":
             return {
-                "date_stamp": self.date_stamp,
-                "price": self.price / 100.0,
+                "date_stamp": date_stamp,
+                "price": price / 100.0,
             }
         else:
             return {
-                "date_stamp": self.date_stamp,
-                "price": self.price,
+                "date_stamp": date_stamp,
+                "price": price,
             }
 
 
@@ -595,25 +602,38 @@ class TradeEOD(EODBase):
         as it is by convention identical to the `close` value.
 
         """
+        # Use SQLAlchemy inspect to check what's loaded without triggering lazy loads
+        insp = sa_inspect(self)
+        obj_dict = self.__dict__
+
+        # Get values from __dict__ first, fall back to attribute access only if not in __dict__
+        date_stamp = obj_dict['date_stamp'] if 'date_stamp' in obj_dict else self.date_stamp
+        open_price = obj_dict['open'] if 'open' in obj_dict else self.open
+        close_price = obj_dict['close'] if 'close' in obj_dict else self.close
+        high_price = obj_dict['high'] if 'high' in obj_dict else self.high
+        low_price = obj_dict['low'] if 'low' in obj_dict else self.low
+        adjusted_close_price = obj_dict['adjusted_close'] if 'adjusted_close' in obj_dict else self.adjusted_close
+        volume = obj_dict['volume'] if 'volume' in obj_dict else self.volume
+
         if self._base_obj.quote_units == "cents":
             return {
-                "date_stamp": self.date_stamp,
-                "open": self.open / 100.0,
-                "close": self.close / 100.0,
-                "high": self.high / 100.0,
-                "low": self.low / 100.0,
-                "adjusted_close": self.adjusted_close / 100.0,
-                "volume": self.volume,
+                "date_stamp": date_stamp,
+                "open": open_price / 100.0,
+                "close": close_price / 100.0,
+                "high": high_price / 100.0,
+                "low": low_price / 100.0,
+                "adjusted_close": adjusted_close_price / 100.0,
+                "volume": volume,
             }
         else:
             return {
-                "date_stamp": self.date_stamp,
-                "open": self.open,
-                "close": self.close,
-                "high": self.high,
-                "low": self.low,
-                "adjusted_close": self.adjusted_close,
-                "volume": self.volume,
+                "date_stamp": date_stamp,
+                "open": open_price,
+                "close": close_price,
+                "high": high_price,
+                "low": low_price,
+                "adjusted_close": adjusted_close_price,
+                "volume": volume,
             }
 
 
@@ -939,27 +959,39 @@ class Dividend(TimeSeriesBase):
             unadjusted_value : float (in currency units)
             adjusted_value : float (in currency units)
         """
+        # Use __dict__ to access already-loaded column values directly,
+        # avoiding repeated SQLAlchemy lazy-load operations
+        obj_dict = self.__dict__
+        date_stamp = obj_dict['date_stamp'] if 'date_stamp' in obj_dict else self.date_stamp
+        currency = obj_dict['currency'] if 'currency' in obj_dict else self.currency
+        declaration_date = obj_dict['declaration_date'] if 'declaration_date' in obj_dict else self.declaration_date
+        payment_date = obj_dict['payment_date'] if 'payment_date' in obj_dict else self.payment_date
+        period = obj_dict['period'] if 'period' in obj_dict else self.period
+        record_date = obj_dict['record_date'] if 'record_date' in obj_dict else self.record_date
+        unadjusted_value = obj_dict['unadjusted_value'] if 'unadjusted_value' in obj_dict else self.unadjusted_value
+        adjusted_value = obj_dict['adjusted_value'] if 'adjusted_value' in obj_dict else self.adjusted_value
+
         if self._base_obj.quote_units == "cents":
             return {
-                "date_stamp": self.date_stamp,
-                "currency": self.currency,
-                "declaration_date": self.declaration_date,
-                "payment_date": self.payment_date,
-                "period": self.period,
-                "record_date": self.record_date,
-                "unadjusted_value": self.unadjusted_value / 100.0,
-                "adjusted_value": self.adjusted_value / 100.0,
+                "date_stamp": date_stamp,
+                "currency": currency,
+                "declaration_date": declaration_date,
+                "payment_date": payment_date,
+                "period": period,
+                "record_date": record_date,
+                "unadjusted_value": unadjusted_value / 100.0,
+                "adjusted_value": adjusted_value / 100.0,
             }
         else:
             return {
-                "date_stamp": self.date_stamp,
-                "currency": self.currency,
-                "declaration_date": self.declaration_date,
-                "payment_date": self.payment_date,
-                "period": self.period,
-                "record_date": self.record_date,
-                "unadjusted_value": self.unadjusted_value,
-                "adjusted_value": self.adjusted_value,
+                "date_stamp": date_stamp,
+                "currency": currency,
+                "declaration_date": declaration_date,
+                "payment_date": payment_date,
+                "period": period,
+                "record_date": record_date,
+                "unadjusted_value": unadjusted_value,
+                "adjusted_value": adjusted_value,
             }
 
 
@@ -1035,9 +1067,16 @@ class Split(TimeSeriesBase):
             numerator : float
             denominator : float
         """
+        # Use __dict__ to access already-loaded column values directly,
+        # avoiding repeated SQLAlchemy lazy-load operations
+        obj_dict = self.__dict__
+        date_stamp = obj_dict['date_stamp'] if 'date_stamp' in obj_dict else self.date_stamp
+        numerator = obj_dict['numerator'] if 'numerator' in obj_dict else self.numerator
+        denominator = obj_dict['denominator'] if 'denominator' in obj_dict else self.denominator
+
         return {
-            "date_stamp": self.date_stamp,
-            "numerator": self.numerator,
-            "denominator": self.denominator,
+            "date_stamp": date_stamp,
+            "numerator": numerator,
+            "denominator": denominator,
         }
 

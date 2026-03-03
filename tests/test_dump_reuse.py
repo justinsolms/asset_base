@@ -41,6 +41,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
 
     def setUp(self):
         """Set up test database and manager."""
+        super().setUp()
         # Create in-memory SQLite database
         self.engine = create_engine('sqlite:///:memory:')
         Base.metadata.create_all(self.engine)
@@ -64,6 +65,7 @@ class TestDumpReuseRoundtrip(unittest.TestCase):
         self.engine.dispose()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
         self.static_patcher.stop()
+        super().tearDown()
 
     def _configure_static_data(self):
         """Configure mock static data for tests."""
@@ -451,6 +453,7 @@ class TestManagerDumpReuse(unittest.TestCase):
 
     def setUp(self):
         """Set up manager with mocked dependencies."""
+        super().setUp()
         self.temp_dir = tempfile.mkdtemp()
 
         # Patch the update_all methods that set_up calls
@@ -480,6 +483,7 @@ class TestManagerDumpReuse(unittest.TestCase):
         self.domicile_patcher.stop()
         self.exchange_patcher.stop()
         self.cash_patcher.stop()
+        super().tearDown()
 
     def _create_test_entities(self):
         """Create minimal test entities for dump/reuse tests."""
@@ -607,6 +611,7 @@ class TestDumpErrorHandling(unittest.TestCase):
 
     def setUp(self):
         """Set up test database."""
+        super().setUp()
         self.engine = create_engine('sqlite:///:memory:')
         Base.metadata.create_all(self.engine)
         Session = sessionmaker(bind=self.engine)
@@ -621,6 +626,7 @@ class TestDumpErrorHandling(unittest.TestCase):
         self.session.close()
         self.engine.dispose()
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+        super().tearDown()
 
     def test_reuse_with_corrupted_pickle_raises_error(self):
         """Test that corrupted pickle files raise appropriate errors."""
@@ -655,6 +661,7 @@ class TestDumpFileOperations(unittest.TestCase):
 
     def setUp(self):
         """Set up temp directory and dumper."""
+        super().setUp()
         self.temp_dir = tempfile.mkdtemp()
         self.dumper = Dump(testing=True)
         self.dumper._abs_data_path = self.temp_dir
@@ -662,6 +669,7 @@ class TestDumpFileOperations(unittest.TestCase):
     def tearDown(self):
         """Clean up temp files."""
         shutil.rmtree(self.temp_dir, ignore_errors=True)
+        super().tearDown()
 
     def test_dump_write_creates_pickle_file(self):
         """Test that write() creates pickle file with correct naming."""

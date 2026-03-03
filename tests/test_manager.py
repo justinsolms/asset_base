@@ -89,6 +89,7 @@ class TestManager(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # Create a memory database manager for testing
         self.manager = Manager(dialect='memory', testing=True)
         self.session = self.manager.session
@@ -107,6 +108,7 @@ class TestManager(unittest.TestCase):
         self.static_patcher.stop()
         if hasattr(self, 'manager'):
             self.manager.close()
+        super().tearDown()
 
     def _configure_static_mock(self, mock_static, currency_tickers, domicile_codes, exchange_mics):
         """Helper to configure Static mock with basic currency/domicile/exchange data."""
@@ -271,7 +273,7 @@ class TestManager(unittest.TestCase):
         currencies = self.session.query(Currency).count()
         self.assertGreater(currencies, 0)
 
-    @unittest.mock.patch('asset_base.asset.Forex.foreign_currencies', ['USD'])
+    @unittest.mock.patch('asset_base.asset.Forex.foreign_currencies_list', ['USD'])
     def test_update_calls_financial_data_methods(self):
         """Test update_all method creates securities by calling AssetBase.update_all."""
         from asset_base.asset import ExchangeTradeFund, AssetBase, ListedEquity
@@ -355,14 +357,15 @@ class TestManager(unittest.TestCase):
         self.assertIn("may not be empty", str(context.exception))
 
     def test_get_time_series_processor_with_listed_equity(self):
-        """Test get_time_series_processor with a ListedEquity identity_code."""
+        """Test get_time_series_processor with a ListedEquity instance."""
         self.manager.set_up(reuse=False, update=False)
         listed = self._create_listed_equity(num_eod=3, add_dividend=True, add_split=True)
 
-        # Use identity_code for manager-level time series processor
-        tsp = self.manager.get_time_series_processor([listed.identity_code])
+        # Use Asset instance for manager-level time series processor
+        tsp = self.manager.get_time_series_processor([listed])
         self.assertIsInstance(tsp, TimeSeriesProcessor)
         self.assertGreater(len(tsp._prices_df), 0)
+        self.assertTrue((tsp._prices_df["identity"] == listed).all())
 
     def test_get_time_series_processor_with_listed_equity_and_cash(self):
         """Test get_time_series_processor with ListedEquity and cash asset."""
@@ -371,29 +374,16 @@ class TestManager(unittest.TestCase):
 
         # Get time series processor including cash asset via currency ticker
         tsp = self.manager.get_time_series_processor(
-            [listed.identity_code], cash_currency_ticker='USD')
+            [listed], cash_currency_ticker='USD')
         self.assertIsInstance(tsp, TimeSeriesProcessor)
         self.assertGreater(len(tsp._prices_df), 0)
 
-        # Expect both listed equity and USD cash identity codes present
-        identity_codes = set(tsp._prices_df["identity_code"].unique())
-        self.assertIn(listed.identity_code, identity_codes)
-        self.assertIn('USD', identity_codes)
-
-    def test_get_resampled_total_returns_with_listed_equity_and_cash(self):
-        """Test get_resampled_total_returns for a ListedEquity and cash."""
-        self.manager.set_up(reuse=False, update=False)
-        # Provide enough observations for the TimeSeriesProcessor sample size check
-        listed = self._create_listed_equity(num_eod=25, add_dividend=False, add_split=False)
-
-        # Weekly resampled total returns including cash
-        total_returns = self.manager.get_resampled_total_returns(
-            [listed.identity_code], cash_currency_ticker='USD', frequency='W')
-
-        self.assertIsInstance(total_returns, pd.DataFrame)
-        self.assertGreater(len(total_returns.index), 0)
-        self.assertIn(listed.identity_code, total_returns.columns)
-        self.assertIn('USD', total_returns.columns)
+        # Expect both listed equity and USD cash asset objects present
+        identity_codes = set(tsp._prices_df["identity"].unique())
+        self.assertIn(listed, identity_codes)
+        self.assertTrue(
+            any(isinstance(asset, Cash) and asset.identity_code == 'USD' for asset in identity_codes)
+        )
 
     def test_get_asset_dict_with_unknown_identity_code_raises(self):
         """Unknown identity_code list yields TimeSeriesNoData."""

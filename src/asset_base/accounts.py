@@ -8,7 +8,7 @@
 from sqlalchemy import Integer
 from sqlalchemy import Column, ForeignKey
 
-from .asset import Cash
+from asset_base.asset import Cash
 
 
 class CashAccount(Cash):

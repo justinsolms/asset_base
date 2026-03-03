@@ -185,11 +185,13 @@ class AssetBase(Common):
     TIME_SERIES_CLASS = EODBase
 
     # All historical generic time-series collection ranked by date_stamp
+    # TODO: Rename this to _time_series_single_item as it is only for single item time-series such as EOD, Dividend, Split etc.
     _series = relationship(
         TimeSeriesBase,
         order_by=TimeSeriesBase.date_stamp,
         back_populates="_base_obj",
         uselist=True,
+        lazy='selectin',
         )
 
     def __init__(self, name, currency, quote_units="units"):
@@ -208,6 +210,10 @@ class AssetBase(Common):
     def __lt__(self, other):
         """Use primarily key ``id`` for sorting. (See Note in class docstring)."""
         return self._id < other._id
+
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return self.identity_code
 
     @property
     def currency_ticker(self):
@@ -447,10 +453,43 @@ class Asset(AssetBase):
         EODSeriesNoData
             If no time series exists.
         """
-        trade_eod_dict_list = [s.to_dict() for s in self._eod_series]
-        if len(trade_eod_dict_list) == 0:
-            raise EODSeriesNoData(f"Expected EOD data for {self}.")
-        data_frame = pd.DataFrame(trade_eod_dict_list)
+        # Use direct SQL query for better performance than ORM
+        from sqlalchemy import text
+        session = object_session(self)
+
+        query = text("""
+        SELECT
+            tsb.date_stamp,
+            eod.price,
+            teod.open,
+            teod.close,
+            teod.high,
+            teod.low,
+            teod.adjusted_close,
+            teod.volume
+        FROM time_series_base tsb
+        LEFT JOIN simple_eod eod ON tsb._id = eod._id
+        LEFT JOIN trade_eod teod ON eod._id = teod._id
+        WHERE tsb._asset_id = :asset_id
+            AND tsb._discriminator IN ('simple_eod', 'trade_eod', 'listed_eod',
+                                       'listed_equity_eod', 'index_eod', 'forex_eod')
+        ORDER BY tsb.date_stamp ASC
+        """)
+
+        data_frame = pd.read_sql(query, session.bind, params={'asset_id': self._id})
+
+        if len(data_frame) == 0:
+            raise EODSeriesNoData(f"Expected EOD data for {self.identity_code}.")
+
+        # Handle quote_units conversion
+        price_columns = ['price', 'open', 'close', 'high', 'low', 'adjusted_close']
+        if self.quote_units == "cents":
+            for col in price_columns:
+                if col in data_frame.columns and data_frame[col].notna().any():
+                    data_frame[col] = data_frame[col] / 100.0
+
+        # Keep only non-null columns (depends on which type of EOD record)
+        data_frame = data_frame.dropna(axis=1, how='all')
         data_frame["date_stamp"] = pd.to_datetime(data_frame["date_stamp"])
         data_frame.set_index("date_stamp", inplace=True)
         data_frame.sort_index(inplace=True)  # Assure ascending
@@ -473,7 +512,7 @@ class Asset(AssetBase):
             If no time series exists.
         """
         if len(self._eod_series) == 0:
-            raise EODSeriesNoData(f"Expected EOD data for {self}.")
+            raise EODSeriesNoData(f"Expected EOD data for {self.identity_code}.")
         else:
             return self._eod_series[-1]
 
@@ -509,8 +548,8 @@ class Asset(AssetBase):
         -------
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
-            asset which includes only the EOD time series and `identity_code`
-            columns set to the ``Asset.identity_code``.
+            asset which includes only the EOD time series and `identity`
+            columns set to this ``Asset`` instance.
         """
         # Check price item is valid
         eod = self.get_eod_series()
@@ -520,8 +559,8 @@ class Asset(AssetBase):
                 f"Expected one of {list(eod.columns)}.")
 
         prices_df = eod.reset_index()
-        prices_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df["identity"] = self
+        columns_to_keep = ["identity", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -583,12 +622,6 @@ class Cash(Asset):
         super().__init__(name, currency, quote_units="units")
 
         self.identity_code = self.ticker
-
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        msg = "{}({})".format(self.__class__.__name__, self.currency.ticker)
-
-        return msg
 
     def __repr__(self):
         """Return the official string output."""
@@ -822,8 +855,8 @@ class Cash(Asset):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset which includes only the Cash EOD time series of price = 1.0
-            with dates from the `date_index` argument and `identity_code`
-            columns set to the ``Cash.identity_code``.
+            with dates from the `date_index` argument and `identity`
+            columns set to this ``Cash`` instance.
         """
         # Check that the price_item argument is 'price for this Cash class
         if price_item != 'price':
@@ -832,8 +865,8 @@ class Cash(Asset):
                 "Expected 'price' for this asset class.")
 
         prices_df = self.get_eod_series(date_index).reset_index()
-        prices_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df["identity"] = self
+        columns_to_keep = ["identity", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -1558,12 +1591,6 @@ class Listed(Share):
         # respectively, which are unique.
         self.identity_code = self.ticker + "." + self.exchange.eod_code
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
-            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
-        )
-
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
@@ -2279,15 +2306,36 @@ class ListedEquity(Listed):
         DividendSeriesNoData
             If no time series exists.
         """
-        dividend_dict_list = [s.to_dict() for s in self._dividend_series]
+        # Use direct SQL query for better performance than ORM
+        from sqlalchemy import text
+        session = object_session(self)
+
+        query = text("""
+        SELECT
+            tsb.date_stamp,
+            d.currency,
+            d.declaration_date,
+            d.payment_date,
+            d.period,
+            d.record_date,
+            d.unadjusted_value,
+            d.adjusted_value
+        FROM time_series_base tsb
+        INNER JOIN dividend d ON tsb._id = d._id
+        WHERE tsb._asset_id = :asset_id
+            AND tsb._discriminator = 'dividend'
+        ORDER BY tsb.date_stamp ASC
+        """)
+
+        series = pd.read_sql(query, session.bind, params={'asset_id': self._id})
 
         # If no dividend records exist
-        if len(dividend_dict_list) == 0:
+        if len(series) == 0:
             # If distributions are expected then raise an explicit exception
             # so that callers can decide how to handle missing data.
             if self.distributions:
                 raise DividendSeriesNoData(
-                    f"Expected dividend data for {self} as `distributions` attribute is True.")
+                    f"Expected dividend data for {self.identity_code} as `distributions` attribute is True.")
 
             # If distributions are not expected and no data is present then
             # return an empty DataFrame with the minimal required columns so
@@ -2302,12 +2350,17 @@ class ListedEquity(Listed):
         # Warn if no distributions are expected but data is found. This is not
         # an exception as the distributions attribute may be incorrectly set to
         # False or there may be special distribution events.
-        if not self.distributions and len(dividend_dict_list) > 0:
+        if not self.distributions and len(series) > 0:
             logger.warning(
-                f"Found dividend data for {self} but `distributions` attribute "
+                f"Found dividend data for {self.identity_code} but `distributions` attribute "
                 "is False. Check if `distributions` is correctly set.")
 
-        series = pd.DataFrame(dividend_dict_list)
+        # Handle quote_units conversion for dividend values
+        if self.quote_units == "cents":
+            for col in ['unadjusted_value', 'adjusted_value']:
+                if col in series.columns and series[col].notna().any():
+                    series[col] = series[col] / 100.0
+
         series["date_stamp"] = pd.to_datetime(series["date_stamp"])
         series.set_index("date_stamp", inplace=True)
         series.sort_index(inplace=True)  # Assure ascending
@@ -2330,7 +2383,7 @@ class ListedEquity(Listed):
             If no time series exists.
         """
         if len(self._dividend_series) == 0:
-            raise DividendSeriesNoData(f"Expected dividend data for {self}")
+            raise DividendSeriesNoData(f"Expected dividend data for {self.identity_code}")
         else:
             return self._dividend_series[-1]
 
@@ -2364,10 +2417,27 @@ class ListedEquity(Listed):
         SplitSeriesNoData
             If no time series exists.
         """
-        split_dict_list = [s.to_dict() for s in self._split_series]
-        if len(split_dict_list) == 0:
-            raise SplitSeriesNoData(f"Expected split data for {self}")
-        series = pd.DataFrame(split_dict_list)
+        # Use direct SQL query for better performance than ORM
+        from sqlalchemy import text
+        session = object_session(self)
+
+        query = text("""
+        SELECT
+            tsb.date_stamp,
+            s.numerator,
+            s.denominator
+        FROM time_series_base tsb
+        INNER JOIN split s ON tsb._id = s._id
+        WHERE tsb._asset_id = :asset_id
+            AND tsb._discriminator = 'split'
+        ORDER BY tsb.date_stamp ASC
+        """)
+
+        series = pd.read_sql(query, session.bind, params={'asset_id': self._id})
+
+        if len(series) == 0:
+            raise SplitSeriesNoData(f"Expected split data for {self.identity_code}")
+
         series["date_stamp"] = pd.to_datetime(series["date_stamp"])
         series.set_index("date_stamp", inplace=True)
         series.sort_index(inplace=True)  # Assure ascending
@@ -2390,7 +2460,7 @@ class ListedEquity(Listed):
             If no time series exists.
         """
         if len(self._split_series) == 0:
-            raise SplitSeriesNoData(f"Expected split data for {self}")
+            raise SplitSeriesNoData(f"Expected split data for {self.identity_code}")
         else:
             return self._split_series[-1]
 
@@ -2425,8 +2495,8 @@ class ListedEquity(Listed):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset with the end-of-day prices, dividends, and splits data
-            series. The `identity_code` column is set to the value of the
-            ``ListedEquity.identity_code`` attribute.
+            series. The `identity` column is set to this
+            ``ListedEquity`` instance.
 
         Raises
         ------
@@ -2446,8 +2516,8 @@ class ListedEquity(Listed):
 
         # Get prices, select price item, and rename to "price" for the processor.
         prices_df = eod.reset_index()
-        prices_df["identity_code"] = self.identity_code
-        columns_to_keep = ["identity_code", "date_stamp", price_item]
+        prices_df["identity"] = self
+        columns_to_keep = ["identity", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
         columns_to_rename = {price_item: "price"}
         prices_df.rename(columns=columns_to_rename, inplace=True)
@@ -2458,12 +2528,12 @@ class ListedEquity(Listed):
             dividends_df = self.get_dividend_series().reset_index()
         except DividendSeriesNoData:
             logger.warning(
-                f"No dividend data for {self}. "
+                f"No dividend data for {self.identity_code}. "
                 "Distributions were expected but Dividend series will be empty.")
             dividends_df = None
         else:
-            dividends_df["identity_code"] = self.identity_code
-            columns_to_keep = ["identity_code", "date_stamp", "unadjusted_value"]
+            dividends_df["identity"] = self
+            columns_to_keep = ["identity", "date_stamp", "unadjusted_value"]
             dividends_df = dividends_df[columns_to_keep]
             # Add dividend column as a copy of unadjusted_value
             dividends_df["dividend"] = dividends_df["unadjusted_value"]
@@ -2474,8 +2544,8 @@ class ListedEquity(Listed):
         except SplitSeriesNoData:
             splits_df = None
         else:
-            splits_df["identity_code"] = self.identity_code
-            columns_to_keep = ["identity_code", "date_stamp", "numerator", "denominator"]
+            splits_df["identity"] = self
+            columns_to_keep = ["identity", "date_stamp", "numerator", "denominator"]
             splits_df = splits_df[columns_to_keep]
 
         # Create and return the processor
@@ -2586,12 +2656,6 @@ class Index(AssetBase):
         # This is a big assumption but it is necessary for the key_code to be j
         # ust the ticker.
         self.identity_code = self.ticker
-
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return '{}(name="{}", ticker="{}")'.format(
-            self.__class__.__name__, self.name, self.ticker
-        )
 
     def __repr__(self):
         """Return the official string output."""

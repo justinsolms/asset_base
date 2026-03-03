@@ -151,6 +151,7 @@ def _make_forex_df(date_str="2020-01-02", tickers=None):
 
 class TestDump(unittest.TestCase):
 	def setUp(self):
+		super().setUp()
 		self.dump = Dump(testing=True)
 		try:
 			self.dump.delete()
@@ -162,6 +163,7 @@ class TestDump(unittest.TestCase):
 			self.dump.delete()
 		except Exception:
 			pass
+		super().tearDown()
 
 	def test_write_read_exists_delete(self):
 		df = pd.DataFrame({"a": [1, 2], "b": [3, 4]})
@@ -177,6 +179,7 @@ class TestDump(unittest.TestCase):
 
 class TestStatic(unittest.TestCase):
 	def setUp(self):
+		super().setUp()
 		self.static = Static()
 
 	def test_get_currency(self):
@@ -197,6 +200,7 @@ class TestStatic(unittest.TestCase):
 
 class TestMetaData(unittest.TestCase):
 	def setUp(self):
+		super().setUp()
 		self.meta = MetaData()
 
 	def test_get_etfs_filtered(self):
@@ -219,6 +223,7 @@ class TestMetaData(unittest.TestCase):
 
 class TestHistory(unittest.TestCase):
 	def setUp(self):
+		super().setUp()
 		self.history = History()
 		ex_us = DummyExchange("US", "XNAS")
 		ex_jse = DummyExchange("JSE", "XJSE")

@@ -29,9 +29,9 @@ import abc
 
 from typing import Optional
 
-from .eod_historical_data import Exchanges, MultiHistorical
-from .exceptions import _BaseException, TimeSeriesNoData
-from .__init__ import get_data_path
+from asset_base.eod_historical_data import Exchanges, MultiHistorical
+from asset_base.exceptions import _BaseException, TimeSeriesNoData
+from asset_base.__init__ import get_data_path
 
 # Get module-named logger.
 import logging
@@ -501,6 +501,28 @@ class MetaData(_Feed):
         # check for expected columns.
         data = data[list(column_dict.keys())]
         data.rename(columns=column_dict, inplace=True)
+
+        # Check for the word "ETF" in the listed_name, if present then remove it and
+        # add it back to the end of the name, else just add it to the end of the
+        # name.
+        data["listed_name"] = data["listed_name"].apply(
+            lambda x: x.replace("ETF", "").strip() + " ETF" if "ETF" in x else x + " ETF"
+        )
+
+        # To avoid database listed_name clashes between Issuers and their shares we
+        # append f" ({mic})" to the listed_name. This is to avoids
+        # name clashes between Issuer and security names.
+        data["listed_name"] = data.apply(
+            lambda row: f"{row['listed_name']} ({row['mic']})", axis=1
+        )
+
+        # Mark delisted securities by appending " (delisted)" to the
+        # listed_name. This is to avoid name clashes between listed and delisted
+        # securities with the same name which can happen in practice.
+        data["listed_name"] = data.apply(
+            lambda row: f"{row['listed_name']} (delisted)" if row["status"] == "delisted" else row["listed_name"],
+            axis=1
+        )
 
         # Check for duplicates in the data and raise an error if found
         for item in duplicate_check_list:

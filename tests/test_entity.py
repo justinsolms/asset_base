@@ -15,6 +15,7 @@ class TestBase(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         """Set up class-wide test fixtures."""
+        super().setUpClass()
         cls.name = "Test Entity"
         cls.currency_ticker = "USD"
         cls.domicile_ticker = "US"
@@ -44,6 +45,7 @@ class TestBase(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures."""
+        super().setUp()
         # Each test with a clean sqlite in-memory database
         self.test_session = TestSession()
         self.session = self.test_session.session
@@ -62,6 +64,7 @@ class TestBase(unittest.TestCase):
     def tearDown(self) -> None:
         """Tear down test case fixtures."""
         self.test_session.close()
+        super().tearDown()
 
 
 class TestCurrency(TestBase):
@@ -457,9 +460,7 @@ class TestIssuer(TestBase):
     def test_str_method(self):
         """Test __str__ method returns correct format."""
         result = str(self.issuer)
-        self.assertIn(self.issuer.name, result)
-        self.assertIn("Issuer", result)
-        self.assertIn(self.domicile.country_name, result)
+        self.assertEqual(result, self.issuer.identity_code)
 
     def test_repr_method(self):
         """Test __repr__ method returns correct format."""
@@ -592,10 +593,7 @@ class TestExchange(TestBase):
     def test_str_method(self):
         """Test __str__ method returns correct format."""
         result = str(self.exchange)
-        self.assertIn(self.exchange.name, result)
-        self.assertIn(self.exchange.mic, result)
-        self.assertIn("Exchange", result)
-        self.assertIn(self.domicile.country_name, result)
+        self.assertEqual(result, self.exchange.identity_code)
 
     def test_repr_method(self):
         """Test __repr__ method returns correct format."""

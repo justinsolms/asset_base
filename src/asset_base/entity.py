@@ -97,8 +97,8 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from .common import Base, Common
-from .exceptions import FactoryError, ReconcileError
+from asset_base.common import Base, Common
+from asset_base.exceptions import FactoryError, ReconcileError
 
 # Get module-named logger.
 import logging
@@ -752,6 +752,10 @@ class Entity(Common):
 
         super().__init__(name)
 
+    def __str__(self):
+        """Return the informal string output. Interchangeable with str(x)."""
+        return self.identity_code
+
     @classmethod
     def update_all(cls, session, get_method):
         """Bulk update or create Entity subclasses from static data.
@@ -1004,12 +1008,6 @@ class Issuer(Institution):
         """Instance initialization."""
         super().__init__(name=name, domicile=domicile, **kwargs)
 
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return "{} is an {} in {}".format(
-            self.name, self.__class__.__name__, self.domicile.country_name
-        )
-
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", domicile={!r})'.format(
@@ -1105,12 +1103,6 @@ class Exchange(Institution):
             self.eod_code = mic  # Default to mic if eod_code not provided
 
         super().__init__(name, domicile)
-
-    def __str__(self):
-        """Return the informal string output. Interchangeable with str(x)."""
-        return "{} ({}) is an {} in {}".format(
-            self.name, self.mic, self.__class__.__name__, self.domicile.country_name
-        )
 
     def __repr__(self):
         """Return the official string output."""

@@ -11,7 +11,7 @@ all entities and assets inherit from.
 Factory Method Paradigm
 ------------------------
 All classes inheriting from ``Common`` implement a factory method pattern
-with dual-mode behavior:
+with dual-mode behaviour:
 
 **Retrieval Mode** (minimal parameters):
     When only key identifying parameters are provided, the factory attempts
@@ -63,7 +63,7 @@ from sqlalchemy.orm.decl_api import DeclarativeMeta
 from sqlalchemy.orm import declarative_base, Session, declared_attr, object_session
 from sqlalchemy_utils import drop_database, database_exists, create_database  # type: ignore
 
-from .financial_data import MetaData as FinancialMetaData
+from asset_base.financial_data import MetaData as FinancialMetaData
 
 from asset_base import get_cache_path
 
