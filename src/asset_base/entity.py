@@ -84,7 +84,6 @@ See Also
 common : Base Common class and factory pattern documentation
 asset : Asset classes with factory methods
 """
-# TODO: Decide upon key_code and identity_code formats
 
 import sys
 import datetime
@@ -1000,9 +999,6 @@ class Issuer(Institution):
 
     _id = Column(Integer, ForeignKey("institution._id"), primary_key=True)
     """ Primary key."""
-
-    # Collection of the issued Model instances.
-    # TODO: Use backref in Model
 
     def __init__(self, name, domicile, **kwargs):
         """Instance initialization."""

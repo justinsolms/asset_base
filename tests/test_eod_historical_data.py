@@ -397,7 +397,6 @@ def assert_split_columns(tester, df):
 
 class TestAPISessionManager(aiounittest.AsyncTestCase):
     """Direct API query, response and result checking."""
-    # TODO: Write tests for retries and error handling.
 
     @classmethod
     def setUpClass(cls):

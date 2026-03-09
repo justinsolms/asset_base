@@ -75,7 +75,6 @@ entity : Entity classes that assets depend on
 common : Base Common class and factory pattern documentation
 """
 
-# TODO: Decide upon key_code and identity_code formats
 from typing import ClassVar
 
 import sys
@@ -174,7 +173,7 @@ class AssetBase(Common):
     quote_units = Column(Enum("units", "cents"), nullable=False)
 
     # The financial_data module history getter method provider that will
-    # populate the _series relationship for this class.
+    # populate the _time_series_single_item relationship for this class.
     HISTORY_INSTANCE = FinancialHistory()
 
     # The financial_data EOD_GET_METHOD method overridden here
@@ -185,8 +184,7 @@ class AssetBase(Common):
     TIME_SERIES_CLASS = EODBase
 
     # All historical generic time-series collection ranked by date_stamp
-    # TODO: Rename this to _time_series_single_item as it is only for single item time-series such as EOD, Dividend, Split etc.
-    _series = relationship(
+    _time_series_single_item = relationship(
         TimeSeriesBase,
         order_by=TimeSeriesBase.date_stamp,
         back_populates="_base_obj",
@@ -351,7 +349,7 @@ class Asset(AssetBase):
     Exchange Traded Funds which are invest-able indexes listed on an exchange.
     (See the child class ``ListedEquity`` and it's child classes.)
 
-    TODO: Speak about ownership of an Asset by an Entity and how this helps
+    NOTE: Speak about ownership of an Asset by an Entity and how this helps
     create a directed, acyclic graph of Entity/Asset holdings.
 
     Note
@@ -373,12 +371,12 @@ class Asset(AssetBase):
     """ Primary key."""
 
     # An Entity owns many Assets. Each Asset has one owner Entity.
-    # TODO: Currently owner is allowed to be NULL. Make owner compulsory.
+    # NOTE: Currently owner is allowed to be NULL. Make owner compulsory.
     _owner_id = Column(Integer, ForeignKey("entity._id"), nullable=True)
     owner = relationship("Entity", backref="asset_list", foreign_keys=[_owner_id])
 
-    # TODO: This (or child) is were we would add asset fundamental data relationships
-    # TODO: This (or child) is were we would add asset book relationships
+    # NOTE: This (or child) is were we would add asset fundamental data relationships
+    # NOTE: This (or child) is were we would add asset book relationships
 
     # Major asset class. This is a generic class so the asset class is
     # indeterminate.
@@ -396,7 +394,7 @@ class Asset(AssetBase):
     @property
     def _eod_series(self):
         """list: EOD historical time-series collection ranked by date_stamp."""
-        return [s for s in self._series if isinstance(s, EODBase)]
+        return [s for s in self._time_series_single_item if isinstance(s, EODBase)]
 
     @property
     def domicile(self):
@@ -568,7 +566,6 @@ class Asset(AssetBase):
 
 class Cash(Asset):
     """Cash in currency held.
-    # TODO: Integrate with EOD API
 
     In English vernacular cash refers to money in the physical form of
     currency, such as banknotes and coins.
@@ -609,9 +606,6 @@ class Cash(Asset):
     tables of key codes."""
 
     _asset_class = "cash"
-
-    #  A short class name for use in naming
-    _name_appendix = "Cash"
 
     def __init__(self, currency):
         """Instance initialization."""
@@ -934,9 +928,6 @@ class Forex(Cash):
     tables of key codes."""
 
     _asset_class = "forex"
-
-    #  A short class name for use in naming
-    _name_appendix = "Forex"
 
     # Priced currency, or ``base_currency``
     _currency_id2 = Column(Integer, ForeignKey("currency._id"), nullable=False)
@@ -1299,7 +1290,7 @@ class Share(Asset):
 
     """
 
-    # TODO: Create Account class to contain assets with many-to-one relationship
+    # NOTE: Create Account class to  (hold) assets with many-to-one relationship
 
     __tablename__ = "share"
     __mapper_args__ = {"polymorphic_identity": __tablename__}
@@ -1307,7 +1298,7 @@ class Share(Asset):
     _id = Column(Integer, ForeignKey("asset._id"), primary_key=True)
     """ Primary key."""
 
-    # TODO: Here we would add share unitization and ownership relationships
+    # NOTE: Here we would add share unitization and ownership relationships
 
     # Issuer issues Shares. Each Share has one Issuer.
     _issuer_id = Column(Integer, ForeignKey("issuer._id"), nullable=False)
@@ -1319,9 +1310,6 @@ class Share(Asset):
     # True of a share pays distributions such as dividends or interest, else
     # False. Default is False.
     distributions = Column(Boolean, nullable=False, default=False)
-
-    #  A short class name for use in naming
-    _name_appendix = "Share"
 
     def __init__(self, name, issuer, currency, **kwargs):
         """Instance initialization."""
@@ -1506,10 +1494,6 @@ class Listed(Share):
 
     # Listing status.
     status = Column(Enum("listed", "delisted"), nullable=False)
-
-    #  A short class name for use in naming
-    # TODO: Automate from class magic attributes.
-    _name_appendix = "Listed"
 
     # Associated time-series class override for this asset class.
     TIME_SERIES_CLASS = ListedEOD
@@ -1991,6 +1975,7 @@ class Listed(Share):
 
 
 class ListedEquity(Listed):
+    # TODO: Make a ListedEquityBase parent with Equity next to ETF child classes. The idea is to use only the leaves orf a hierarchical tree
     """Exchange listed ordinary shares in an issuing company.
 
     Ordinary shares are also known as equity shares and they are the most
@@ -2070,12 +2055,9 @@ class ListedEquity(Listed):
         Integer, ForeignKey("industry_class_icb._id"), nullable=True
     )
 
-    #  A short class name for use in naming
-    _name_appendix = "Equity"
-
     # The financial_data METADATA_GET_METHOD method should be overridden here
     # but as its not yet implemented there is just a comment.
-    METADATA_GET_METHOD = None  # TODO: get_listed_equity_meta to be implemented.
+    METADATA_GET_METHOD = None
 
     # Associated EOD time-series class override for this asset class.
     TIME_SERIES_CLASS = ListedEquityEOD
@@ -2128,15 +2110,15 @@ class ListedEquity(Listed):
 
     @property
     def _dividend_series(self):
-        return [ts for ts in self._series if isinstance(ts, Dividend)]
+        return [ts for ts in self._time_series_single_item if isinstance(ts, Dividend)]
 
     @property
     def _split_series(self):
-        return [ts for ts in self._series if isinstance(ts, Split)]
+        return [ts for ts in self._time_series_single_item if isinstance(ts, Split)]
 
     @property
     def industry_class_instance(self):
-        # TODO: Future integration
+        # NOTE: If we use EOD API maybe we don't need ICB
         """The `industry classification`_ instance.
 
         Is an instance of the class that encodes the industry classification.
@@ -2636,9 +2618,6 @@ class Index(AssetBase):
     # and so would be ignored when the ``IndexEOD.update_all`` method is called.
     static = Column(Boolean, nullable=False)
 
-    #  A short class name for use in naming
-    _name_appendix = "Index"
-
     # The financial_data EOD_GET_METHOD method overridden here
     EOD_GET_METHOD = AssetBase.HISTORY_INSTANCE.get_indices_eod
 
@@ -2780,7 +2759,6 @@ class Index(AssetBase):
     def update_all(cls, session):
         """Update/create all Index securities and their EOD data.
 
-        # TODO: Implement index get metadata and EOD data retrieval and updating.
 
         This is currently a placeholder method to be implemented in future
         development work.
@@ -2790,6 +2768,7 @@ class Index(AssetBase):
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         """
+        # TODO: Implement index get metadata and EOD data retrieval and updating.
         raise NotImplementedError("Index.update_all is not implemented yet.")
 
 
@@ -2879,9 +2858,6 @@ class ExchangeTradeFund(ListedEquity):
 
     # Published Total Expense Ratio of the fund.
     ter = Column(Float, nullable=True)
-
-    #  A short class name for use in naming
-    _name_appendix = "ETF"
 
     # The financial_data METADATA_GET_METHOD method is overridden here
     METADATA_GET_METHOD = AssetBase.METADATA_INSTANCE.get_etfs_meta

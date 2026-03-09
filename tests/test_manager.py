@@ -17,9 +17,6 @@ and the committed ``asset_base`` ORM class instances are committed in the test
 case fixture set up method ``setUp`` after a new blank database has been created
 using the class fixtures set up in ``setUpClass``.
 
-TODO: Describe the design philosophy of the module, especially reoccurring
-methods such as ``factory``, ``from_dataframe``, and lots more.
-
 
 """
 import unittest

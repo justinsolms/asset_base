@@ -62,7 +62,7 @@ package "Assets" {
 
     abstract    AssetBase {
         +currency : Currency
-        -_series : TimeSeriesBase
+        -_time_series_single_item : TimeSeriesBase
     }
 
     abstract    Asset {

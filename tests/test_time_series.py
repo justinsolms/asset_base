@@ -460,7 +460,7 @@ class TestListedEquityEOD(TestBase):
 
         # Access through relationship
         self.assertEqual(equity_eod._base_obj, self.listed_equity)
-        self.assertIn(equity_eod, self.listed_equity._series)
+        self.assertIn(equity_eod, self.listed_equity._time_series_single_item)
 
         # Test typed _eod_series property
         self.assertIn(equity_eod, self.listed_equity._eod_series)
@@ -927,7 +927,7 @@ class TestDividend(TestBase):
 
         # Access through relationship
         self.assertEqual(dividend._base_obj, self.listed_equity)
-        self.assertIn(dividend, self.listed_equity._series)
+        self.assertIn(dividend, self.listed_equity._time_series_single_item)
 
     def test_dividend_works_with_listed_equity_class(self):
         """Test that Dividend can be created with ListedEquity instances."""
@@ -1060,7 +1060,7 @@ class TestSplit(TestBase):
 
         # Access through relationship
         self.assertEqual(split._base_obj, self.listed_equity)
-        self.assertIn(split, self.listed_equity._series)
+        self.assertIn(split, self.listed_equity._time_series_single_item)
 
     def test_split_ratio_calculation(self):
         """Test different split ratios."""

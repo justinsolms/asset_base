@@ -91,7 +91,7 @@ class TimeSeriesBase(Base):
     # Foreign key giving the ``Asset`` class a generic time series capability
     _asset_id = Column(Integer, ForeignKey("asset_base._id"), nullable=False)
     _base_obj = relationship(
-        "AssetBase", back_populates="_series", foreign_keys=[_asset_id])
+        "AssetBase", back_populates="_time_series_single_item", foreign_keys=[_asset_id])
 
     date_stamp = Column(Date, nullable=False)
     # TODO: Consider making this part of the primary keys
