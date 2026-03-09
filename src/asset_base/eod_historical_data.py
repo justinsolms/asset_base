@@ -23,6 +23,14 @@ All tabular data are returned as a ``pandas.DataFrame``.
 The module uses the Python ``requests`` package. This also means we can use
 ``datetime.datetime`` interchangeably date ``str`` objects for dates.
 
+Note
+----
+The eodhistoricaldata.com API is a paid service. To use this module you must
+have an API token which you can get by subscribing to the service. Once you have
+the token, set it as an environment variable with the name
+`EOD_HISTORICAL_DATA_API_TOKEN` and the value of the token. The module will read
+the token from the environment variable and use it in the API calls.
+
 Warning
 -------
 Date fields are kept as they are received as date strings `YYYY-MM-DD`. They are
@@ -32,6 +40,7 @@ the classes that use this class' data to converts date strings.
 
 
 """
+import os
 import asyncio
 import aiohttp
 import sys
@@ -60,6 +69,9 @@ dividend_columns = [
     "unadjustedValue",
     "currency",
 ]
+split_columns = [
+    "split"
+]
 
 
 class APISessionManager:
@@ -67,7 +79,7 @@ class APISessionManager:
 
     # API domain and security token
     _DOMAIN = "eodhistoricaldata.com"
-    _API_TOKEN = "60802039419943.54316578"
+    _API_TOKEN = os.environ.get("EOD_HISTORICAL_DATA_API_TOKEN")
 
     # Limiting connection pool size
     _CONNECTION_LIMIT = 4
@@ -134,10 +146,14 @@ class APISessionManager:
                     logger.debug("Timeout (retry-%s): %s", retry, url)
                     continue  # retry loop
             else:
-                # Success - break out of retry loop
+                # Success
                 logger.debug("Success: %s", response.url)
+                # In the json variable which is a list of dicts, convert any
+                # None to NaN for pandas
+                json = [{k: (v if v is not None else float('nan')) for k, v in row.items()} for row in json]
+                # Convert to DataFrame
                 table = pd.DataFrame(json)
-                break  # out of retry loop
+                break  # Success - break out of retry loop
 
         return table
 
@@ -149,6 +165,7 @@ class Historical(APISessionManager):
     _historical_forex = "/api/eod"
     _historical_index = "/api/eod"
     _historical_dividends = "/api/div"
+    _historical_splits = "/api/splits"
 
     async def _get(self, path, exchange, ticker, from_date=None, to_date=None):
         """Generic getter, daily, EOD historical data table over a date range.
@@ -261,7 +278,51 @@ class Historical(APISessionManager):
             from_date=from_date,
             to_date=to_date,
         )
+
+        # Select only the expected dividend columns
         table = table[dividend_columns]
+
+        # Normalise dtypes to match test and downstream expectations:
+        # - date-like/reference fields stay as generic objects (string/ISO date)
+        # - numeric fields are floats
+        for col in ["declarationDate", "recordDate", "paymentDate", "period", "currency"]:
+            if col in table.columns:
+                table[col] = table[col].astype("object")
+        for col in ["value", "unadjustedValue"]:
+            if col in table.columns:
+                table[col] = table[col].astype("float64")
+
+        return table
+
+    async def get_splits(self, exchange, ticker, from_date=None, to_date=None):
+        """Get daily, EOD historical splits over a date range.
+
+        Parameters
+        ----------
+        exchange : str
+            Short exchange code for the listed security.
+        ticker : str
+            Exchange security ticker code
+        from_date : datetime.date, optional
+            Inclusive start date of historical data. If not provided then the
+            date is set to 1900-01-01.
+        to_date : datetime.date, optional
+            Inclusive end date of historical data. If not provide then the date
+            is set to today.
+
+        Returns
+        -------
+        pandas.DataFrame
+            The daily, EOD historical time-series.
+        """
+        table = await self._get(
+            self._historical_splits,
+            exchange,
+            ticker,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        table = table[split_columns]
 
         return table
 
@@ -745,6 +806,41 @@ class MultiHistorical(object):
         else:
             # The security and date info is in the index
             table = table[dividend_columns]
+
+        # Some DataFrames values are sometimes None - convert only these to
+        # float NaNs
+
+
+
+        return table
+
+    def get_splits(self, symbol_list):
+        """Get historical splits for a list of securities.
+
+        This method uses only the EOD (class Historical) due to incorrect Bulk
+        API call behaviour such as not returning the ``value`` filed and not
+        restricting to only the specified tickers or symbols.
+
+        symbol_list : list of tuples
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown
+
+        """
+        # Use EOD API
+        table = asyncio.run(
+            self._get_eod(Historical._historical_splits, symbol_list)
+        )
+
+        if table.empty:
+            # Produce an empty DataFrame that will pass empty tests downstream
+            table = pd.DataFrame()
+        else:
+            # The security and date info is in the index
+            table = table[split_columns]
 
         return table
 

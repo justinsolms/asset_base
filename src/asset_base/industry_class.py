@@ -19,8 +19,8 @@ if TYPE_CHECKING:
 from sqlalchemy import Column, Integer, String
 from sqlalchemy.orm import relationship
 
-from .common import Base
-from .exceptions import ReconcileError
+from asset_base.common import Base
+from asset_base.exceptions import ReconcileError
 
 
 class IndustryClassICB(Base):
@@ -97,7 +97,7 @@ class IndustryClassICB(Base):
 
     __tablename__ = "industry_class_icb"
 
-    id = Column(Integer, primary_key=True)
+    _id = Column(Integer, primary_key=True)
     """ Primary key."""
 
     # Collection of ListedEquity instances having this instance of

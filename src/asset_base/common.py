@@ -2,9 +2,54 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-""" Declare common object infrastructure
+"""Declare common object infrastructure.
+
+This module provides the foundational classes for the asset_base system,
+including database session management and the base ``Common`` class that
+all entities and assets inherit from.
+
+Factory Method Paradigm
+------------------------
+All classes inheriting from ``Common`` implement a factory method pattern
+with dual-mode behaviour:
+
+**Retrieval Mode** (minimal parameters):
+    When only key identifying parameters are provided, the factory attempts
+    to retrieve an existing instance from the database. If not found, raises
+    ``FactoryError``.
+
+    Example::
+
+        currency = Currency.factory(session, ticker="USD")
+
+**Creation Mode** (full parameters):
+    When all required parameters are provided, the factory retrieves an
+    existing instance if found, or creates a new one if missing.
+
+    Example::
+
+        currency = Currency.factory(
+            session, ticker="USD", name="US Dollar",
+            country_code_list=["US"]
+        )
+
+**Dependency Enforcement**:
+    Higher-level classes call lower-level factories in retrieval mode to
+    enforce that dependencies must pre-exist:
+
+    - ``Currency`` (base level, no dependencies)
+    - ``Domicile`` → requires ``Currency`` to exist
+    - ``Entity``/``Exchange`` → require ``Domicile`` to exist
+
+    This ensures referential integrity and prevents accidental creation of
+    foundational data records.
+
+See Also
+--------
+entity : Entity and related classes with factory methods
+asset : Asset classes with factory methods
 """
-from abc import ABC
+from abc import ABC, ABCMeta, abstractmethod
 
 import sys
 import datetime
@@ -14,8 +59,11 @@ import pandas as pd
 
 from sqlalchemy import create_engine
 from sqlalchemy import Integer, String, Date, Column, UniqueConstraint
-from sqlalchemy.orm import declarative_base, Session
+from sqlalchemy.orm.decl_api import DeclarativeMeta
+from sqlalchemy.orm import declarative_base, Session, declared_attr, object_session
 from sqlalchemy_utils import drop_database, database_exists, create_database  # type: ignore
+
+from asset_base.financial_data import MetaData as FinancialMetaData
 
 from asset_base import get_cache_path
 
@@ -24,11 +72,13 @@ logger = logging.getLogger(__name__)
 # Change logging level here.
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 
-# Create the declarative base
-Base = declarative_base()
 
 class _Session(ABC):
-    """Set up and destroy a database and session.
+    """Set up and destroy a database and session with proper resource management.
+
+    This class provides a context manager interface for safe database session
+    handling. It ensures proper cleanup of database resources and provides
+    methods for session recreation when needed.
 
     Parameters
     ----------
@@ -39,160 +89,328 @@ class _Session(ABC):
         If True, the database will be dropped upon destruction. This is useful
         for testing purposes to ensure a clean state for each test run. If False,
         the database will not be dropped, allowing it to persist across runs.
+    echo : bool, optional
+        If True, enables SQL statement logging. Default is False.
 
+    Examples
+    --------
+    >>> # Preferred usage with context manager
+    >>> with TestSession() as session_manager:
+    >>>     session = session_manager.session
+    >>>     # Use session...
+    >>> # Resources automatically cleaned up
+
+    >>> # Manual management (ensure close() is called)
+    >>> session_manager = TestSession()
+    >>> try:
+    >>>     session = session_manager.session
+    >>>     # Use session...
+    >>> finally:
+    >>>     session_manager.close()
     """
 
-    def __init__(self, url, testing):
+    def __init__(self, url, testing, echo=False):
         """Initialization."""
         self.testing = testing
         self.db_url = url
+        self.echo = echo
+        self.engine = None
+        self.session = None
+        self._closed = False
 
+        try:
+            self._initialize_database()
+        except Exception as e:
+            logger.error(f"Failed to initialize database {self.db_url}: {e}")
+            self.close()  # Cleanup on failure
+            raise
+
+    def _initialize_database(self):
+        """Initialize database engine, create database if needed, and create session."""
         # Create the SQLAlchemy ORM engine.
-        # Set echo=False to disable logging of SQL statements.
-        # Set echo=True to enable logging of SQL statements.
-        self.engine = create_engine(self.db_url, echo=False)  # No logging
+        self.engine = create_engine(self.db_url, echo=self.echo)
         logger.debug(f"Created database engine {self.db_url}")
 
-        # Create all the database tables using the declarative_base defined
-        # above.
-        if not database_exists(self.db_url):
+        # Create database if it doesn't exist (skip for in-memory SQLite)
+        if not self.db_url.startswith("sqlite:///:memory:") and not database_exists(self.db_url):
             logger.debug(f"Database {self.db_url} does not exist. Creating...")
             create_database(self.db_url)
             logger.debug(f"Created database {self.db_url}.")
         else:
-            logger.debug(f"Database {self.db_url} already exists.")
+            logger.debug(f"Database {self.db_url} ready.")
 
+        # Create all tables
         Base.metadata.create_all(self.engine)
         logger.debug(f"Ensuring all tables exist in {self.db_url}.")
 
-        # Create a new session for the database. Set autoflush=True to flush
-        # changes to the database before each query. Set autocommit=False to
-        # disable autocommit mode. This means that changes are not committed to
-        # the database until explicitly called with session.commit(). This is
-        # useful for ensuring that all changes are made in a single transaction,
-        # which can be rolled back if needed. If autoflush is set to False, you
-        # need to call session.flush() before querying the database to ensure
-        # that all changes are flushed to the database. The "autocommit" keyword
-        # is present for backwards compatibility but must remain at its default
-        # value of False.
+        # Create session
         self.session = Session(self.engine, autoflush=True, autocommit=False)
         logger.debug(f"Opened database session {self.db_url}")
 
-    def __del__(self):
-        """Destruction.
+    def __enter__(self):
+        """Context manager entry."""
+        return self
 
-        This method is called when the object is about to be destroyed. This
-        will ensure that the database session and engine are properly closed and
-        disposed of.
-
-
-        If the `testing` flag is set to True (See class testing parameter), the
-        database will be dropped to ensure a clean state for the next test run.
-        If False, the database will not be dropped, allowing it to persist
-        across runs.
-        """
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit with proper cleanup."""
+        self.close()
         if self.testing:
-            logger.debug(f"Deleting database {self.db_url} because we are testing.")
-            self.close(drop=True)
-        else:
-            self.close(drop=False)
+            self.drop_database()
 
-    def close(self, drop=False):
+    def new_session(self):
+        """Create a new session, closing the current one if it exists.
+
+        This is useful when you need a fresh session after operations that
+        might have left the session in an inconsistent state.
+
+        Returns
+        -------
+        sqlalchemy.orm.Session
+            A new database session
+        """
+        if self._closed:
+            raise RuntimeError("Cannot create new session - SessionManager is closed")
+
+        if self.session:
+            self.session.close()
+
+        self.session = Session(self.engine, autoflush=True, autocommit=False)
+        logger.debug(f"Created new session for {self.db_url}")
+        return self.session
+
+    def __del__(self):
+        """Destructor - provides backup cleanup but should not be relied upon.
+
+        Warning: __del__ is unreliable in Python. Use context manager or explicit
+        close() calls instead. This is only a safety net.
+        """
+        if not self._closed:
+            logger.warning(f"SessionManager for {self.db_url} was not properly closed. "
+                         "Use context manager or explicit close() for reliable cleanup.")
+            try:
+                self.close()
+                if self.testing:
+                    self.drop_database()
+            except Exception as e:
+                logger.error(f"Error during cleanup in __del__: {e}")
+
+    def close(self):
         """Close the database session and dispose of the engine.
 
-        Parameters
-        ----------
-        drop : bool, optional
-            If True, the database will be dropped. This is useful for testing
-            purposes to ensure a clean state for the next test run. If False,
-            the database will not be dropped, allowing it to persist across runs.
-
+        This method is idempotent - it can be called multiple times safely.
+        After calling this method, the SessionManager should not be used further.
         """
-        # Delete database session and engine only if the database exists. This
-        # guard is important as the database may not exist when __del__ is
-        # called, due to previous calls to close() or when testing.
-        if not database_exists(self.db_url):
-            logger.debug(f"Database {self.db_url} does not exist. Nothing to delete.")
+        if self._closed:
+            return  # Already closed
+
+        try:
+            # Close session if it exists
+            if hasattr(self, 'session') and self.session is not None:
+                try:
+                    self.session.close()
+                    logger.debug(f"Closed session for {self.db_url}.")
+                except Exception as e:
+                    logger.error(f"Error closing session for {self.db_url}: {e}")
+                finally:
+                    self.session = None
+
+            # Dispose of engine if it exists
+            if hasattr(self, 'engine') and self.engine is not None:
+                try:
+                    self.engine.dispose()
+                    logger.debug(f"Disposed of engine for {self.db_url}.")
+                except Exception as e:
+                    logger.error(f"Error disposing engine for {self.db_url}: {e}")
+                finally:
+                    self.engine = None
+
+        finally:
+            self._closed = True
+
+    def drop_database(self):
+        """Drop the database if it exists.
+
+        Warning: This permanently destroys all data in the database.
+        Only use for testing or when you're certain you want to delete everything.
+        """
+        if self.db_url.startswith("sqlite:///:memory:"):
+            logger.debug("In-memory database will be dropped automatically.")
             return
 
-        # If the session exists, close it and dispose of the engine.
-        if hasattr(self, 'session') and self.session is not None:
-            # Close the session to release any resources it holds. This is
-            # important to ensure that the session is properly cleaned up and
-            # does not hold onto any database connections or resources. This is
-            # especially important in a testing environment where the database
-            # may be dropped and recreated frequently. Closing the session will
-            # also ensure that any pending changes are flushed to the database
-            # before the session is closed. This is important to ensure that any
-            # changes made to the database are properly saved before the session
-            # is closed.
-            self.session.close()
-            del self.session  # Delete the session attribute
-            logger.debug(f"Closed session for {self.db_url}.")
-            # Dispose of the engine to release any resources it holds.
-            self.engine.dispose()
-            del self.engine  # Delete the engine attribute
-            logger.debug(f"Disposed of engine for {self.db_url}.")
+        try:
+            if database_exists(self.db_url):
+                drop_database(self.db_url)
+                logger.debug(f"Dropped database {self.db_url}.")
+        except Exception as e:
+            logger.error(f"Error dropping database {self.db_url}: {e}")
+            raise
 
-        if drop is True:
-            # If we are not testing, just close the session and engine.
-            drop_database(self.db_url)
-            logger.debug(f"Dropped database for {self.db_url}.")
+    @property
+    def is_closed(self):
+        """Check if the session manager has been closed."""
+        return self._closed
 
 
 class TestSession(_Session):
-    """Set up an `in-memory` test database and session."""
+    """Set up an in-memory test database and session for testing.
 
-    _URL = "sqlite://"
+    This class creates a SQLite in-memory database that exists only for the
+    duration of the session. It's automatically cleaned up when the session
+    is closed, making it ideal for unit tests that need isolation.
 
-    def __init__(self):
-        # Default is testing is True
-        super().__init__(self._URL, testing=True)
+    The session is immediately available as .session attribute for use with
+    unittest setUp/tearDown patterns.
+
+    Parameters
+    ----------
+    echo : bool, optional
+        If True, enables SQL statement logging for debugging. Default is False.
+
+    Examples
+    --------
+    >>> # For unittest setUp/tearDown pattern
+    >>> def setUp(self):
+    >>>     self.test_session = TestSession()
+    >>>     self.session = self.test_session.session
+    >>>
+    >>> def tearDown(self):
+    >>>     del self.test_session  # Automatic cleanup
+    >>>
+    >>> # For fresh session when needed (e.g., after deletes)
+    >>> def test_something(self):
+    >>>     # ... do some operations ...
+    >>>     self.session = self.test_session.new_session()  # Fresh session
+    """
+
+    _URL = "sqlite://"  # In-memory SQLite database
+
+    def __init__(self, echo=False):
+        # Always testing=True for test sessions since in-memory DB is ephemeral
+        super().__init__(self._URL, testing=True, echo=echo)
 
 
 class SQLiteSession(_Session):
-    """Set up an `in-memory` test database and session."""
+    """Set up a file-based SQLite database and session.
+
+    This creates a persistent SQLite database file that survives across
+    application runs. Useful for development and production environments.
+
+    Parameters
+    ----------
+    testing : bool, optional
+        If True, creates a test database that will be dropped when closed.
+        If False (default), creates a persistent database. Default is False.
+    echo : bool, optional
+        If True, enables SQL statement logging for debugging. Default is False.
+
+    Examples
+    --------
+    >>> # Production usage - persistent database
+    >>> with SQLiteSession() as session_manager:
+    >>>     session = session_manager.session
+    >>>     # Work with persistent data...
+
+    >>> # Testing usage - temporary database
+    >>> with SQLiteSession(testing=True) as session_manager:
+    >>>     session = session_manager.session
+    >>>     # Database will be deleted on exit...
+    """
 
     _DB_NAME = "asset_base"
 
-    def __init__(self, testing=False):
+    def __init__(self, testing=False, echo=False):
         # Construct SQLite file name with path expansion for a URL
-        self._db_name = "%s.db" % self._DB_NAME
+        self._db_name = f"{self._DB_NAME}.db"
 
-        # Put files in a `cache`` folder under the `var` path scheme.
+        # Put files in a `cache` folder under the `var` path scheme.
         db_path = get_cache_path(self._db_name, testing=testing)
-        db_url = "sqlite:///" + db_path
+        db_url = f"sqlite:///{db_path}"
 
-        super().__init__(db_url, testing=testing)
+        super().__init__(db_url, testing=testing, echo=echo)
 
 
+class UniqueNameMixin(object):
+    """Mixin to ensure uniqueness of names within each subclass."""
+
+    _id = Column(Integer, primary_key=True, autoincrement=True)
+    _discriminator = Column(String(50))
+    name = Column(String(256), nullable=False)
+
+    __mapper_args__ = { "polymorphic_on": _discriminator, }
+
+    @declared_attr
+    def __table_args__(cls):
+        # Applies to every mapped subclass that includes this mixin
+        return (UniqueConstraint("_discriminator", "name"),)
+
+
+class CombinedMeta(DeclarativeMeta, ABCMeta):
+    """Create a combined metaclass inheriting from DeclarativeMeta and ABCMeta.
+
+    This avoids metaclass conflicts when using abstract base classes with
+    SQLAlchemy's declarative base such as:
+
+        `TypeError: metaclass conflict: the metaclass of a derived class must be
+        a (non-strict) subclass of the metaclasses of all its bases`
+
+    Note
+    ----
+    Why This Works is when Python sees class Common(Base, ABC, ...), it needs to
+    determine the metaclass:
+
+    - Check Base → uses CombinedMeta
+    - Check ABC → uses ABCMeta
+    - Verify: Is CombinedMeta a subclass of ABCMeta? → Yes! ✓
+
+    Since CombinedMeta inherits from ABCMeta (and DeclarativeMeta), there's no
+    conflict. Python uses CombinedMeta for Common, which gives you:
+
+    - SQLAlchemy's automatic table mapping behaviour
+    - Python's abstract base class enforcement
+    - All functionality from both!
+
+    This is a common pattern when working with libraries that use custom
+    metaclasses alongside Python's built-in abstract classes.
+    """
+    pass
+
+
+# Create the declarative base with the combined metaclass
+Base = declarative_base(metaclass=CombinedMeta)
 
 
 class Common(Base):
-    """Common object."""
+    """Common object.
+
+    This is the common base class Assets and Entities. As they and their child
+    classes inherit from this class, they will share the common ``id`` and
+    ``name`` attributes forcing uniqueness of id and name across both Assets and
+    Entities which is a primary feature of this financial database system
+    allowing entities to own assets.
+
+    """
 
     __tablename__ = "common"
 
+    # Primary key.
+    _id = Column(Integer, primary_key=True, autoincrement=True)
     # Polymorphism discriminator.
     _discriminator = Column(String(32))
+    # Common name
+    name = Column(String(256), nullable=False)
+
+    # Each child class must ensure uniqueness of name across all instances.
+    __table_args__ = (UniqueConstraint("_discriminator", "name"),)
 
     __mapper_args__ = {
-        "polymorphic_identity": __tablename__,
         "polymorphic_on": _discriminator,
+        # no polymorphic_identity here; this class is effectively abstract
     }
 
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    """ Primary key."""
-
-    __table_args__ = (UniqueConstraint("_discriminator", "id"),)
-
-    name = Column(String(256), nullable=False)
-    """str: Entity name."""
-
-    key_code_name = "key_code"
+    KEY_CODE_LABEL = "key_code"
     """str: The name to attach to the ``key_code`` attribute (@property method).
     Override in  sub-classes. This is used for example as the column name in
-    tables of key codes."""
+    tables of key codes when joining."""
 
     # Entity dates.
     date_create = Column(Date, nullable=False)
@@ -201,58 +419,128 @@ class Common(Base):
     date_mod_stamp = Column(Date, nullable=True)
     """sqlalchemy.DateTime: Modification date stamp. May be in the past."""
 
-    def __init__(self, name, **kwargs):
+    # The financial_data module metadata getter method provider instance for all
+    # classes inheriting from Common.
+    METADATA_INSTANCE = FinancialMetaData()
+
+    # The metadata get method should be overridden in child classes to return
+    # the appropriate metadata get method for that class. Use the METADATA
+    # instance.
+    METADATA_GET_METHOD = None
+
+    def __init__(self, name):
         """Instance initialization."""
         self.name = name
 
         # Record creation date
         self.date_create = datetime.datetime.today()
 
+    @abstractmethod
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
-        return "{} - {}".format(self.id, self.name)
+        pass
 
+    @abstractmethod
     def __repr__(self):
         """Return the official string output."""
-        return '{}(name="{}", id={!r})'.format(self.__class__.__name__, self.name, self.id)
-
-    @classmethod
-    def _class_name(cls):
-        return cls.__name__
+        pass
 
     @property
+    @abstractmethod
     def key_code(self):
         """A key string unique to the class instance."""
-        return "{}.{}".format(self.id, self.name)
+        pass
 
     @property
+    @abstractmethod
     def identity_code(self):
         """A human readable string unique to the class instance."""
-        return "{}.{}".format(self.id, self.name)
+        pass
+
+    @property
+    @abstractmethod
+    def long_name(self):
+        """str: Return the long name string."""
+        pass
+
+    @classmethod
+    @abstractmethod
+    def factory(cls, session, **kwargs):
+        """Manufacture/retrieve an instance from the given parameters.
+
+        Factory Method Behaviour
+        ------------------------
+        This abstract method defines the factory pattern used throughout the
+        asset_base system. Implementations follow a dual-mode paradigm:
+
+        **Retrieval Mode** (minimal parameters):
+            Provide only key identifying parameters. Returns existing instance
+            or raises ``FactoryError`` if not found.
+
+        **Creation Mode** (full parameters):
+            Provide all required parameters. Returns existing instance if found,
+            creates new instance if missing.
+
+        The ``create`` parameter (when present) can explicitly control behaviour:
+            - ``create=False``: Force retrieval mode, raise error if not found
+            - ``create=True``: Allow creation if instance doesn't exist (default)
+
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            The database session.
+        **kwargs
+            Class-specific parameters. See concrete implementations for details.
+
+        Returns
+        -------
+        Common
+            The single instance that is in the session.
+
+        Raises
+        ------
+        FactoryError
+            If instance not found in retrieval mode or if required dependencies
+            don't exist.
+        ReconcileError
+            If provided parameters conflict with existing instance data.
+
+        See Also
+        --------
+        Currency.factory : Base-level factory with no dependencies
+        Domicile.factory : Requires Currency to exist
+        Entity.factory : Requires Domicile to exist
+        """
+        pass
+
+    @property
+    def class_name(self):
+        """Single word class name (not the full module path)."""
+        return self.__class__.__name__
 
     @classmethod
     def key_code_id_table(cls, session):
-        """A table of all instance's ``Entity.id`` against ``key_code``.
+        """A table of all instance's ``Common._id`` against ``key_code``.
 
         This table is useful for translating any other party's unique entity
-        code keys to ``Entity.id`` numbers, especially if the other party names
+        code keys to ``Common._id`` numbers, especially if the other party names
         their column the same as the ``entity_code_name`` attribute
 
         Returns
         -------
         pandas.DataFrame
-            The key code column name shall be the class' ``key_code_name``
-            attribute.
+            One row per instance in the database with two columns:
+            - The first column shall be named ``id`` and contain the instance's
+              ``Common._id`` number.
+            - The second column shall be named after the class's
+              ``KEY_CODE_LABEL`` attribute and contain the instance's
+              ``key_code`` property value.
         """
         instances_list = session.query(cls).all()
         return pd.DataFrame(
-            [(item.id, item.key_code) for item in instances_list],
-            columns=["id", cls.key_code_name],
+            [(item._id, item.key_code) for item in instances_list],
+            columns=["id", cls.KEY_CODE_LABEL],
         )
-
-    @classmethod
-    def factory(cls, session, **kwargs):
-        raise NotImplementedError("This method must be overridden.")
 
     @classmethod
     def from_data_frame(cls, session, data_frame):
@@ -274,6 +562,9 @@ class Common(Base):
             return
 
         for i, row in data_frame.iterrows():
+            # Call class factory method. Each class factory method should be
+            # designed to handle creation of instances from the provided row
+            # data.
             cls.factory(session, **row)
 
     @classmethod
@@ -304,25 +595,3 @@ class Common(Base):
 
         return data_frame
 
-    @classmethod
-    def update_all(cls, session, get_method, **kwargs):
-        """Update/create all the objects in the asset_base session.
-
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        get_method : class method
-            The method that returns a ``pandas.DataFrame`` with columns of the
-            same name as all the `factory` method arguments, with the exception
-            of the `session` argument.
-        kwargs : key work arguments
-            Any parameters are passed to the ``get_method``.
-
-        No object shall be destroyed, only updated, or missing object created.
-
-        """
-        # Get all financial data
-        data_frame = get_method(**kwargs)
-        # Bulk add/update data (uses the factory method)
-        cls.from_data_frame(session, data_frame)

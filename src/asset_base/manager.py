@@ -53,7 +53,7 @@ is why the relationships and hierarchies matter.
 
 It is part of the To-Do list to bring natural entities (natural persons) into
 this view. However, it may be practical to keep them in a separate schemas with
-the ``Asset.id``'s being the glue. Such a scheme is used with another database
+the ``Asset._id``'s being the glue. Such a scheme is used with another database
 module, the fund ``submissions``. module.
 
 See also
@@ -61,9 +61,7 @@ See also
 .submissions
 
 """
-import os
 import logging
-import yaml
 import datetime
 import pandas as pd
 
@@ -71,22 +69,14 @@ from sqlalchemy import String
 from sqlalchemy import Column
 from sqlalchemy import MetaData as SQLAlchemyMetaData
 
-from sqlalchemy.orm.exc import NoResultFound
+from sqlalchemy.orm.exc import NoResultFound, MultipleResultsFound
 
-from asset_base import get_config_path
-
-from .exceptions import NotSetUp, TimeSeriesNoData
-from .financial_data import Dump, History, MetaData, Static
-from .common import Base, SQLiteSession, TestSession
-from .entity import Domicile, Exchange
-from .asset import (
-    Asset,
-    ExchangeTradeFund,
-    Forex,
-    ListedEquity,
-    Currency,
-    Cash,
-)
+from asset_base.exceptions import NotSetUp, TimeSeriesNoData, EODSeriesNoData
+from asset_base.financial_data import Dump, History, MetaData, Static
+from asset_base.common import Base, SQLiteSession, TestSession
+from asset_base.entity import Domicile, Exchange
+from asset_base.asset import Asset, ExchangeTradeFund, Forex, ListedEquity, Currency, Cash, Listed
+from asset_base.time_series_processor import TimeSeriesProcessor
 
 
 # Get module-named logger.
@@ -135,7 +125,7 @@ def substitute_security_labels(data_frame, identifier, inplace=False, labels_onl
     """
     # Pick column label identifier.
     if identifier == "id":
-        columns = [s.id for s in data_frame.columns]
+        columns = [s._id for s in data_frame.columns]
     elif identifier == "identity_code":
         # Translation of column id to codes.
         columns = [s.identity_code for s in data_frame.columns]
@@ -236,6 +226,7 @@ class ManagerBase(object):
 
     # These must only be `Asset` polymorphs.
     classes_to_dump = [ListedEquity]
+    # TODO: Make a ListedEquityBase parent with ListedEquity next to ExchangeTradeFund child classes. The idea is to use only the leaves orf a hierarchical tree
 
     def __init__(self, dialect="sqlite", testing=False):
         """Instance initialization.
@@ -277,7 +268,16 @@ class ManagerBase(object):
 
         """
         if hasattr(self, "session_obj") and self.session_obj is not None:
-            self.session_obj.close(drop=drop)
+            self.session_obj.close()
+            if drop is True:
+                # Delegate dropping of the underlying database to the
+                # session manager, which knows how to tear down its
+                # specific backend (SQLite file, in-memory DB, etc.).
+                #
+                # NOTE: Manager itself does not implement drop_database;
+                # that responsibility lives on the Session wrappers in
+                # common.py (TestSession/SQLiteSession via _Session).
+                self.session_obj.drop_database()
             del self.session_obj
         if hasattr(self, "session"):
             # Also delete the _make_session convenience attribute
@@ -305,8 +305,7 @@ class ManagerBase(object):
             raise ex
 
     def set_up(
-        self, reuse=True, update=True, _test_isin_list=None, _test_forex_list=None
-    ):
+        self, reuse=True, update=True):
         """Set up the database for operations.
 
         Parameters
@@ -347,15 +346,12 @@ class ManagerBase(object):
         if reuse:
             self.reuse()
 
+        # Check for newer data and update the database with API data.
+        if update:
+            self.update_all()
+
         # First commit. The update method call below will commit again
         self.commit()
-
-        # Update all from API feeds
-        # TODO: Remove this. Updating must be a separate call tio update() - note the knockon changes to all tests.
-        if update is True:
-            self.update(
-                _test_isin_list=_test_isin_list, _test_forex_list=_test_forex_list
-            )
 
     def tear_down(self, delete_dump_data=False):
         """Tear down the environment for operation of the module.
@@ -386,7 +382,7 @@ class ManagerBase(object):
         # Delete database
         self.close(drop=True)
 
-    def update(self, _test_isin_list=None, _test_forex_list=None):
+    def update_all(self):
         """Update all non-static data.
 
         Uses the ``.financial_data`` module as the data source.
@@ -399,26 +395,12 @@ class ManagerBase(object):
                 "Database has not been set up. Please call set_up() first."
             )
 
-        # Check for newer securities data and update the database
-        fundamentals = MetaData()
-        history = History()
-        # NOTE: Future security classes place their update_all() methods here.
-        # NOTE: ListedEquity.update_all() here
-        ExchangeTradeFund.update_all(
-            self.session,
-            get_meta_method=fundamentals.get_etfs,
-            get_eod_method=history.get_eod,
-            get_dividends_method=history.get_dividends,
-            _test_isin_list=_test_isin_list,  # Hidden arg. For testing only!
-        )
+        # TODO: Future security classes place their update_all() methods here.
+        ExchangeTradeFund.update_all(self.session)
 
         # Forex update - based on existing currencies and built in list
         # Forex.foreign_currencies
-        Forex.update_all(
-            self.session,
-            get_forex_method=history.get_forex,
-            _test_forex_list=_test_forex_list,  # Hidden arg. For testing only!
-        )
+        Forex.update_all(self.session)
 
         # TODO: Include Index.update_all
 
@@ -426,50 +408,68 @@ class ManagerBase(object):
         self.commit()
 
     def dump(self):
-        """Dump re-usable content to disk files.
+        """Dump reusable market data to disk files.
 
-        The purpose of the dump files is to provide a convenience reusable data
-        source for initialising the ``asset_base`` database without
-        necessitating a lengthy download of data from the data feeds (via the
-        ``financial_data` module). Instead time may be save as most of the
-        previously dumped data should be reused and only a small fraction of new
-        data download form feeds.
+        This method serialises the classes listed in ``classes_to_dump`` using
+        their class-level :meth:`dump` implementations (for example
+        :meth:`ListedEquity.dump`). The resulting files can later be consumed
+        by :meth:`reuse` to rebuild non-static market data without refetching
+        it from upstream data feeds.
 
-        The dump shall include data from the classes:
-        - ListedEquity (and its time series data: ListedEOD and Dividend)
+        By design, *static* reference data is **not** dumped here. The
+        following are always recreated from the built-in static files in
+        :mod:`financial_data` and must exist before reuse is attempted:
 
-        This excludes the following data items which are always available as
-        static data through the ``financial_data.Static`` class or as
-        derived data form the static data:
         - Currency
         - Domicile
         - Exchange
         - Cash
+
+        Currently ``classes_to_dump`` includes only ``ListedEquity`` (and its
+        associated time series data: ``ListedEOD``, ``Dividend`` and
+        ``Split``).
         """
         for cls in self.classes_to_dump:
             cls.dump(self.session, self.dumper)
 
     def reuse(self):
-        # TODO: FInd and make clear ho EOD and Dividend data is reused.
-        # TODO: Reuse FOREX data
-        """Reuse dumped data as a database initialization resource.
+        """Reuse previously dumped market data as a database initialisation resource.
+
+        For each class in ``classes_to_dump`` this method calls the
+        corresponding class-level :meth:`reuse`. Static reference tables (such
+        as currencies, domiciles, exchanges and cash) are **not** populated
+        here and must already exist in the database, typically via
+        :meth:`set_up`.
+
+        ``reuse`` is primarily intended to speed up creation of a new database
+        by avoiding repeated API downloads; it reconstructs objects based on
+        business identifiers (for example ISIN) rather than preserving primary
+        key values from the database that produced the dump.
 
         See also
         --------
         .dump
         """
         for cls in self.classes_to_dump:
+            # Use uninstantiated class name for logging
+            class_name = cls.__name__
             try:
                 cls.reuse(self.session, self.dumper)
             except FileNotFoundError:
                 logger.info(
-                    f"Dump data not found to reuse for class {cls._class_name()}.")
+                    f"Dump data not found to reuse for class {class_name}.")
             else:
                 logger.info(
-                    f"Reused dumped data for {cls._class_name()}")
+                    f"Reused dumped data for {class_name}")
 
     def delete_dumps(self):
-        """Delete dumped data folder."""
+        """Delete all dump files while keeping the dump folder.
+
+        This is a convenience wrapper around :meth:`Dump.delete`. It removes
+        all dumped DataFrame files but intentionally leaves the underlying dump
+        directory in place so that future dump operations can recreate files
+        without needing to recreate the directory structure.
+        """
         self.dumper.delete()
 
     def get_meta(self):
@@ -483,209 +483,7 @@ class ManagerBase(object):
         data = [(str(item.name), str(item.value)) for item in self.session.query(Meta)]
         return dict(data)
 
-    def get_dict(self, id):
-        """Get a dictionary of assets.
 
-        The returned dictionary items will be polymorphic instances of the
-        assets specified by the list of asset id numbers.
-
-        Parameters
-        ----------
-        id : list
-            A list if database session `Asset.id` id numbers of the required
-            database assets. See `.Asset`.
-
-        Return
-        ------
-        dict
-            A dictionary of assets with the specified id numbers. The id
-            numbers are the keys of the dictionary.
-        """
-        if isinstance(id, list):
-            # Get the list of matching funds and construct a new list.
-            entities = self.session.query(Asset).filter(Asset.id.in_(id))
-            return dict([(asset.id, asset) for asset in entities])
-        else:
-            raise ValueError(
-                "Argument `id` must be a list of asset id numbers."
-            )
-
-    def time_series(
-        self,
-        asset_list,
-        series="price",
-        price_item="close",
-        return_type="price",
-        identifier="asset",
-        tidy=True,
-        date_index=None,
-    ):
-        """Return historic price or return, time-series for a list of assets.
-
-        TODO: Remove `series` argument and use to get price series only
-
-        Note
-        ----
-        The values of `Cash` entities shall always be equivalent to a price of
-        1.0 for all dates in the date range.
-
-        Parameters
-        ----------
-        asset_list : list of Asset (or polymorph class) instances
-            A list of securities or assets for which time series are required.
-        series : str, optional
-            Which security series:
-
-            'price':
-                The security's periodic trade price.
-            'dividend':
-                The annualized distribution yield.
-            'volume':
-                The volume of trade (total units of trade) in the period.
-        price_item : str, optional
-            The specific item of price. Only valid for the `price` type:
-
-            'close' :
-                The period's close price.
-            'open' :
-                The period's open price.
-            'low' :
-                The period's lowest price.
-            'high' :
-                The period's highest price.
-        return_type : str, optional
-            The specific view of the price series:
-
-            'price':
-                The original price series.
-            'return':
-                The price period-on-period return series.
-            'total_return':
-                The price period-on-period return series including the extra
-                yield due to distribution paid.
-            'total_price':
-                The price period-on-period price series inclusive of the extra
-                yield due to dividends paid. The total_price series start value
-                is the same as the price start value.
-        identifier : str, optional
-            By default the column labels of the returned ``pandas.DataFrame``
-            are ``asset.Asset`` (or polymorph child instances) provided by in
-            the ``asset_list`` argument. With the `identifier` argument one can
-            specify if these column labels are to be substituted:
-
-            'asset':
-                The default ``asset.Asset`` (or polymorph child instances)
-                provided by in the `asset_list` argument.
-            'id':
-                The database table `id` column entry.
-            'isin':
-                The standard security ISO 6166 ISIN number.
-            'ticker':
-                The exchange ticker
-            'identify_code':
-                That which will be returned by the ``asset.Asset.identity_code``
-                attribute.
-        tidy : bool, optional
-            When ``True`` then prices are tidied up by removing outliers.
-        date_index : pandas.DatetimeIndex, optional
-            If there are non-cash securities specified in the `asset_list` then
-            this argument is overridden by the union of the date index (the
-            `pandas.DatetimeIndex`) of all the non-`Cash` security time-series.
-            If the `asset_list` argument specifies only `Cash` securities then
-            this data range is not optional and is required. It could be
-            provided by the the index of another `time_series` result. See
-            documentation on ``Cash.time_series`` for the explanation.
-
-        Returns
-        -------
-        pandas.DataFrame
-            A column of data for each  ``.asset.Asset`` instance (or polymorph)
-            in the ``asset-list`` argument. The column labels are the
-            ``.asset.Asset`` instances.
-
-        Raises
-        ------
-        ValueError
-            Argument id_list may not be empty.
-        Exception
-            Expected non-cash securities in asset_list.
-
-        See also
-        --------
-        Cash.time_series
-
-        """
-        if len(asset_list) == 0:
-            raise ValueError("Argument `asset_list` may not be empty.")
-
-        # Get a list of cash securities
-        cash_list = [item for item in asset_list if isinstance(item, Cash)]
-
-        # Get a list of non-cash securities
-        non_cash_list = [asset for asset in asset_list if not isinstance(asset, Cash)]
-
-        #  A date-index must be provided to specify the cash data date range if
-        #  there are no non-cash securities from which the date range may be
-        #  derived.
-        if len(non_cash_list) == 0 and date_index is None:
-            raise ValueError(
-                "Expected non-cash securities in asset_list or a date_index "
-                "argument to specify the date range for the cash securities."
-            )
-
-        data_list = list()
-        if len(non_cash_list) > 0:
-            # Create a pandas.DataFrame of non-cash securities
-            data_list = list()
-            # For non-Cash entities
-            for asset in non_cash_list:
-                # Slip and warn for absent time-series.
-                try:
-                    data = asset.time_series(series, price_item, return_type)
-                except TimeSeriesNoData as ex:
-                    logger.warning(ex)
-                else:
-                    data_list.append(data)
-            data = pd.concat(data_list, axis=1, sort=True)
-            # Any data_index  argument is ignored as non-cash security data date
-            # range takes precedence.
-            data_list = [data]  # List for appending Cash securities to.
-
-        # For all non-Cash entities. We need the previous data DatetimeIndex to
-        # construct Cash time series. See docs.
-        date_index = data.index
-        for asset in cash_list:
-            data = asset.time_series(date_index)
-            data_list.append(data)
-        # Concatenate the separate data in the list into one pandas.DataFrame.
-        data = pd.concat(data_list, axis=1, sort=True)
-
-        # Assure ascending date index
-        data.sort_index(inplace=True)
-
-        # Warning if a dataframe has mixed currency time series.
-        if len(set(s.currency for s in data.columns)) > 1:
-            logger.warning("The DataFrame data is of mixed currencies.")
-
-        # Replace column labels as specified by the identifier arg
-        # TODO: Replace with a match statement
-        if identifier == "asset":
-            id_dict = {}
-        elif identifier == "id":
-            id_dict = {asset: asset.id for asset in asset_list}
-        elif identifier == "isin":
-            id_dict = {asset: asset.isin for asset in asset_list}
-        elif identifier == "ticker":
-            id_dict = {asset: asset.ticker for asset in asset_list}
-        elif identifier == "identity_code":
-            id_dict = {asset: asset.identity_code for asset in asset_list}
-        else:
-            raise ValueError(f"Unexpected `identifier` argument `{identifier}`.")
-        data = data.rename(columns=id_dict)
-        data.columns.name = identifier
-
-        # Return all time series in one pandas.DataFrame.
-        return data
 
     def to_common_currency(self, data_frame, currency_ticker):
         """Transform price-like time-series to a common currency.
@@ -695,6 +493,7 @@ class ManagerBase(object):
         data_frame : pandas.DataFrame
             An asset price data frame derived from the ``time_series``
             method. Must be price series data. Thus valid
+        # FIXME: This method need the Asset polymorph objects and time_series() no longer exists.
         currency_ticker : str(3), optional
             ISO 4217 3-letter currency code of the desired price currency.
 
@@ -755,8 +554,186 @@ class ManagerBase(object):
     # TODO: Add a method to transform and force a single currency within a
     # dataframe of mixed currency time series.
 
-    # TODO: Add a method to flag mixed currencies==True that a dataframe has
-    # mixed currency time series.
+    def get_time_series_processor(
+        self, asset_list, cash_currency_ticker=None, price_item="close"):
+        """Get a time series processor for a list of assets.
+
+        Parameters
+        ----------
+        asset_list : list of asset_base.asset.AssetBase
+            List of ``Asset`` (or polymorph) instances.
+        cash_currency_ticker : str, optional
+            ISO 4217 3-letter currency ticker for the single cash asset to
+            include. There must be exactly none or one ``Cash`` asset in this
+            currency and its currency must match that of all assets referenced
+            in the ``asset_list``. If not provided then no cash asset is
+            included.
+        price_item : str, optional
+            The price item to use for listed assets. These could be 'open',
+            'close', 'high' or 'low' depending on the available data. Default is
+            'close'.
+
+        Returns
+        -------
+        TimeSeriesProcessor
+            A TimeSeriesProcessor instance with time-series data loaded for all
+            assets referenced in ``asset_list`` and the cash asset
+            if specified by ``cash_currency_ticker``. The time-series data is
+            not yet processed or adjusted for corporate actions. This is left to
+            the caller to run the full processing pipeline via
+            ``TimeSeriesProcessor.process()`` method.
+
+        Notes
+        -----
+                - Assets with missing time-series data are skipped and a warning is
+                    logged and the method proceeds with the
+          remaining assets. If no assets with usable time-series data are found
+          then a ``TimeSeriesNoData`` exception is raised.
+        - All listed assets and the cash asset must share the same price
+            currency. Currently mixed-currency portfolios are rejected with a
+            ``ValueError``.
+        - The returned TimeSeriesProcessor performs validation, corporate action
+          adjustment and resampling on a per-asset basis.
+
+        """
+        if not asset_list:
+            raise ValueError("Argument `asset_list` may not be empty.")
+
+        # Enforce common currency across all assets (listed + cash)
+        currency_tickers = {asset.currency.ticker for asset in asset_list}
+        if len(currency_tickers) != 1:
+            raise ValueError(
+                f"Mixed asset currencies detected {currency_tickers}. "
+                "All listed assets and the cash asset must share the "
+                "same currency in the current implementation."
+            )
+
+        # Resolve the unique Cash asset for the requested currency if a
+        # cash_currency_ticker is provided. If not provided then no cash asset
+        # is included.
+        if cash_currency_ticker is not None:
+            try:
+                cash_currency = (
+                    self.session.query(Currency)
+                    .filter(Currency.ticker == cash_currency_ticker)
+                    .one()
+                )
+            except NoResultFound:
+                raise TimeSeriesNoData(
+                    f"No Currency found for ticker {cash_currency_ticker!r}. "
+                    "Ensure static currency data is loaded via Manager.set_up()."
+                )
+            else:
+                cash_assets = (
+                    self.session.query(Cash)
+                    .filter(Cash._currency_id == cash_currency._id)
+                    .all()
+                )
+                if len(cash_assets) == 0:
+                    raise TimeSeriesNoData(
+                        "No Cash asset found for currency ticker "
+                        f"{cash_currency_ticker!r}. Exactly one Cash asset is required."
+                    )
+                if len(cash_assets) > 1:
+                    raise TimeSeriesNoData(
+                        "Multiple Cash assets found for currency ticker "
+                        f"{cash_currency_ticker!r}. Exactly one Cash asset is required."
+                    )
+                cash_asset = cash_assets[0]
+
+            # Enforce common currency between cash asset and listed assets
+            currency_tickers.add(cash_asset.currency.ticker)
+            if len(currency_tickers) != 1:
+                # TODO: In a future implementation we may wish to allow mixed-currency portfolios and perform currency transformation to a common currency within the time series processor. For now we reject mixed-currency portfolios with an error.
+                raise ValueError(
+                    f"Mixed asset currencies detected {currency_tickers}. "
+                    "All listed assets and the cash asset must share the "
+                    "same currency in the current implementation."
+                )
+        else:
+            cash_asset = None
+
+        # Build TimeSeriesProcessor objects for listed assets, handling
+        # missing time-series data on a per-asset basis.
+        tsp_list = []
+        for asset in asset_list:
+            try:
+                tsp = asset.get_time_series_processor(price_item=price_item)
+            except EODSeriesNoData:
+                logger.warning(
+                    "Missing EOD series for asset %s (identity_code=%s). "
+                    "Skipping this asset.",
+                    asset,
+                    asset.identity_code,
+                )
+                continue
+            else:
+                tsp_list.append(tsp)
+        if not tsp_list:
+            raise TimeSeriesNoData(
+                "No usable listed assets with time-series data for the "
+                "provided asset_list."
+            )
+
+        # Combine all listed TimeSeriesProcessors and derive the common
+        # date index for building the cash series.
+        non_cash_tsp = TimeSeriesProcessor.concat(tsp_list)
+        if cash_asset is not None:
+            date_index = non_cash_tsp.get_date_index()
+            cash_tsp = cash_asset.get_time_series_processor(
+                date_index=date_index, price_item="price"
+            )
+            tsp_all = TimeSeriesProcessor.concat([non_cash_tsp, cash_tsp])
+        else:
+            tsp_all = non_cash_tsp
+
+        return tsp_all
+
+    def get_asset_dict(self, identity_code_list):
+        """Get a dict of assets based on a list of identity codes.
+
+        Parameters
+        ----------
+        identity_code_list : list of str
+            A list of asset identity codes.
+
+        Returns
+        -------
+        dict
+            Mapping of ``identity_code`` strings to ``Asset`` (or
+            polymorphic child) instances found in the current session.
+            Unknown or malformed identity codes are skipped with a warning.
+        """
+        # Bulk query all assets at once with optimized polymorphic loading
+        from sqlalchemy.orm import with_polymorphic
+
+        # Use with_polymorphic to optimize joined table inheritance queries
+        # This did not really speed things up much.
+        poly_asset = with_polymorphic(Asset, '*')
+        assets = self.session.query(poly_asset).filter(
+            poly_asset.identity_code.in_(identity_code_list)
+        ).all()
+
+        # Build dict from results
+        asset_dict = {asset.identity_code: asset for asset in assets}
+
+        # Check for missing identity codes and log warnings
+        found_codes = set(asset_dict.keys())
+        requested_codes = set(identity_code_list)
+        missing_codes = requested_codes - found_codes
+
+        for missing_code in missing_codes:
+            logger.warning(
+                "No asset found for identity_code %s", missing_code)
+
+        # Raise an error if no assets were found for any of the provided
+        # identity codes
+        if not asset_dict:
+            raise TimeSeriesNoData(
+                "No assets found for the provided identity_code_list."
+            )
+
+        return asset_dict
 
 
 class Manager(ManagerBase):

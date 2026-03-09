@@ -1,8 +1,7 @@
 @startuml asset_base
 
+' left to right direction
 top to bottom direction
-
-'skinparam handwritten true
 
 ' Class definitions
 
@@ -16,18 +15,6 @@ package "Common" {
 }
 
 package "Entities" {
-
-    class       Domicile {
-        +country_code : ISO 3166-1
-        +country_name : ISO 3166-1
-        +currency : Currency
-        +entity_list : Entity[0..*]
-    }
-
-    class       Currency {
-        +ticker : ISO 4217 3-letter
-        +name : Official name
-    }
 
     abstract    Entity {
         +domicile : Domicile
@@ -45,8 +32,20 @@ package "Entities" {
         +listing_list : Listed[0..*]
     }
 
+    class       Domicile {
+        +country_code : ISO 3166-1
+        +country_name : ISO 3166-1
+        +currency : Currency
+        +entity_list : Entity[0..*]
+    }
+
+    class       Currency {
+        +ticker : ISO 4217 3-letter
+        +name : Official name
+    }
+
     ' Common inheritance
-    Common <|-- Entity
+    Common.Common <|-- Entity
 
     ' Domicile and Currency
     Currency "1" --* "*" Domicile : < denominates
@@ -61,25 +60,13 @@ package "Entities" {
 
 package "Assets" {
 
-    abstract    Base {
+    abstract    AssetBase {
         +currency : Currency
         -_series : TimeSeriesBase
     }
 
     abstract    Asset {
         +owner : Entity
-    }
-
-    class       Cash {
-    }
-
-    class       Forex {
-        +currency2 : Currency
-        -_eod_series : ForexEOD
-    }
-
-    class Index {
-        -_eod_series : IndexEOD
     }
 
     abstract    Share {
@@ -90,7 +77,6 @@ package "Assets" {
         +ticker : str
         +isin : ISIN number
         +exchange : Exchange
-        -_eod_series : ListedEOD
     }
 
     class       ListedEquity {
@@ -101,18 +87,79 @@ package "Assets" {
         +index : Index
     }
 
+    class       Cash {
+    }
+
+    class       Forex {
+        +currency2 : Currency
+    }
+
+    class Index {
+    }
+
     ' Common inheritance
-    Common <|-- Base
+    Common.Common <|-- AssetBase
 
     ' Assets
-    Base <|-- Asset
+    AssetBase <|-- Asset
+    AssetBase <|-- Index
     Asset <|-- Share
     Asset <|-- Cash
     Cash <|-- Forex
-    Base <|-- Index
     Share <|-- Listed
     Listed <|-- ListedEquity
     ListedEquity <|-- ETF
+
+}
+
+package "Time Series" {
+
+    class TimeSeriesBase {
+        +date_stamp : date
+        +_base_obj : AssetBase
+    }
+
+    class EODBase {
+        +price : float
+    }
+
+    class TradeEOD {
+        +open : float
+        +close : float
+        +high : float
+        +low : float
+        +adjusted_close : float
+        +volume : float
+
+    }
+
+    class ListedEOD {
+    }
+
+    class ForexEOD {
+    }
+
+    class IndexEOD {
+    }
+
+    class Dividend {
+        +listed_equity : ListedEquity
+        +currency : str
+        +declaration_date : datetime.date
+        +payment_date L datetime.date
+        +period : str
+        +record_date : datetime.date
+        +unadjusted_value : float
+        +adjusted_value : float
+    }
+
+    ' Time Series
+    TimeSeriesBase <|-- EODBase
+    EODBase <|-- TradeEOD
+    TradeEOD <|-- ListedEOD
+    TradeEOD <|-- ForexEOD
+    TradeEOD <|-- IndexEOD
+    TimeSeriesBase <|-- Dividend
 
 }
 
@@ -127,55 +174,8 @@ package "Accounts" {
 
 }
 
-package "Time Series" {
-
-    class TimeSeriesBase {
-        +date_stamp : date
-        +base_obj : Base
-    }
-
-    class Dividend {
-        +listed_equity : ListedEquity
-    }
-
-    class SimpleEOD {
-        +price : float
-    }
-
-    class TradeEOD {
-        +open : float
-        +close : float
-        +high : float
-        +low : float
-        +adjusted_close : float
-        +volume : float
-
-    }
-
-    class ForexEOD {
-        +forex : Forex
-    }
-
-    class IndexEOD {
-        +index : Index
-    }
-
-    class ListedEOD {
-        +listed : Listed
-    }
-
-    ' Time Series
-    TimeSeriesBase <|-- SimpleEOD
-    SimpleEOD <|-- TradeEOD
-    TradeEOD <|-- ListedEOD
-    TradeEOD <|-- ForexEOD
-    TradeEOD <|-- IndexEOD
-    TimeSeriesBase <|-- Dividend
-
-}
-
 ' Pricing
-Currency "1" --* "1" Base : < priced in currency
+Currency "1" --* "1" AssetBase : < priced in currency
 
 ' Entities to Assets relationships
 Entity "1" *-- "*" Asset : > owns
@@ -183,13 +183,9 @@ Issuer "1" -l-* "*" Share : > issues
 Exchange "1" -l-* "*" Listed : > lists
 
 ' Asset to Asset relationships
-ETF "*" *-r- "1" Index : > replicates
+ETF "*" *-r- "1" Assets.Index : > replicates
 
 ' Asset to Time Series relationships
-Base "1" *-- "*" TimeSeriesBase
-Listed "1" *-- "*" ListedEOD
-Forex "1" *-- "*" ForexEOD
-Index "1" *-- "*" IndexEOD
-ListedEquity "1" *-- "*" Dividend
+AssetBase "1" *-- "*" TimeSeriesBase : > acquires
 
 @enduml

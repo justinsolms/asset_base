@@ -28,7 +28,7 @@ def date_to_str(df):
                 or isinstance(item, datetime.datetime)
             ):
                 # Not sure why I must do this 0!?! Else it does not work
-                df.loc[index, column] = 0
+                df.loc[index, column] = 0.0
                 # Convert
                 try:
                     df.loc[index, column] = item.strftime("%Y-%m-%d")
