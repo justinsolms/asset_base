@@ -45,6 +45,7 @@ import asyncio
 import aiohttp
 import sys
 import datetime
+import random
 import pandas as pd
 
 from asyncio import TimeoutError
@@ -76,27 +77,51 @@ split_columns = [
 
 
 class APISessionManager:
-    """Direct API query, response and result checking."""
+    """Session manager for EOD historical data API.
+
+    The target API is the EOD historical data API at
+    https://eodhistoricaldata.com/. The API is a paid service and requires an
+    API token which must be set as an environment variable with the name
+    `EOD_HISTORICAL_DATA_API_TOKEN` and the value of the token. The module will
+    read the token from the environment variable and use it in the API calls.
+
+    The api session manager is an asynchronous context manager which manages the
+    lifecycle of the aiohttp client session and connection pool. It also
+    provides a `get` method which is used by the other classes to make API
+    calls. The `get` method also implements mechanisms for handling
+    timeouts and other typical errors which may arise in API calls with the goal
+    of completing the API call successfully and returning the result.
+
+    The results are returned as the original JSON response.
+
+    """
 
     # API domain
     _DOMAIN = "eodhistoricaldata.com"
-
-    # Get API token from environment variable EOD_HISTORICAL_DATA_API_TOKEN
-    _API_TOKEN = os.environ.get("EOD_HISTORICAL_DATA_API_TOKEN")
-
     # Limiting connection pool size
     _CONNECTION_LIMIT = 4
 
     # Client total timeout in seconds
     _TIMEOUT = 5 * 60
 
+    # Retry policy for transient transport and service errors.
+    _RETRY_ATTEMPTS = 4
+    _RETRYABLE_STATUS_CODES = {429, 500, 502, 503, 504}
+    _BACKOFF_BASE_SECONDS = 0.5
+    _BACKOFF_MAX_SECONDS = 8.0
+
     def __init__(self) -> None:
+        api_token = os.environ.get("EOD_HISTORICAL_DATA_API_TOKEN")
+        if not api_token:
+            raise EnvironmentError(
+                "EOD_HISTORICAL_DATA_API_TOKEN environment variable is not set."
+            )
         # Prepare the URL
         self.url = f"https://{self._DOMAIN}"
         # Default to JSON format at the request of the service provider. There
         # is an issue that CSV includes a last line with the total number of
         # bytes which causes pandas read problems. Use JSON for now.
-        self.base_params = {"api_token": self._API_TOKEN, "fmt": "json"}
+        self.base_params = {"api_token": api_token, "fmt": "json"}
 
     async def __aenter__(self):
         # Get connector object
@@ -106,8 +131,10 @@ class APISessionManager:
             total=None, sock_connect=self._TIMEOUT, sock_read=self._TIMEOUT
         )
         # Get session object for starting a session with
+        # connector_owner=False: this class explicitly closes the connector in
+        # __aexit__, so the session must not close it a second time on its own.
         self.session = aiohttp.ClientSession(
-            connector=self.conn, timeout=session_timeout
+            connector=self.conn, connector_owner=False, timeout=session_timeout
         )
 
         return self
@@ -116,49 +143,114 @@ class APISessionManager:
         await self.session.close()
         await self.conn.close()
 
+    def _is_last_attempt(self, attempt_number):
+        return attempt_number >= self._RETRY_ATTEMPTS
+
+    def _calculate_retry_delay(self, attempt_number, response=None):
+        # Honor server Retry-After headers for rate limiting/service pressure.
+        if response is not None:
+            retry_after = response.headers.get("Retry-After")
+            if retry_after is not None:
+                try:
+                    retry_after_seconds = float(retry_after)
+                    if retry_after_seconds >= 0:
+                        return min(retry_after_seconds, self._BACKOFF_MAX_SECONDS)
+                except ValueError:
+                    # Ignore non-numeric Retry-After values.
+                    pass
+
+        # Exponential backoff with jitter reduces synchronized retry bursts.
+        base_delay = min(
+            self._BACKOFF_BASE_SECONDS * (2 ** (attempt_number - 1)),
+            self._BACKOFF_MAX_SECONDS,
+        )
+        return base_delay + random.uniform(0, base_delay * 0.1)
+
     async def get(self, endpoint, params):
-        """Get API response with retries."""
+        """Get API response with retries for transient errors."""
         url = f"{self.url}{endpoint}"
 
         # Merge the base parameters with the specific parameters
         all_params = {**self.base_params, **params}
 
         # Try several times to get the response
-        for retry in [0, 1, 2, "last"]:
+        for attempt in range(1, self._RETRY_ATTEMPTS + 1):
             try:
                 async with self.session.get(url, params=all_params) as response:
                     logger.info("Initiated: %s", response.url)
-                    # Check response status
-                    if response.ok is True:
-                        json = await response.json()
-                    else:
+
+                    if response.status in self._RETRYABLE_STATUS_CODES:
                         text = await response.text()
                         status = response.status
-                        url = response.url
-                        msg = f"Failed response status={status}: text={text}: url={url}"
+                        response_url = response.url
+                        msg = (
+                            f"Retryable response status={status}: text={text}: "
+                            f"url={response_url}"
+                        )
+                        if self._is_last_attempt(attempt):
+                            logger.warning(
+                                "Fail (retryable status retries exceeded): %s", msg
+                            )
+                            raise Exception(msg)
+
+                        retry_delay = self._calculate_retry_delay(
+                            attempt_number=attempt, response=response
+                        )
+                        logger.warning(
+                            "Retry (%s/%s) after status %s in %.2fs: %s",
+                            attempt,
+                            self._RETRY_ATTEMPTS,
+                            status,
+                            retry_delay,
+                            response_url,
+                        )
+                        await asyncio.sleep(retry_delay)
+                        continue
+
+                    if not response.ok:
+                        text = await response.text()
+                        status = response.status
+                        response_url = response.url
+                        msg = (
+                            f"Failed response status={status}: text={text}: "
+                            f"url={response_url}"
+                        )
                         logger.warning(msg)
                         raise Exception(msg)
-            except TimeoutError as ex:
-                # Test for retries
-                if retry == "last":
-                    msg = f"Fail (timeout retries exceeded): {url}"
-                    logger.warning(msg)
-                    raise ex
-                else:
-                    # Go around for a retry
-                    logger.debug("Timeout (retry-%s): %s", retry, url)
-                    continue  # retry loop
-            else:
-                # Success
-                logger.debug("Success: %s", response.url)
-                # In the json variable which is a list of dicts, convert any
-                # None to NaN for pandas
-                json = [{k: (v if v is not None else float('nan')) for k, v in row.items()} for row in json]
-                # Convert to DataFrame
-                table = pd.DataFrame(json)
-                break  # Success - break out of retry loop
 
-        return table
+                    data = await response.json()
+            except (
+                TimeoutError,
+                aiohttp.ClientConnectionError,
+                aiohttp.ClientPayloadError,
+                aiohttp.ServerDisconnectedError,
+            ) as ex:
+                if self._is_last_attempt(attempt):
+                    msg = f"Fail (transient retries exceeded): {url}"
+                    logger.warning(msg)
+                    raise
+
+                retry_delay = self._calculate_retry_delay(attempt_number=attempt)
+                logger.warning(
+                    "Retry (%s/%s) after transient error %s in %.2fs: %s",
+                    attempt,
+                    self._RETRY_ATTEMPTS,
+                    type(ex).__name__,
+                    retry_delay,
+                    url,
+                )
+                await asyncio.sleep(retry_delay)
+            else:
+                logger.debug("Success: %s", response.url)
+                # Convert any None values to NaN for pandas compatibility.
+                data = [
+                    {k: (v if v is not None else float("nan")) for k, v in row.items()}
+                    for row in data
+                ]
+                return data
+
+        # Defensive fallback: loop should either return data or raise.
+        raise Exception(f"Failed API call after retries: {url}")
 
 
 class Historical(APISessionManager):
@@ -247,7 +339,9 @@ class Historical(APISessionManager):
             The daily, EOD historical time-series.
         """
         table = await self._get(
-            self._historical_eod, exchange, ticker, from_date=from_date, to_date=to_date
+            self._historical_eod,
+            exchange, ticker,
+            from_date=from_date, to_date=to_date
         )
         table = table[eod_columns]
 
@@ -276,10 +370,8 @@ class Historical(APISessionManager):
         """
         table = await self._get(
             self._historical_dividends,
-            exchange,
-            ticker,
-            from_date=from_date,
-            to_date=to_date,
+            exchange, ticker,
+            from_date=from_date, to_date=to_date,
         )
 
         # Select only the expected dividend columns
@@ -320,10 +412,8 @@ class Historical(APISessionManager):
         """
         table = await self._get(
             self._historical_splits,
-            exchange,
-            ticker,
-            from_date=from_date,
-            to_date=to_date,
+            exchange, ticker,
+            from_date=from_date, to_date=to_date,
         )
         table = table[split_columns]
 
@@ -350,10 +440,8 @@ class Historical(APISessionManager):
         """
         table = await self._get(
             self._historical_forex,
-            "FOREX",
-            ticker,
-            from_date=from_date,
-            to_date=to_date,
+            "FOREX", ticker,
+            from_date=from_date, to_date=to_date,
         )
         table = table[eod_columns]
 
