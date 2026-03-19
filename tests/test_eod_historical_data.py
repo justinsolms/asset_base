@@ -509,9 +509,8 @@ class TestHistorical(MockAPIMixin, aiounittest.AsyncTestCase):
 
     async def test___init__(self):
         """Test Initialization."""
-        # Is this a subclass of _API?
         async with Historical() as historical:
-            self.assertIsInstance(historical, APISessionManager)
+            self.assertIsInstance(historical, Historical)
 
     async def test_get_eod(self):
         """Get daily, EOD historical over a date range."""
@@ -579,9 +578,8 @@ class TestBulk(MockAPIMixin, aiounittest.AsyncTestCase):
 
     async def test___init__(self):
         """Test Initialization."""
-        # Is this a subclass of _API?
         async with Bulk() as bulk:
-            self.assertIsInstance(bulk, APISessionManager)
+            self.assertIsInstance(bulk, Bulk)
 
     async def test_get_eod(self):
         """Get bulk EOD price and volume for the exchange on a date."""
@@ -704,6 +702,17 @@ class TestExchanges(MockAPIMixin, unittest.TestCase):
     def setUp(self):
         """Set up one test."""
         super().setUp()
+
+    def test_async_context_manager(self):
+        """Support async context manager usage like the other feed classes."""
+
+        async def _get_table():
+            async with Exchanges() as exchanges:
+                return await exchanges.aget_exchanges()
+
+        table = asyncio.run(_get_table())
+        self.assertIsInstance(table, pd.DataFrame)
+        self.assertIn("Name", table.columns)
 
     def test_get_exchanges(self):
         """Get the full list of supported exchanges."""

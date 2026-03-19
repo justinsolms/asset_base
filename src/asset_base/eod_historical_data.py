@@ -253,7 +253,7 @@ class APISessionManager:
         raise Exception(f"Failed API call after retries: {url}")
 
 
-class Historical(APISessionManager):
+class Historical:
     """Get EOD historical data sets."""
 
     _historical_eod = "/api/eod"
@@ -261,6 +261,16 @@ class Historical(APISessionManager):
     _historical_index = "/api/eod"
     _historical_dividends = "/api/div"
     _historical_splits = "/api/splits"
+
+    def __init__(self) -> None:
+        self._session = APISessionManager()
+
+    async def __aenter__(self):
+        await self._session.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_tb):
+        await self._session.__aexit__(exc_type, exc_value, exc_tb)
 
     async def _get(self, path, exchange, ticker, from_date=None, to_date=None):
         """Generic getter, daily, EOD historical data table over a date range.
@@ -305,7 +315,8 @@ class Historical(APISessionManager):
             "period": "d",  # Default to daily sampling period
             "order": "a",  # Default to ascending order
         }
-        table = await self.get(path, params=params)
+        data = await self._session.get(path, params=params)
+        table = pd.DataFrame(data)
 
         if table.empty:
             return table
@@ -448,10 +459,20 @@ class Historical(APISessionManager):
         return table
 
 
-class Bulk(APISessionManager):
+class Bulk:
     """Get Bulk data sets."""
 
     _bulk_eod = "/api/eod-bulk-last-day"
+
+    def __init__(self) -> None:
+        self._session = APISessionManager()
+
+    async def __aenter__(self):
+        await self._session.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_tb):
+        await self._session.__aexit__(exc_type, exc_value, exc_tb)
 
     async def _get(self, exchange, date=None, symbols=None, type=None):
         """Generic getter, bulk EOD for the exchange for a particular day.
@@ -504,7 +525,9 @@ class Bulk(APISessionManager):
         if symbols is not None:
             # The symbols=None is not liked by aiohttp.ClientSession() instance
             params["symbols"] = symbols
-        table = await self.get(path, params=params)
+        data = await self._session.get(path, params=params)
+        table = pd.DataFrame(data)
+
 
         if table.empty:
             return table
@@ -591,11 +614,21 @@ class Bulk(APISessionManager):
         return table
 
 
-class Fundamentals(APISessionManager):
+class Fundamentals:
     """Get fundamental data API for stocks, ETFs, Mutual Funds, Indices."""
 
     # TODO: Add fundamental public methods
     _fundamentals = "/api/fundamentals"
+
+    def __init__(self) -> None:
+        self._session = APISessionManager()
+
+    async def __aenter__(self):
+        await self._session.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_tb):
+        await self._session.__aexit__(exc_type, exc_value, exc_tb)
 
     async def _get(self, exchange, ticker):
         """Get fundamental data API for stocks, ETFs, Mutual Funds, Indices.
@@ -622,7 +655,8 @@ class Fundamentals(APISessionManager):
             period="d",  # Default to daily sampling period
             order="a",  # Default to ascending order
         )
-        table = await self.get(path, params=params)
+        data = await self._session.get(path, params=params)
+        table = pd.DataFrame(data)
 
         return table
 
@@ -630,29 +664,39 @@ class Fundamentals(APISessionManager):
 class Exchanges(object):
     """Get exchanges (and list of indices) data."""
 
-    def get_exchanges(self):
-        """Get the full list of supported exchanges."""
-        # Path must append ticker and short exchange code
-        _exchanges = "/api/exchanges-list"
-        path = "{}".format(_exchanges)
+    def __init__(self) -> None:
+        self._session = APISessionManager()
 
-        # Get the API response
+    async def __aenter__(self):
+        await self._session.__aenter__()
+        return self
+
+    async def __aexit__(self, exc_type, exc_value, exc_tb):
+        await self._session.__aexit__(exc_type, exc_value, exc_tb)
+
+    async def _get(self, path, params):
+        data = await self._session.get(path, params=params)
+        return pd.DataFrame(data)
+
+    async def aget_exchanges(self):
+        """Get the full list of supported exchanges."""
+        path = "/api/exchanges-list"
         params = dict(
             fmt="json",  # Default to CSV table. See NOTE in get!
             period="d",  # Default to daily sampling period
             order="a",  # Default to ascending order
         )
+        return await self._get(path, params)
 
-        async def _get(path, params):
-            async with APISessionManager() as exchanges:
-                task = await exchanges.get(path, params=params)
-            return task
+    def get_exchanges(self):
+        """Get the full list of supported exchanges."""
+        async def _run():
+            async with Exchanges() as exchanges:
+                return await exchanges.aget_exchanges()
 
-        table = asyncio.run(_get(path, params))
+        return asyncio.run(_run())
 
-        return table
-
-    def get_exchange_symbols(self, exchange):
+    async def aget_exchange_symbols(self, exchange):
         """Get the full table of symbols (tickers) on the exchange.
 
         Parameters
@@ -661,29 +705,33 @@ class Exchanges(object):
             Short exchange code.
 
         """
-        # Path must append ticker and short exchange code
-        _exchange_symbol_list = "/api/exchange-symbol-list"
-        path = "{}/{}".format(_exchange_symbol_list, exchange)
-
-        # Get the API response
+        path = "/api/exchange-symbol-list/{}".format(exchange)
         params = dict(
             fmt="json",  # Default to CSV table. See NOTE in get!
             period="d",  # Default to daily sampling period
             order="a",  # Default to ascending order
         )
+        return await self._get(path, params)
 
-        async def _get(path, params):
-            async with APISessionManager() as exchanges:
-                task = await exchanges.get(path, params=params)
-            return task
+    def get_exchange_symbols(self, exchange):
+        """Get the full table of symbols (tickers) on the exchange."""
+        async def _run():
+            async with Exchanges() as exchanges:
+                return await exchanges.aget_exchange_symbols(exchange)
 
-        table = asyncio.run(_get(path, params))
+        return asyncio.run(_run())
 
-        return table
+    async def aget_indices(self):
+        """Get a table of supported indices."""
+        return await self.aget_exchange_symbols("INDX")
 
     def get_indices(self):
         """Get a table of supported indices."""
-        return self.get_exchange_symbols("INDX")
+        async def _run():
+            async with Exchanges() as exchanges:
+                return await exchanges.aget_indices()
+
+        return asyncio.run(_run())
 
 
 class MultiHistorical(object):
