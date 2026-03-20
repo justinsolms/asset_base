@@ -846,8 +846,8 @@ class TestBulk(MockAPIMixin, aiounittest.AsyncTestCase):
         self.assertEqual(index_type, df.index.dtype)
         self.assertEqual(index_names, df.index.names)
         test_index_list = [
-            (pd.Timestamp("2020-12-31 00:00:00"), "AAPL", "US"),
-            (pd.Timestamp("2020-12-31 00:00:00"), "MCD", "US"),
+            ("AAPL", "US", pd.Timestamp("2020-12-31 00:00:00")),
+            ("MCD", "US", pd.Timestamp("2020-12-31 00:00:00")),
         ]
         self.assertEqual(test_index_list, df.index.tolist())
 

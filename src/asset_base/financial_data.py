@@ -29,7 +29,7 @@ import abc
 
 from typing import Optional
 
-from asset_base.eod_historical_data import Exchanges, MultiHistorical
+from asset_base.eod_historical_data import Exchanges, Historical
 from asset_base.exceptions import _BaseException, TimeSeriesNoData
 from asset_base.__init__ import get_data_path
 
@@ -702,7 +702,6 @@ class History(_Feed):
 
         # Pick feed
         if feed == "EOD":
-            feed = MultiHistorical()
             # Columns to keep and rename to a standard. This is also then a check
             # for expected columns.
             column_dict = {
@@ -716,7 +715,7 @@ class History(_Feed):
                 "open": "open",
                 "volume": "volume",
             }
-            data = feed.get_eod(symbol_list)
+            data = Historical.get_eod(symbol_list)
             logger.debug("Got EOD data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -791,7 +790,6 @@ class History(_Feed):
 
         # Pick feed
         if feed == "EOD":
-            feed = MultiHistorical()
             # Columns to keep and rename to a standard. This is also then a check
             # for expected columns.
             column_dict = {
@@ -814,7 +812,7 @@ class History(_Feed):
                 "payment_date",
                 "record_date",
             ]
-            data = feed.get_dividends(symbol_list)
+            data = Historical.get_dividends(symbol_list)
             logger.debug("Got dividend data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -890,7 +888,6 @@ class History(_Feed):
 
         # Pick feed
         if feed == "EOD":
-            feed = MultiHistorical()
             # Columns to keep and rename to a standard. This is also then a check
             # for expected columns.
             column_dict = {
@@ -904,7 +901,7 @@ class History(_Feed):
             date_columns_list = [
                 "date_stamp",
             ]
-            data = feed.get_splits(symbol_list)
+            data = Historical.get_splits(symbol_list)
             logger.debug("Got splits data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -987,7 +984,6 @@ class History(_Feed):
 
         # Pick feed
         if feed == "EOD":
-            feed = MultiHistorical()
             column_dict = {
                 "date": "date_stamp",
                 "ticker": "ticker",
@@ -998,7 +994,7 @@ class History(_Feed):
                 "open": "open",
                 "volume": "volume",
             }
-            data = feed.get_forex(symbol_list)
+            data = Historical.get_forex(symbol_list)
             logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
@@ -1058,7 +1054,6 @@ class History(_Feed):
 
         # Pick feed
         if feed == "EOD":
-            feed = MultiHistorical()
             column_dict = {
                 "date": "date_stamp",
                 "ticker": "ticker",
@@ -1069,7 +1064,7 @@ class History(_Feed):
                 "open": "open",
                 "volume": "volume",
             }
-            data = feed.get_index(symbol_list)
+            data = Historical.get_index(symbol_list)
             logger.debug("Got Forex data.")
             # If no data then just return a simple empty pandas DataFrame.
             if data.empty:
