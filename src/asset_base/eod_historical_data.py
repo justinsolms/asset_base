@@ -60,22 +60,6 @@ logging.basicConfig(stream=sys.stderr)
 logger = logging.getLogger(__name__)
 
 
-date_index_name = "date"
-eod_columns = ["open", "close", "high", "low", "adjusted_close", "volume"]
-dividend_columns = [
-    "declarationDate",
-    "recordDate",
-    "paymentDate",
-    "period",
-    "value",
-    "unadjustedValue",
-    "currency",
-]
-split_columns = [
-    "split"
-]
-
-
 class APISessionManager:
     """Session manager for EOD historical data API.
 
@@ -147,7 +131,7 @@ class APISessionManager:
         return attempt_number >= self._RETRY_ATTEMPTS
 
     def _calculate_retry_delay(self, attempt_number, response=None):
-        # Honor server Retry-After headers for rate limiting/service pressure.
+        # Honour server Retry-After headers for rate limiting/service pressure.
         if response is not None:
             retry_after = response.headers.get("Retry-After")
             if retry_after is not None:
@@ -256,11 +240,30 @@ class APISessionManager:
 class Historical:
     """Get EOD historical data sets."""
 
-    _historical_eod = "/api/eod"
-    _historical_forex = "/api/eod"
-    _historical_index = "/api/eod"
-    _historical_dividends = "/api/div"
-    _historical_splits = "/api/splits"
+    _PATH_EOD = "/api/eod"
+    _PATH_FOREX = "/api/eod"
+    _PATH_INDEX = "/api/eod"
+    _PATH_DIVIDENDS = "/api/div"
+    _PATH_SPLITS = "/api/splits"
+
+    _DATE_INDEX_NAME = "date"
+    _EOD_COLUMNS = [
+        "date", "open", "close", "high", "low", "adjusted_close", "volume"
+    ]
+    _DIVIDEND_COLUMNS = [
+        "date",
+        "declarationDate",
+        "recordDate",
+        "paymentDate",
+        "period",
+        "value",
+        "unadjustedValue",
+        "currency",
+    ]
+    _SPLIT_COLUMNS = [
+        "date",
+        "split"
+    ]
 
     def __init__(self) -> None:
         self._session = APISessionManager()
@@ -296,8 +299,8 @@ class Historical:
 
         Returns
         -------
-        pandas.DataFrame
-            The daily, EOD historical time-series.
+        list of dicts
+            The JSON response from the API call as a list of dicts.
         """
         # Path must append ticker and short exchange code
         path = "{}/{}.{}".format(path, ticker, exchange)
@@ -316,153 +319,319 @@ class Historical:
             "order": "a",  # Default to ascending order
         }
         data = await self._session.get(path, params=params)
-        table = pd.DataFrame(data)
 
-        if table.empty:
-            return table
+        return data
 
-        # Condition date, date-index and sort and check for duplicates
-        table[date_index_name] = pd.to_datetime(table[date_index_name])
-        table.set_index(date_index_name, verify_integrity=True, inplace=True)
-        table.sort_index(inplace=True)
+    async def _get_bulk(self, symbol_list, from_date, to_date=None, type=None):
+        """Get bulk historical data for a range of dates.
 
-        return table
+        This uses the Bulk history API service (class Bulk) which means
+        histories for all securities in the ``symbol_list` argument are
+        retrieved for one exchange and one day per API call.
 
-    async def get_eod(self, exchange, ticker, from_date=None, to_date=None):
-        """Get daily, EOD historical over a date range.
+        This method combines multiple ``Historical`` class getter method call
+        results, one for each `(exchange, ticker)` tuple in the ``symbol_list``
+        argument, into a single ``pandas.DataFrame``.
 
         Parameters
         ----------
-        exchange : str
-            Short exchange code for the listed security.
-        ticker : str
-            Exchange security ticker code
-        from_date : datetime.date, optional
+        symbol_list : list of tuples
+            A list of ticker-exchange symbol_list. As an example Apple Inc. would be
+            `AAPL.US` and it's symbol tuple would be `('AAPL', 'US')`, where
+            `AAPL` is the exchange ticker and `US` is the exchange code
+            (actually EOD code for all US exchanges).
+        from_date : datetime.date
             Inclusive start date of historical data. If not provided then the
             date is set to 1900-01-01.
         to_date : datetime.date, optional
             Inclusive end date of historical data. If not provide then the date
             is set to today.
+        type : None, 'dividends`, or 'splits'
+            None (default) for end of day data, or dividends or splits
 
-        Returns
-        -------
-        pandas.DataFrame
-            The daily, EOD historical time-series.
         """
-        table = await self._get(
-            self._historical_eod,
-            exchange, ticker,
-            from_date=from_date, to_date=to_date
-        )
-        table = table[eod_columns]
+        # Generate a date series between from_date and to_date (inclusive).
+        dates = [
+            from_date + datetime.timedelta(days=x)
+            for x in range((to_date - from_date).days + 1)
+        ]
+
+        # Create a dict of exchanges keys with each item a list of the
+        # securities specified (by symbols_list) in that exchange.
+        exchange_dict = defaultdict(list)
+        for ticker, exchange in symbol_list:
+            exchange_dict[exchange].append(ticker)
+
+        # Fetch securities across all exchange.
+        tasks = list()
+        async with Bulk() as bulk:
+            for exchange, ticker_list in exchange_dict.items():
+                for date in dates:
+                    tasks.append(bulk._get(exchange, date, ticker_list, type))
+            table_list = await asyncio.gather(*tasks)
+
+        # Contrary to _get_eod the API does return date, exchange and ticker
+        # data so it not not be constructed and attached. Combine tables in to
+        # one large table
+        table = pd.concat(table_list, axis="index")
+        table.sort_index(inplace=True)  # MultiIndex must be sorted for slicing.
+        # Duplicates are caused by holidays. Querying the API on the evenings of
+        # Friday (which did return a non-trivial result), and Saturday and
+        # Sunday would produce 3 identical entries, all dated Friday. So we need
+        # to drop these.
+        table.drop_duplicates(inplace=True)
 
         return table
 
-    async def get_dividends(self, exchange, ticker, from_date=None, to_date=None):
-        """Get daily, EOD historical dividends over a date range.
+    @classmethod
+    async def _get_multi(cls, path, symbol_list, expected_columns):
+        """Get historical data for a list of multiple securities and date ranges.
+
+        This uses the EOD history API service (class ``Historical``) which means
+        histories for all securities in the ``symbol_list` argument are
+        retrieved as one security history per API call.
+
+        This method combines multiple ``Historical`` class getter method call
+        results, one for each `(exchange, ticker)` tuple in the ``symbol_list``
+        argument, into a single ``pandas.DataFrame``.
 
         Parameters
         ----------
-        exchange : str
-            Short exchange code for the listed security.
-        ticker : str
-            Exchange security ticker code
-        from_date : datetime.date, optional
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
+        path : str
+            The domain's specific API service path, example: "/api/eod"
+            for EOD prices
+        symbol_list : list of tuples
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown.
+        expected_columns : list of str
+            The columns to return in the final table. This is used to select the
+            relevant columns from the API response tables and to set the column
+            order in the final table.
 
-        Returns
-        -------
-        pandas.DataFrame
-            The daily, EOD historical time-series.
+        Note
+        ----
+        All date strings must be ISO date strings `yyyy-mm-dd` or `%Y-%m-%d`.
+
         """
-        table = await self._get(
-            self._historical_dividends,
-            exchange, ticker,
-            from_date=from_date, to_date=to_date,
+        tasks = list()
+        # With a new context manager instance for each call to this method, we
+        # can be assured of a fresh session and connection pool. This is
+        # important for the retry mechanism to work properly as it relies on a
+        # clean state for each call.
+        async with cls() as historical:
+            # Create a task for each symbol and date range in the symbol list.
+            for ticker, exchange, from_date, to_date in symbol_list:
+                # Call historical EOD
+                tasks.append(
+                    historical._get(path, exchange, ticker, from_date, to_date)
+                )
+            # Submit all tasks and wait for them to complete, gathering results
+            # and exceptions.
+            result_list = await asyncio.gather(*tasks, return_exceptions=True)
+            # Add ticker and exchange code to each table in the list. The API
+            # does not return this data so it must be constructed and attached.
+            # Skip over exceptions.
+            table_list = list()
+            for _, item in enumerate(zip(symbol_list, result_list)):
+                symbol, result = item
+                ticker, exchange, from_date, to_date = symbol
+                # Check dates, guard against None's
+                assert from_date is None or isinstance(from_date, datetime.date), (
+                    "Expected symbol_list" "s from_date type as datetime.date."
+                )
+                assert to_date is None or isinstance(to_date, datetime.date), (
+                    "Expected symbol_list" "s to_date type as datetime.date."
+                )
+                # Separate exception results from successful results. Log
+                # exceptions and skip them. This is to ensure that one failed
+                # API call does not cause the entire batch to fail.
+                if isinstance(result, BaseException):
+                    exception = result
+                    logger.warning(
+                        "Exception %s for symbol %s.%s", exception, ticker, exchange
+                    )
+                else:
+                    # Process dict to table
+                    table = pd.DataFrame(result)
+                    # Add columns for ticker and exchange as these are not
+                    # returned by the API but are needed for the final table.
+                    table["ticker"] = ticker
+                    table["exchange"] = exchange
+                    # Condition date column to pandas datetime for proper
+                    # indexing and slicing.
+                    table["date"] = pd.to_datetime(table["date"])
+                    # Add the table to the list of tables to concatenate.
+                    table_list.append(table)
+
+        # Eliminate empty tables in the table list as these inadvertently erase
+        # the `date` index name. This may be a `pandas` bug.
+        table_list = [table for table in table_list if not table.empty]
+
+        # Concatenate all tables
+        result = pd.concat(table_list, axis="index")
+
+        # Add ticker and exchange columns labels to the column list for
+        # selection and ordering.
+        expected_columns = ["ticker", "exchange"] + expected_columns
+
+        # Deal with the case where all tables were empty and thus the
+        # concatenated table is empty. This is necessary to pass empty tests
+        # downstream. In this case produce an empty DataFrame with the expected
+        # columns as these are expected by downstream code and tests.
+        if result.empty or result.isna().all().all():
+            # Produce an empty DataFrame that will pass empty tests downstream
+            return pd.DataFrame(columns=expected_columns)
+
+        # Check that all expected columns are present in the table. This is a
+        # sanity check to guard against API changes and to ensure that the
+        # expected columns are present for selection and ordering.
+        missing_columns = set(expected_columns) - set(result.columns)
+        if missing_columns:
+            raise ValueError(
+                f"Missing expected columns in API response: {missing_columns}")
+        else:
+            result = result[expected_columns]
+
+        # Verify uniqueness of the index and set the index and sort the table.
+        result.set_index(
+            ["ticker", "exchange", "date"],
+            verify_integrity=True, inplace=True,
+        )
+        result = result.sort_index()
+
+        return result
+
+    @classmethod
+    def get_eod(cls, symbol_list):
+        """Get historical EOD for a list of securities.
+
+        symbol_list : list of tuples
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown.
+
+        """
+        # Use EOD API
+        return asyncio.run(
+            cls._get_multi(
+                cls._PATH_EOD, symbol_list, cls._EOD_COLUMNS
+            )
         )
 
-        # Select only the expected dividend columns
-        table = table[dividend_columns]
+    @classmethod
+    def get_dividends(cls, symbol_list):
+        """Get historical dividends for a list of securities.
 
-        # Normalise dtypes to match test and downstream expectations:
-        # - date-like/reference fields stay as generic objects (string/ISO date)
-        # - numeric fields are floats
-        for col in ["declarationDate", "recordDate", "paymentDate", "period", "currency"]:
-            if col in table.columns:
-                table[col] = table[col].astype("object")
-        for col in ["value", "unadjustedValue"]:
-            if col in table.columns:
-                table[col] = table[col].astype("float64")
+        symbol_list : list of tuples
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown
 
-        return table
-
-    async def get_splits(self, exchange, ticker, from_date=None, to_date=None):
-        """Get daily, EOD historical splits over a date range.
-
-        Parameters
-        ----------
-        exchange : str
-            Short exchange code for the listed security.
-        ticker : str
-            Exchange security ticker code
-        from_date : datetime.date, optional
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
-
-        Returns
-        -------
-        pandas.DataFrame
-            The daily, EOD historical time-series.
         """
-        table = await self._get(
-            self._historical_splits,
-            exchange, ticker,
-            from_date=from_date, to_date=to_date,
+        # Use EOD API
+        df = asyncio.run(
+            cls._get_multi(
+                cls._PATH_DIVIDENDS, symbol_list, cls._DIVIDEND_COLUMNS
+            )
         )
-        table = table[split_columns]
+        df["declarationDate"] = pd.to_datetime(df["declarationDate"])
+        df["recordDate"] = pd.to_datetime(df["recordDate"])
+        df["paymentDate"] = pd.to_datetime(df["paymentDate"])
 
-        return table
+        return df
 
-    async def get_forex(self, ticker, from_date=None, to_date=None):
-        """Get daily, EOD historial forex (USD based) over a date range.
 
-        Parameters
-        ----------
-        ticker : str
-            Exchange security ticker code
-        from_date : datetime.date, optional
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
+    @classmethod
+    def get_splits(cls, symbol_list):
+        """Get historical splits for a list of securities.
 
-        Returns
-        -------
-        pandas.DataFrame
-            The daily, EOD historical time-series.
+        symbol_list : list of tuples
+            A list of ticker-exchange and date range list. As an example, if
+            Apple Inc (ticker AAPL, exchange US). was required between
+            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
+            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
+            that the date must be `datetime.date` or an exception shall be
+            thrown
+
         """
-        table = await self._get(
-            self._historical_forex,
-            "FOREX", ticker,
-            from_date=from_date, to_date=to_date,
+        # Use EOD API
+        return asyncio.run(
+            cls._get_multi(
+                cls._PATH_SPLITS, symbol_list, cls._SPLIT_COLUMNS
+            )
         )
-        table = table[eod_columns]
 
-        return table
+    @classmethod
+    def get_forex(cls, symbol_list):
+        """Get historical rates for a list of forex tickers.
+
+        symbol_list : list of tuples
+            A list of forex tickers and date range list. As an example, if USD
+            to ZAR (ticker USDZAR) was required between 2021-01-01 and
+            2022-01-01 then it's symbol tuple would be: `('USDZAR',
+            datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note that
+            the date must be `datetime.date` or an exception shall be thrown
+
+        """
+        # Re-construct a symbol list form the forex ticker list as (`exchange`,
+        # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
+        # part set to "FOREX". In other words, insert FOREX in the right
+        # position.
+        symbol_list = [
+            (ticker, "FOREX", from_date, to_date)
+            for ticker, from_date, to_date in symbol_list
+        ]
+
+        # Use EOD API
+        return asyncio.run(
+            cls._get_multi(
+                Historical._PATH_FOREX, symbol_list, cls._EOD_COLUMNS
+            )
+        )
+
+    @classmethod
+    def get_index(cls, symbol_list):
+        """Get historical prices for a list of indices.
+
+        symbol_list : list of tuples
+            A list of index tickers and date range list. As an example, if the
+            index ASX (FTSE All Share Index) was required between 2021-01-01 and
+            2022-01-01 then it's symbol tuple would be: `('ASX',
+            datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note that
+            the date must be `datetime.date` or an exception shall be thrown
+
+        """
+        # Re-construct a symbol list form the forex ticker list as (`exchange`,
+        # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
+        # part set to "FOREX". In other words, insert FOREX in the right
+        # position.
+        symbol_list = [
+            (ticker, "INDX", from_date, to_date)
+            for ticker, from_date, to_date in symbol_list
+        ]
+
+        # Use EOD API
+        return asyncio.run(
+            cls._get_multi(
+                Historical._PATH_INDEX, symbol_list, cls._EOD_COLUMNS
+            )
+        )
 
 
 class Bulk:
     """Get Bulk data sets."""
 
-    _bulk_eod = "/api/eod-bulk-last-day"
+    _PATH_BULK_EOD = "/api/eod-bulk-last-day"
 
     def __init__(self) -> None:
         self._session = APISessionManager()
@@ -501,7 +670,7 @@ class Bulk:
 
         """
         # Path must append short exchange code
-        path = "{}/{}".format(self._bulk_eod, exchange)
+        path = "{}/{}".format(self._PATH_BULK_EOD, exchange)
 
         if date is None:
             # Find yesterday's date.
@@ -536,9 +705,9 @@ class Bulk:
         if "exchange_short_name" in table.columns:
             table.rename(columns={"exchange_short_name": "exchange"}, inplace=True)
         # Condition date
-        table[date_index_name] = pd.to_datetime(table[date_index_name])
+        table["date"] = pd.to_datetime(table["date"])
         table.rename(columns={"code": "ticker"}, inplace=True)  # Fix API names
-        table.set_index([date_index_name, "ticker", "exchange"], inplace=True)
+        table.set_index(["ticker", "exchange", "date"], inplace=True)
         table.sort_index(inplace=True)  # MultiIndex must be sorted for slicing.
 
         return table
@@ -734,327 +903,3 @@ class Exchanges(object):
         return asyncio.run(_run())
 
 
-class MultiHistorical(object):
-    """Get multiple histories across exchanges, securities and date ranges.
-
-    This class' public methods take a list of `(exchange, ticker)` tuples and
-    generate a single call per `(exchange, ticker)` tuple from the appropriate
-    `get` method. The `get` method chosen depends on the type of data required
-    and the date range.
-
-    The class then gathers multiple API call results (single column
-    ``pandas.DataFrame`` objects) into a multi-column data table
-    (``pandas.DataFrame``) which is returned.
-
-    """
-
-    async def _get_eod(self, path, symbol_list):
-        """Get historical data for a list of securities.
-
-        This uses the EOD history API service (class ``Historical``) which means
-        histories for all securities in the ``symbol_list` argument are
-        retrieved as one security history per API call.
-
-        This method combines multiple ``Historical`` class getter method call
-        results, one for each `(exchange, ticker)` tuple in the ``symbol_list``
-        argument, into a single ``pandas.DataFrame``.
-
-        Parameters
-        ----------
-        path : str
-            The domain's specific API service path, example: "/api/eod"
-            for EOD prices
-        symbol_list : list of tuples
-            A list of ticker-exchange and date range list. As an example, if
-            Apple Inc (ticker AAPL, exchange US). was required between
-            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
-            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
-            that the date must be `datetime.date` or an exception shall be
-            thrown.
-
-        Note
-        ----
-        All date strings must be ISO date strings `yyyy-mm-dd` or `%Y-%m-%d`.
-
-        """
-        # Each security has its own from date.
-        tasks = list()
-        async with Historical() as historical:
-            for ticker, exchange, from_date, to_date in symbol_list:
-                # Call historical EOD
-                tasks.append(
-                    historical._get(path, exchange, ticker, from_date, to_date)
-                )
-            result_list = await asyncio.gather(*tasks, return_exceptions=True)
-            # Add ticker and exchange code to each table in the list. The API
-            # does not return this data so it must be constructed and attached.
-            # Skip over exceptions.
-            table_list = list()
-            for i, result in enumerate(zip(symbol_list, result_list)):
-                symbol, unknown = result
-                ticker, exchange, from_date, to_date = symbol
-                # Check dates, guard against None's
-                assert from_date is None or isinstance(from_date, datetime.date), (
-                    "Expected symbol_list" "s from_date type as datetime.date."
-                )
-                assert to_date is None or isinstance(to_date, datetime.date), (
-                    "Expected symbol_list" "s to_date type as datetime.date."
-                )
-                if isinstance(unknown, Exception):
-                    exception = unknown
-                    logger.warning(
-                        "Exception %s for symbol %s.%s", exception, ticker, exchange
-                    )
-                else:
-                    # Process table and add to list
-                    table = unknown
-                    table["ticker"] = ticker
-                    table["exchange"] = exchange
-                    table_list.append(table)
-        # Eliminate empty tables in the table list as these inadvertently erase
-        # the `date` index name. This may be a `pandas` bug.
-        table_list = [table for table in table_list if not table.empty]
-        # Case management after elimination leaving zero, one or several tables
-        if len(table_list) == 0:
-            # Return an empty table
-            return pd.DataFrame([])
-        # Concatenate all tables
-        table = pd.concat(table_list, axis="index")
-        # Set up full index by appending ticker and exchange to the date index
-        table.set_index(
-            ["ticker", "exchange"], verify_integrity=True, append=True, inplace=True
-        )
-        # MultiIndex must be sorted for causal slicing.
-        table.sort_index(inplace=True)
-
-        return table
-
-    async def _get_bulk(self, symbol_list, from_date, to_date=None, type=None):
-        """Get bulk historical data for a range of dates.
-
-        This uses the Bulk history API service (class Bulk) which means
-        histories for all securities in the ``symbol_list` argument are
-        retrieved for one exchange and one day per API call.
-
-        This method combines multiple ``Historical`` class getter method call
-        results, one for each `(exchange, ticker)` tuple in the ``symbol_list``
-        argument, into a single ``pandas.DataFrame``.
-
-        Parameters
-        ----------
-        symbol_list : list of tuples
-            A list of ticker-exchange symbol_list. As an example Apple Inc. would be
-            `AAPL.US` and it's symbol tuple would be `('AAPL', 'US')`, where
-            `AAPL` is the exchange ticker and `US` is the exchange code
-            (actually EOD code for all US exchanges).
-        from_date : datetime.date
-            Inclusive start date of historical data. If not provided then the
-            date is set to 1900-01-01.
-        to_date : datetime.date, optional
-            Inclusive end date of historical data. If not provide then the date
-            is set to today.
-        type : None, 'dividends`, or 'splits'
-            None (default) for end of day data, or dividends or splits
-
-        """
-        # Generate a date series between from_date and to_date (inclusive).
-        dates = [
-            from_date + datetime.timedelta(days=x)
-            for x in range((to_date - from_date).days + 1)
-        ]
-
-        # Create a dict of exchanges keys with each item a list of the
-        # securities specified (by symbols_list) in that exchange.
-        exchange_dict = defaultdict(list)
-        for ticker, exchange in symbol_list:
-            exchange_dict[exchange].append(ticker)
-
-        # Fetch securities across all exchange.
-        tasks = list()
-        async with Bulk() as bulk:
-            for exchange, ticker_list in exchange_dict.items():
-                for date in dates:
-                    tasks.append(bulk._get(exchange, date, ticker_list, type))
-            table_list = await asyncio.gather(*tasks)
-
-        # Contrary to _get_eod the API does return date, exchange and ticker
-        # data so it not not be constructed and attached. Combine tables in to
-        # one large table
-        table = pd.concat(table_list, axis="index")
-        table.sort_index(inplace=True)  # MultiIndex must be sorted for slicing.
-        # Duplicates are caused by holidays. Querying the API on the evenings of
-        # Friday (which did return a non-trivial result), and Saturday and
-        # Sunday would produce 3 identical entries, all dated Friday. So we need
-        # to drop these.
-        table.drop_duplicates(inplace=True)
-
-        return table
-
-    def get_eod(self, symbol_list):
-        """Get historical EOD for a list of securities.
-
-        This method switches between EOD and Bulk feeds (classes Historical and
-        Bulk) depending on the date range. This is to minimize time in the API
-        calls.
-
-        symbol_list : list of tuples
-            A list of ticker-exchange and date range list. As an example, if
-            Apple Inc (ticker AAPL, exchange US). was required between
-            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
-            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
-            that the date must be `datetime.date` or an exception shall be
-            thrown.
-
-        """
-        # Use EOD API
-        table = asyncio.run(self._get_eod(Historical._historical_eod, symbol_list))
-
-        if table.empty:
-            # Produce an empty DataFrame that will pass empty tests downstream
-            table = pd.DataFrame()
-        else:
-            # The security and date info is in the index
-            table = table[eod_columns]
-
-        return table
-
-    def get_dividends(self, symbol_list):
-        """Get historical dividends for a list of securities.
-
-        This method uses only the EOD (class Historical) due to incorrect Bulk
-        API call behaviour such as not returning the ``value`` filed and not
-        restricting to only the specified tickers or symbols.
-
-        symbol_list : list of tuples
-            A list of ticker-exchange and date range list. As an example, if
-            Apple Inc (ticker AAPL, exchange US). was required between
-            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
-            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
-            that the date must be `datetime.date` or an exception shall be
-            thrown
-
-        """
-        # Use EOD API
-        table = asyncio.run(
-            self._get_eod(Historical._historical_dividends, symbol_list)
-        )
-
-        if table.empty:
-            # Produce an empty DataFrame that will pass empty tests downstream
-            table = pd.DataFrame()
-        else:
-            # The security and date info is in the index
-            table = table[dividend_columns]
-
-        # Some DataFrames values are sometimes None - convert only these to
-        # float NaNs
-
-
-
-        return table
-
-    def get_splits(self, symbol_list):
-        """Get historical splits for a list of securities.
-
-        This method uses only the EOD (class Historical) due to incorrect Bulk
-        API call behaviour such as not returning the ``value`` filed and not
-        restricting to only the specified tickers or symbols.
-
-        symbol_list : list of tuples
-            A list of ticker-exchange and date range list. As an example, if
-            Apple Inc (ticker AAPL, exchange US). was required between
-            2021-01-01 and 2022-01-01 then it's symbol tuple would be: `('AAPL',
-            'US', datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note
-            that the date must be `datetime.date` or an exception shall be
-            thrown
-
-        """
-        # Use EOD API
-        table = asyncio.run(
-            self._get_eod(Historical._historical_splits, symbol_list)
-        )
-
-        if table.empty:
-            # Produce an empty DataFrame that will pass empty tests downstream
-            table = pd.DataFrame()
-        else:
-            # The security and date info is in the index
-            table = table[split_columns]
-
-        return table
-
-    def get_forex(self, forex_list):
-        """Get historical forex for a list of rates.
-
-        This method uses only the EOD (class Historical) due to incorrect Bulk
-        API call behaviour such as not returning the ``value`` filed and not
-        restricting to only the specified tickers or symbols.
-
-        symbol_list : list of tuples
-            A list of forex tickers and date range list. As an example, if USD
-            to ZAR (ticker USDZAR) was required between 2021-01-01 and
-            2022-01-01 then it's symbol tuple would be: `('USDZAR',
-            datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note that
-            the date must be `datetime.date` or an exception shall be thrown
-
-        """
-        # Re-construct a symbol list form the forex ticker list as (`exchange`,
-        # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
-        # part set to "FOREX". In other words, insert FOREX in the right
-        # position.
-        symbol_list = [
-            (ticker, "FOREX", from_date, to_date)
-            for ticker, from_date, to_date in forex_list
-        ]
-
-        # Use EOD API
-        table = asyncio.run(self._get_eod(Historical._historical_forex, symbol_list))
-
-        if table.empty:
-            # Produce an empty DataFrame that will pass empty tests downstream
-            table = pd.DataFrame()
-        else:
-            # The security and date info is in the index
-            table = table[eod_columns]
-            # As the exchange suffix is always 'FOREX' it is unnecessary.
-            table = table.droplevel(level="exchange")
-
-        return table
-
-    def get_index(self, index_list):
-        """Get historical forex for a list of rates.
-
-        This method uses only the EOD (class Historical) due to incorrect Bulk
-        API call behaviour such as not returning the ``value`` filed and not
-        restricting to only the specified tickers or symbols.
-
-        symbol_list : list of tuples
-            A list of index tickers and date range list. As an example, if the
-            index ASX (FTSE All Share Index) was required between 2021-01-01 and
-            2022-01-01 then it's symbol tuple would be: `('ASX',
-            datetime.date(2021, 1, 1), datetime.date(2022, 1, 1))`. Note that
-            the date must be `datetime.date` or an exception shall be thrown
-
-        """
-        # Re-construct a symbol list form the forex ticker list as (`exchange`,
-        # `ticker`) pairs (as in the ``get_eod`` method) with the `exchange`
-        # part set to "FOREX". In other words, insert FOREX in the right
-        # position.
-        symbol_list = [
-            (ticker, "INDX", from_date, to_date)
-            for ticker, from_date, to_date in index_list
-        ]
-
-        # Use EOD API
-        table = asyncio.run(self._get_eod(Historical._historical_forex, symbol_list))
-
-        if table.empty:
-            # Produce an empty DataFrame that will pass empty tests downstream
-            table = pd.DataFrame()
-        else:
-            # The security and date info is in the index
-            table = table[eod_columns]
-            # As the exchange suffix is always 'INDX' it is unnecessary.
-            table = table.droplevel(level="exchange")
-
-        return table
