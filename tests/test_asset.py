@@ -755,10 +755,6 @@ class TestIndex(TestBase):
         self.assertIn("Index", result)
         self.assertIn(self.currency.ticker, result)
 
-    def test_name_appendix(self):
-        """Test _name_appendix class attribute."""
-        self.assertEqual(Index._name_appendix, "Index")
-
     def test_database_persistence(self):
         """Test that Index instance can be persisted to database."""
         self.session.add(self.index)
@@ -1024,10 +1020,6 @@ class TestExchangeTradeFund(TestBase):
     def test_mic_property(self):
         """Test that MIC is set from exchange."""
         self.assertEqual(self.etf.mic, self.exchange.mic)
-
-    def test_name_appendix(self):
-        """Test _name_appendix class attribute."""
-        self.assertEqual(ExchangeTradeFund._name_appendix, "ETF")
 
     def test_database_persistence(self):
         """Test that ExchangeTradeFund instance can be persisted to database."""

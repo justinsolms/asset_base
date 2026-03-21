@@ -92,13 +92,6 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         pass
         super().tearDown()
 
-    def test_show_price_df_fixture(self):
-        """Print the price fixture DataFrame for visual inspection."""
-        print("\nPlain Test Price DataFrame:")
-        print(self.clean_test_price_df)
-        print("\nOutlier Test Price DataFrame:")
-        print(self.dirty_test_price_df)
-
     def test_init(self):
         """Test TimeSeriesProcessor initialization."""
         self.assertIsInstance(self.tsp_dirty, TimeSeriesProcessor)

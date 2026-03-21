@@ -698,7 +698,6 @@ class TestHistorical(MockAPIMixin, aiounittest.AsyncTestCase):
         df.reset_index(inplace=True)  # Reset index to test date column
         # Assert ticker and exchange columns are present then drop them for
         # testing the rest of the structure
-        print(df)
         self.assertIn("ticker", df.columns)
         self.assertIn("exchange", df.columns)
         self.assertEqual("AAPL", df["ticker"].iloc[0])
