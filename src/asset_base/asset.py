@@ -156,14 +156,6 @@ class AssetBase(Common):
     _id = Column(Integer, ForeignKey("common._id"), primary_key=True)
     """ Primary key."""
 
-    # A human readable string unique to the class instance. This is not a key
-    # code but is useful for display and debugging purposes. It is not required
-    # to be unique across the entire database but is **required to be unique
-    # within the asset class**. For example, the ticker "USD" is unique within
-    # the Cash class but not across all asset classes as it may also be used as
-    # a ticker in the Listed class.
-    identity_code = Column(String(64), index=True, nullable=False)
-
     # Each Asset has one Currency.
     _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship(Currency)

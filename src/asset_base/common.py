@@ -407,10 +407,18 @@ class Common(Base):
         # no polymorphic_identity here; this class is effectively abstract
     }
 
+    # The name (or label) to attach to the ``key_code`` attribute (@property
+    # method). Override in sub-classes. This might be used as the column name in
+    # tables of key codes when joining enabling automated column identification.
     KEY_CODE_LABEL = "key_code"
-    """str: The name to attach to the ``key_code`` attribute (@property method).
-    Override in  sub-classes. This is used for example as the column name in
-    tables of key codes when joining."""
+
+    # A human readable string unique to the class instance. This is not a key
+    # code but is useful for display and debugging purposes. It is not required
+    # to be unique across the entire database but is **required to be unique
+    # within the asset class**. For example, the ticker "USD" is unique within
+    # the Cash class but not across all asset classes as it may also be used as
+    # a ticker in the Listed class.
+    identity_code = Column(String(64), index=True, nullable=False)
 
     # Entity dates.
     date_create = Column(Date, nullable=False)
@@ -432,7 +440,7 @@ class Common(Base):
         """Instance initialization."""
         self.name = name
 
-        # Record creation date
+        # Record creation date as today (only set on creation, not modified on updates).
         self.date_create = datetime.datetime.today()
 
     @abstractmethod
