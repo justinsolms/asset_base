@@ -441,8 +441,8 @@ class Common(Base):
         self.name = name
 
         # Set the identity code using the class-specific method that subclasses
-        # must implement. This ensures that the identity code is always
-        # initialized based on the instance's attributes and class logic.
+        # must implement. The code is a required attribute for unique
+        # identification of instances and is not optional.
         self.identity_code = self._get_identity_code()
 
         # Record creation date as today (only set on creation, not modified on updates).
