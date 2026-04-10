@@ -13,7 +13,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def setUpClass(cls):
         """Set up class-wide test fixtures."""
         super().setUpClass()
-        cls.identity_code = "XNYS:ABC"  # ABC Inc. identity code as example
+        cls.identity_code = "XNYS:ABC"  # ABC Inc. asset code as example
 
         # Price data fixture - days of trade data with holidays and anomalies In
         # prices spikes cause twin outliers on the spike day and on the
@@ -22,15 +22,15 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # are removed. Jumps cause a single outlier on the jump day.
         fixture_df = pd.read_csv("tests/fixtures/time_series_processor_price_fixture.csv")
         price_df = fixture_df[['identity_code', 'date_stamp', 'price', 'anomaly', 'anomaly_value', 'holiday', 'is_outlier']]
-        price_df = price_df.rename(columns={'identity_code': 'identity'})
+        price_df = price_df.rename(columns={'identity_code': 'asset'})
         price_df['date_stamp'] = pd.to_datetime(price_df['date_stamp'])
         cls.test_price_df = price_df.copy()
 
         # Create clean price DataFrame without anomalies
-        cls.clean_test_price_df = price_df[['identity', 'date_stamp', 'price']]
+        cls.clean_test_price_df = price_df[['asset', 'date_stamp', 'price']]
 
         # Create dirty price DataFrame with anomalies applied
-        price_df = price_df.set_index(['identity', 'date_stamp'])
+        price_df = price_df.set_index(['asset', 'date_stamp'])
         # Apply price spikes on the day they occur
         spike_df = price_df.loc[price_df['anomaly'] == 'spike', 'anomaly_value']
         price_df.loc[price_df['anomaly'] == 'spike', 'price'] += spike_df
@@ -42,11 +42,11 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Reset index
         price_df = price_df.reset_index()
         # Dirty price DataFrame with anomalies applied
-        cls.dirty_test_price_df = price_df[['identity', 'date_stamp', 'price']]
+        cls.dirty_test_price_df = price_df[['asset', 'date_stamp', 'price']]
 
         # Create a tsp with insufficient rows to meet sample size adequacy
         # for multiple assets test later
-        cls.insufficient_test_price_df = price_df[['identity', 'date_stamp', 'price']].iloc[:5]
+        cls.insufficient_test_price_df = price_df[['asset', 'date_stamp', 'price']].iloc[:5]
 
         # Assert that days with holiday names are NaN in price as there would be
         # no trading on those days
@@ -57,14 +57,14 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Dividend data fixture - 2 dividend events
         dividend_df = fixture_df[['identity_code', 'date_stamp', 'dividend']]
-        dividend_df = dividend_df.rename(columns={'identity_code': 'identity'})
+        dividend_df = dividend_df.rename(columns={'identity_code': 'asset'})
         dividend_df.rename(columns={'dividend': 'unadjusted_value'}, inplace=True)
         dividend_df['date_stamp'] = pd.to_datetime(dividend_df['date_stamp'])
         cls.test_dividend_df = dividend_df
 
         # Split data fixture - 2 split events
         split_df = fixture_df[['identity_code', 'date_stamp', 'numerator', 'denominator']]
-        split_df = split_df.rename(columns={'identity_code': 'identity'})
+        split_df = split_df.rename(columns={'identity_code': 'asset'})
         split_df['date_stamp'] = pd.to_datetime(split_df['date_stamp'])
         cls.test_split_df = split_df
 
@@ -127,7 +127,19 @@ class TestTimeSeriesProcessor(unittest.TestCase):
             TimeSeriesProcessor(legacy_price_df)
 
         self.assertIn("missing required columns", str(context.exception))
-        self.assertIn("identity", str(context.exception))
+        self.assertIn("asset", str(context.exception))
+
+    def test_init_accepts_asset_column(self):
+        """Preferred asset column is accepted."""
+        price_df = pd.DataFrame({
+            'asset': [self.identity_code] * 3,
+            'date_stamp': pd.date_range(start='2021-01-01', periods=3),
+            'price': [100.0, 101.0, 102.0],
+        })
+
+        tsp = TimeSeriesProcessor(price_df)
+
+        self.assertIn('asset', tsp._prices_df.columns)
 
     def test_validate_prices(self):
         """Test price validation method."""
@@ -136,7 +148,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Validate small price fixture
         invalid_price_df = pd.DataFrame({
-            'identity': [self.identity_code]*5,
+            'asset': [self.identity_code]*5,
             'date_stamp': pd.date_range(start='2021-01-01', periods=5),
             'price': [100.0, 50.0, 30.0, 200.0, np.nan]
         })
@@ -145,7 +157,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Test non-numeric prices
         invalid_price_df = pd.DataFrame({
-            'identity': [self.identity_code]*5,
+            'asset': [self.identity_code]*5,
             'date_stamp': pd.date_range(start='2021-01-01', periods=5),
             'price': [100.0, 50.0, 'abc', 200.0, np.nan]
         })
@@ -155,7 +167,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Test negative prices
         invalid_price_df = pd.DataFrame({
-            'identity': [self.identity_code]*5,
+            'asset': [self.identity_code]*5,
             'date_stamp': pd.date_range(start='2021-01-01', periods=5),
             'price': [100.0, -50.0, 30.0, 200.0, np.nan]
         })
@@ -217,7 +229,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         self.tsp_dirty._normalize_and_order_dates()
         pd.testing.assert_frame_equal(
             self.tsp_dirty._prices_df.reset_index(drop=True),
-            self.clean_test_price_df.sort_values(by=['identity', 'date_stamp']).reset_index(drop=True)
+            self.clean_test_price_df.sort_values(by=['asset', 'date_stamp']).reset_index(drop=True)
         )
 
     # TODO: These test must use adjusted prices.
@@ -269,7 +281,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         outlier_df.drop(columns=['price'], inplace=True)
         # Get known outlier bool series from fixture
         clean_test_df = self.test_price_df.dropna(subset=['price'])
-        known_outliers = clean_test_df.set_index(['identity', 'date_stamp'])['is_outlier'].reset_index()
+        known_outliers = clean_test_df.set_index(['asset', 'date_stamp'])['is_outlier'].reset_index()
         # Test that the outlier bool series matches known outliers
         pd.testing.assert_frame_equal(outlier_df, known_outliers)
 
@@ -285,14 +297,14 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         message = str(context.exception)
         self.assertTrue(
             "Insufficient data" in message
-            or "No identity has sufficient data" in message
+            or "No asset has sufficient data" in message
         )
 
     def test_apply_corporate_actions_no_dividends_no_splits(self):
         """Test corporate actions with no dividends and no splits."""
         # Create a simple price series without dividends or splits
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 5,
+            'asset': ['TEST:A'] * 5,
             'date_stamp': pd.date_range('2020-01-01', periods=5, freq='D'),
             'price': [100.0, 101.0, 102.0, 103.0, 104.0]
         })
@@ -321,13 +333,13 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_with_dividends_only(self):
         """Test corporate actions with dividends but no splits."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 5,
+            'asset': ['TEST:A'] * 5,
             'date_stamp': pd.date_range('2020-01-01', periods=5, freq='D'),
             'price': [100.0, 101.0, 102.0, 103.0, 104.0]
         })
         # Dividend of 2.0 on day 3 (2020-01-03)
         dividend_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'unadjusted_value': [2.0]
         })
@@ -358,13 +370,13 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_with_splits_only(self):
         """Test corporate actions with splits but no dividends."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 5,
+            'asset': ['TEST:A'] * 5,
             'date_stamp': pd.date_range('2020-01-01', periods=5, freq='D'),
             'price': [100.0, 101.0, 50.5, 51.0, 52.0]  # Split on day 3
         })
         # 2-for-1 split on day 3 (2020-01-03)
         split_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -396,19 +408,19 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_with_dividends_and_splits(self):
         """Test corporate actions with both dividends and splits."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 6,
+            'asset': ['TEST:A'] * 6,
             'date_stamp': pd.date_range('2020-01-01', periods=6, freq='D'),
             'price': [100.0, 101.0, 102.0, 51.0, 52.0, 53.0]
         })
         # Dividend of 1.0 on day 3
         dividend_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'unadjusted_value': [1.0]
         })
         # 2-for-1 split on day 4
         split_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-04')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -450,19 +462,19 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_multiple_assets(self):
         """Test corporate actions with multiple assets."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A']*3 + ['TEST:B']*3,
+            'asset': ['TEST:A']*3 + ['TEST:B']*3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D').tolist() * 2,
             'price': [100.0, 101.0, 102.0, 200.0, 202.0, 204.0]
         })
         # Dividend for TEST:A only
         dividend_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-02')],
             'unadjusted_value': [1.0]
         })
         # Split for TEST:B only
         split_df = pd.DataFrame({
-            'identity': ['TEST:B'],
+            'asset': ['TEST:B'],
             'date_stamp': [pd.Timestamp('2020-01-02')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -471,13 +483,13 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp._apply_corporate_actions()
 
         # TEST:A should have dividend on day 2
-        test_a = tsp._prices_df[tsp._prices_df['identity'] == 'TEST:A']
+        test_a = tsp._prices_df[tsp._prices_df['asset'] == 'TEST:A']
         np.testing.assert_array_almost_equal(
             test_a['dividend'].values, [0.0, 1.0, 0.0], decimal=6
         )
 
         # TEST:B should have split on day 2
-        test_b = tsp._prices_df[tsp._prices_df['identity'] == 'TEST:B']
+        test_b = tsp._prices_df[tsp._prices_df['asset'] == 'TEST:B']
         np.testing.assert_array_almost_equal(
             test_b['split_ratio'].values, [1.0, 2.0, 1.0], decimal=6
         )
@@ -485,18 +497,18 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_same_day_dividend_and_split(self):
         """Test corporate actions when dividend and split occur on the same day."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 4,
+            'asset': ['TEST:A'] * 4,
             'date_stamp': pd.date_range('2020-01-01', periods=4, freq='D'),
             'price': [100.0, 101.0, 51.0, 52.0]
         })
         # Both dividend and split on day 3
         dividend_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'unadjusted_value': [2.0]
         })
         split_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -516,13 +528,13 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_multiple_dividends_same_day(self):
         """Test corporate actions with multiple dividends on the same day (aggregation)."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
         # Two dividends on day 2 (should be aggregated)
         dividend_df = pd.DataFrame({
-            'identity': ['TEST:A', 'TEST:A'],
+            'asset': ['TEST:A', 'TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-02'), pd.Timestamp('2020-01-02')],
             'unadjusted_value': [1.0, 0.5]
         })
@@ -535,13 +547,13 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_reverse_split(self):
         """Test corporate actions with a reverse split (1-for-5)."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [10.0, 11.0, 55.0]  # Price jumps due to reverse split
         })
         # 1-for-5 reverse split on day 3
         split_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'numerator': [1.0],
             'denominator': [5.0]
@@ -558,13 +570,13 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_apply_corporate_actions_invalid_splits(self):
         """Test corporate actions with invalid split data (non-positive)."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
         # Invalid split with zero denominator
         split_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-02')],
             'numerator': [2.0],
             'denominator': [0.0]
@@ -620,17 +632,17 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         """Test get_raw_price_info_dataframe includes total_return after processing."""
         # Create price series with sufficient data (need at least 10 observations)
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 12,
+            'asset': ['TEST:A'] * 12,
             'date_stamp': pd.date_range('2020-01-01', periods=12, freq='D'),
             'price': [100.0 + i for i in range(12)]
         })
         dividend_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-05')],
             'unadjusted_value': [1.0]
         })
         split_df = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-08')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -643,7 +655,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Verify total_return column exists
         self.assertIn('total_return', result_df.columns)
-        self.assertIn('identity', result_df.columns)
+        self.assertIn('asset', result_df.columns)
         self.assertIn('date_stamp', result_df.columns)
 
         # Verify we have 12 rows
@@ -657,7 +669,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_get_adjusted_price_anchor_first(self):
         """Test that adj_price_first is computed correctly."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 12,
+            'asset': ['TEST:A'] * 12,
             'date_stamp': pd.date_range('2020-01-01', periods=12, freq='D'),
             'price': [100.0 + i for i in range(12)]
         })
@@ -675,7 +687,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_get_adjusted_price_anchor_last(self):
         """Test that adj_price_last is computed correctly."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 12,
+            'asset': ['TEST:A'] * 12,
             'date_stamp': pd.date_range('2020-01-01', periods=12, freq='D'),
             'price': [100.0 + i for i in range(12)]
         })
@@ -703,7 +715,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         """Test get_pivoted_price_info_dataframes_dict method."""
         # Need at least 10*2=20 observations for 2 assets
         price_df = pd.DataFrame({
-            'identity': ['AAPL'] * 25 + ['MSFT'] * 25,
+            'asset': ['AAPL'] * 25 + ['MSFT'] * 25,
             'date_stamp': pd.date_range('2020-01-01', periods=25, freq='D').tolist() * 2,
             'price': [100.0 + i for i in range(25)] + [200.0 + i*2 for i in range(25)]
         })
@@ -727,7 +739,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_pivot_dataframes_with_get_methods(self):
         """Test pivoting with processed data including corporate actions."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 12,
+            'asset': ['TEST:A'] * 12,
             'date_stamp': pd.date_range('2020-01-01', periods=12, freq='D'),
             'price': [100.0 + i for i in range(12)]
         })
@@ -749,7 +761,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         """Test basic concatenation of two TimeSeriesProcessor instances."""
         # Create first processor with TEST:A
         price_df_a = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
@@ -757,7 +769,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Create second processor with TEST:B
         price_df_b = pd.DataFrame({
-            'identity': ['TEST:B'] * 3,
+            'asset': ['TEST:B'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [200.0, 202.0, 204.0]
         })
@@ -769,20 +781,20 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Verify result
         self.assertIsInstance(tsp_combined, TimeSeriesProcessor)
         self.assertEqual(len(tsp_combined._prices_df), 6)
-        self.assertEqual(tsp_combined._prices_df['identity'].nunique(), 2)
-        self.assertIn('TEST:A', tsp_combined._prices_df['identity'].values)
-        self.assertIn('TEST:B', tsp_combined._prices_df['identity'].values)
+        self.assertEqual(tsp_combined._prices_df['asset'].nunique(), 2)
+        self.assertIn('TEST:A', tsp_combined._prices_df['asset'].values)
+        self.assertIn('TEST:B', tsp_combined._prices_df['asset'].values)
 
     def test_concat_with_dividends(self):
         """Test concatenation when dividends are present."""
         # First processor with dividend
         price_df_a = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
         dividend_df_a = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-02')],
             'unadjusted_value': [1.0]
         })
@@ -790,12 +802,12 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Second processor with dividend
         price_df_b = pd.DataFrame({
-            'identity': ['TEST:B'] * 3,
+            'asset': ['TEST:B'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [200.0, 202.0, 204.0]
         })
         dividend_df_b = pd.DataFrame({
-            'identity': ['TEST:B'],
+            'asset': ['TEST:B'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'unadjusted_value': [2.0]
         })
@@ -807,19 +819,19 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Verify dividends are combined
         self.assertIsNotNone(tsp_combined._dividends_df)
         self.assertEqual(len(tsp_combined._dividends_df), 2)
-        self.assertIn('TEST:A', tsp_combined._dividends_df['identity'].values)
-        self.assertIn('TEST:B', tsp_combined._dividends_df['identity'].values)
+        self.assertIn('TEST:A', tsp_combined._dividends_df['asset'].values)
+        self.assertIn('TEST:B', tsp_combined._dividends_df['asset'].values)
 
     def test_concat_with_splits(self):
         """Test concatenation when splits are present."""
         # First processor with split
         price_df_a = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 50.5]
         })
         split_df_a = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -828,12 +840,12 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Second processor with split
         price_df_b = pd.DataFrame({
-            'identity': ['TEST:B'] * 3,
+            'asset': ['TEST:B'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [200.0, 202.0, 101.0]
         })
         split_df_b = pd.DataFrame({
-            'identity': ['TEST:B'],
+            'asset': ['TEST:B'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -846,19 +858,19 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         # Verify splits are combined
         self.assertIsNotNone(tsp_combined._splits_df)
         self.assertEqual(len(tsp_combined._splits_df), 2)
-        self.assertIn('TEST:A', tsp_combined._splits_df['identity'].values)
-        self.assertIn('TEST:B', tsp_combined._splits_df['identity'].values)
+        self.assertIn('TEST:A', tsp_combined._splits_df['asset'].values)
+        self.assertIn('TEST:B', tsp_combined._splits_df['asset'].values)
 
     def test_concat_mixed_dividends_and_splits(self):
         """Test concatenation with mixed dividend/split presence."""
         # First processor with dividend only
         price_df_a = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
         dividend_df_a = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-02')],
             'unadjusted_value': [1.0]
         })
@@ -866,12 +878,12 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Second processor with split only
         price_df_b = pd.DataFrame({
-            'identity': ['TEST:B'] * 3,
+            'asset': ['TEST:B'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [200.0, 202.0, 101.0]
         })
         split_df_b = pd.DataFrame({
-            'identity': ['TEST:B'],
+            'asset': ['TEST:B'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -880,7 +892,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Third processor with neither
         price_df_c = pd.DataFrame({
-            'identity': ['TEST:C'] * 3,
+            'asset': ['TEST:C'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [300.0, 303.0, 306.0]
         })
@@ -899,7 +911,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
     def test_concat_single_processor(self):
         """Test concatenation with a single processor."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
@@ -912,15 +924,15 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         self.assertIsInstance(tsp_combined, TimeSeriesProcessor)
         self.assertEqual(len(tsp_combined._prices_df), 3)
         pd.testing.assert_frame_equal(
-            tsp_combined._prices_df.sort_values(['identity', 'date_stamp']).reset_index(drop=True),
-            tsp._prices_df.sort_values(['identity', 'date_stamp']).reset_index(drop=True)
+            tsp_combined._prices_df.sort_values(['asset', 'date_stamp']).reset_index(drop=True),
+            tsp._prices_df.sort_values(['asset', 'date_stamp']).reset_index(drop=True)
         )
 
     def test_concat_overlapping_assets(self):
         """Test concatenation with overlapping assets (same identity_code)."""
         # First processor with TEST:A on dates 1-3
         price_df_a = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
@@ -928,7 +940,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Second processor with TEST:A on dates 4-6
         price_df_b = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-04', periods=3, freq='D'),
             'price': [103.0, 104.0, 105.0]
         })
@@ -939,16 +951,16 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Should have 6 rows for same asset
         self.assertEqual(len(tsp_combined._prices_df), 6)
-        self.assertEqual(tsp_combined._prices_df['identity'].nunique(), 1)
+        self.assertEqual(tsp_combined._prices_df['asset'].nunique(), 1)
 
         # Verify all dates are present
-        test_a_data = tsp_combined._prices_df[tsp_combined._prices_df['identity'] == 'TEST:A']
+        test_a_data = tsp_combined._prices_df[tsp_combined._prices_df['asset'] == 'TEST:A']
         self.assertEqual(len(test_a_data), 6)
 
     def test_concat_invalid_type(self):
         """Test concatenation with invalid input type."""
         price_df = pd.DataFrame({
-            'identity': ['TEST:A'] * 3,
+            'asset': ['TEST:A'] * 3,
             'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
             'price': [100.0, 101.0, 102.0]
         })
@@ -963,17 +975,17 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         """Test that concatenation preserves all data correctly."""
         # Create two processors with full corporate actions
         price_df_a = pd.DataFrame({
-            'identity': ['TEST:A'] * 4,
+            'asset': ['TEST:A'] * 4,
             'date_stamp': pd.date_range('2020-01-01', periods=4, freq='D'),
             'price': [100.0, 101.0, 102.0, 103.0]
         })
         dividend_df_a = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-02')],
             'unadjusted_value': [1.0]
         })
         split_df_a = pd.DataFrame({
-            'identity': ['TEST:A'],
+            'asset': ['TEST:A'],
             'date_stamp': [pd.Timestamp('2020-01-03')],
             'numerator': [2.0],
             'denominator': [1.0]
@@ -981,12 +993,12 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         tsp_a = TimeSeriesProcessor(price_df_a, dividends_df=dividend_df_a, splits_df=split_df_a)
 
         price_df_b = pd.DataFrame({
-            'identity': ['TEST:B'] * 4,
+            'asset': ['TEST:B'] * 4,
             'date_stamp': pd.date_range('2020-01-01', periods=4, freq='D'),
             'price': [200.0, 202.0, 204.0, 206.0]
         })
         dividend_df_b = pd.DataFrame({
-            'identity': ['TEST:B'],
+            'asset': ['TEST:B'],
             'date_stamp': [pd.Timestamp('2020-01-04')],
             'unadjusted_value': [2.0]
         })
@@ -1015,7 +1027,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         processors = []
         for i, code in enumerate(['TEST:A', 'TEST:B', 'TEST:C']):
             price_df = pd.DataFrame({
-                'identity': [code] * 3,
+                'asset': [code] * 3,
                 'date_stamp': pd.date_range('2020-01-01', periods=3, freq='D'),
                 'price': [(i+1)*100.0, (i+1)*101.0, (i+1)*102.0]
             })
@@ -1026,7 +1038,7 @@ class TestTimeSeriesProcessor(unittest.TestCase):
 
         # Verify
         self.assertEqual(len(tsp_combined._prices_df), 9)
-        self.assertEqual(tsp_combined._prices_df['identity'].nunique(), 3)
+        self.assertEqual(tsp_combined._prices_df['asset'].nunique(), 3)
         for code in ['TEST:A', 'TEST:B', 'TEST:C']:
-            self.assertIn(code, tsp_combined._prices_df['identity'].values)
+            self.assertIn(code, tsp_combined._prices_df['asset'].values)
 

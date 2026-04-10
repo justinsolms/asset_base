@@ -538,8 +538,8 @@ class Asset(AssetBase):
         -------
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
-            asset which includes only the EOD time series and `identity`
-            columns set to this ``Asset`` instance.
+            asset which includes only the EOD time series and an `asset`
+            column set to this ``Asset`` instance.
         """
         # Check price item is valid
         eod = self.get_eod_series()
@@ -549,8 +549,8 @@ class Asset(AssetBase):
                 f"Expected one of {list(eod.columns)}.")
 
         prices_df = eod.reset_index()
-        prices_df["identity"] = self
-        columns_to_keep = ["identity", "date_stamp", price_item]
+        prices_df["asset"] = self
+        columns_to_keep = ["asset", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -843,8 +843,8 @@ class Cash(Asset):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset which includes only the Cash EOD time series of price = 1.0
-            with dates from the `date_index` argument and `identity`
-            columns set to this ``Cash`` instance.
+            with dates from the `date_index` argument and an `asset` column set
+            to this ``Cash`` instance.
         """
         # Check that the price_item argument is 'price for this Cash class
         if price_item != 'price':
@@ -853,8 +853,8 @@ class Cash(Asset):
                 "Expected 'price' for this asset class.")
 
         prices_df = self.get_eod_series(date_index).reset_index()
-        prices_df["identity"] = self
-        columns_to_keep = ["identity", "date_stamp", price_item]
+        prices_df["asset"] = self
+        columns_to_keep = ["asset", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -2481,8 +2481,8 @@ class ListedEquity(Listed):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset with the end-of-day prices, dividends, and splits data
-            series. The `identity` column is set to this
-            ``ListedEquity`` instance.
+            series. The `asset` column is set to this ``ListedEquity``
+            instance.
 
         Raises
         ------
@@ -2502,8 +2502,8 @@ class ListedEquity(Listed):
 
         # Get prices, select price item, and rename to "price" for the processor.
         prices_df = eod.reset_index()
-        prices_df["identity"] = self
-        columns_to_keep = ["identity", "date_stamp", price_item]
+        prices_df["asset"] = self
+        columns_to_keep = ["asset", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
         columns_to_rename = {price_item: "price"}
         prices_df.rename(columns=columns_to_rename, inplace=True)
@@ -2518,8 +2518,8 @@ class ListedEquity(Listed):
                 "Distributions were expected but Dividend series will be empty.")
             dividends_df = None
         else:
-            dividends_df["identity"] = self
-            columns_to_keep = ["identity", "date_stamp", "unadjusted_value"]
+            dividends_df["asset"] = self
+            columns_to_keep = ["asset", "date_stamp", "unadjusted_value"]
             dividends_df = dividends_df[columns_to_keep]
             # Add dividend column as a copy of unadjusted_value
             dividends_df["dividend"] = dividends_df["unadjusted_value"]
@@ -2530,8 +2530,8 @@ class ListedEquity(Listed):
         except SplitSeriesNoData:
             splits_df = None
         else:
-            splits_df["identity"] = self
-            columns_to_keep = ["identity", "date_stamp", "numerator", "denominator"]
+            splits_df["asset"] = self
+            columns_to_keep = ["asset", "date_stamp", "numerator", "denominator"]
             splits_df = splits_df[columns_to_keep]
 
         # Create and return the processor

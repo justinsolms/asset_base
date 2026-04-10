@@ -17,8 +17,8 @@ $ pip install asset_base
 
 ### Identifier semantics in time-series workflows
 
-- The `TimeSeriesProcessor` input/output column name is `identity`.
-- In current `Asset.get_time_series_processor()` flows, this column stores the `Asset` instance itself (not just `Asset.identity_code` string values).
+- The preferred `TimeSeriesProcessor` object identifier column name is `asset`.
+- In current `Asset.get_time_series_processor()` flows, this payload stores the `Asset` instance itself (not just `Asset.identity_code` string values).
 - This allows downstream workflows to access full asset attributes directly from grouped/pivoted data.
 
 ### Identity code initialization

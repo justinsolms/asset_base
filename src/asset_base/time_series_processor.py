@@ -18,26 +18,26 @@ class TimeSeriesProcessor():
     """ Clean and transform raw trade-daily price series into statistically
     usable price return series.
 
+    The object identifier column name is ``asset``.
+
     Parameters
     ----------
     prices_df : pandas.DataFrame
         Raw trade-daily price data with columns:
-        ``['identity', 'date_stamp', 'price']``.
+        ``['asset', 'date_stamp', 'price']``.
     dividends_df : pandas.DataFrame, optional
         Dividend data with columns:
-        ``['identity', 'date_stamp', 'unadjusted_value']``.
+        ``['asset', 'date_stamp', 'unadjusted_value']``.
         If provided, total returns are computed. Default is ``None``.
     splits_df : pandas.DataFrame, optional
         Share split data with columns:
-        ``['identity', 'date_stamp', 'numerator', 'denominator']``.
+        ``['asset', 'date_stamp', 'numerator', 'denominator']``.
         Default is ``None``.
 
     Notes
     -----
-    The identifier column name is ``identity``. Its values may be full
-    ``Asset`` instances (preferred in
-    current workflows) or other hashable identifiers used to group time-series
-    rows by security.
+    The ``asset`` column values may be full ``Asset`` instances or other
+    hashable identifiers used to group time-series rows by security.
 
     This class prepares raw price data for downstream return and risk analysis
     by performing a series of cleaning and transformation steps. The main processing steps include:
@@ -87,6 +87,8 @@ class TimeSeriesProcessor():
 
     """
 
+    ASSET_COLUMN = "asset"
+
     def __init__(
         self,
         prices_df: pd.DataFrame,
@@ -99,7 +101,7 @@ class TimeSeriesProcessor():
         if not isinstance(prices_df, pd.DataFrame):
             raise TypeError("prices_df must be a pandas.DataFrame")
 
-        required_price_cols = {"identity", "date_stamp", "price"}
+        required_price_cols = {self.ASSET_COLUMN, "date_stamp", "price"}
         if not required_price_cols.issubset(set(prices_df.columns)):
             missing = required_price_cols - set(prices_df.columns)
             raise ValueError(f"prices_df is missing required columns: {missing}")
@@ -107,7 +109,7 @@ class TimeSeriesProcessor():
         if dividends_df is not None:
             if not isinstance(dividends_df, pd.DataFrame):
                 raise TypeError("dividends_df must be a pandas.DataFrame or None")
-            required_div_cols = {"identity", "date_stamp", "unadjusted_value"}
+            required_div_cols = {self.ASSET_COLUMN, "date_stamp", "unadjusted_value"}
             if not required_div_cols.issubset(set(dividends_df.columns)):
                 missing = required_div_cols - set(dividends_df.columns)
                 raise ValueError(f"dividends_df is missing required columns: {missing}")
@@ -115,7 +117,7 @@ class TimeSeriesProcessor():
         if splits_df is not None:
             if not isinstance(splits_df, pd.DataFrame):
                 raise TypeError("splits_df must be a pandas.DataFrame or None")
-            required_split_cols = {"identity", "date_stamp", "numerator", "denominator"}
+            required_split_cols = {self.ASSET_COLUMN, "date_stamp", "numerator", "denominator"}
             if not required_split_cols.issubset(set(splits_df.columns)):
                 missing = required_split_cols - set(splits_df.columns)
                 raise ValueError(f"splits_df is missing required columns: {missing}")
@@ -181,16 +183,16 @@ class TimeSeriesProcessor():
         invalid_prices = self._prices_df[self._prices_df['price'] <= 0]
         if not invalid_prices.empty:
             raise ValueError(
-                f"Found non-positive prices in prices_df for identities: "
-                f"{invalid_prices['identity'].unique().tolist()}"
+                f"Found non-positive prices in prices_df for assets: "
+                f"{invalid_prices['asset'].unique().tolist()}"
             )
 
     # Private processing step stubs (one per documented processing step)
     def _validate_sampling_frequency(self) -> None:
         """Validate price frequency is trade or daily then set to daily. """
-        # Validate pandas.Dataframe sampling frequency for each identity
-        # Group by identity and check sampling frequency for each group
-        for identity, group in self._prices_df.groupby('identity'):
+        # Validate pandas.Dataframe sampling frequency for each asset
+        # Group by asset and check sampling frequency for each group
+        for asset, group in self._prices_df.groupby('asset'):
             # Sort by date to ensure proper frequency inference
             group = group.sort_values('date_stamp')
 
@@ -202,13 +204,13 @@ class TimeSeriesProcessor():
                 pass
             elif frequency is not None and pd.to_timedelta(frequency) < pd.Timedelta(days=1):
                 raise ValueError(
-                    f"Prices for identity {identity} are sampled at "
+                    f"Prices for asset {asset} are sampled at "
                     f"higher than daily frequency ({frequency}). Please downsample "
                     f"to daily frequency."
                 )
             elif frequency is not None and pd.to_timedelta(frequency) > pd.Timedelta(days=1):
                 raise ValueError(
-                    f"Prices for identity {identity} are sampled at "
+                    f"Prices for asset {asset} are sampled at "
                     f"lower than daily frequency ({frequency}). Please provide "
                     f"daily frequency data."
                 )
@@ -222,13 +224,13 @@ class TimeSeriesProcessor():
                 if date_diffs.empty:
                     raise ValueError(
                         f"Insufficient data to determine sampling frequency for "
-                        f"identity: {identity}"
+                        f"asset: {asset}"
                     )
                 median_diff = date_diffs.median()
                 # Check if median_diff corresponds to daily frequency
                 if median_diff > pd.Timedelta(days=1):
                     logger.warning(
-                        f"Prices for identity {identity} are not "
+                        f"Prices for asset {asset} are not "
                         f"sampled at daily frequency. Found median difference of "
                         f"{median_diff}. You may need longer price series or higher "
                         f"frequency data."
@@ -238,7 +240,7 @@ class TimeSeriesProcessor():
     def _dropna_prices(self) -> None:
         """Drop samples with NaN prices."""
         group_list = []
-        for identity, group in self._prices_df.groupby('identity'):
+        for asset, group in self._prices_df.groupby('asset'):
             group = group.dropna(subset=['price'])
             # Do not use update as it will not remove rows from the main DataFrame.
             # Instead create a brand new DataFrame without NaNs and assign it back.
@@ -250,12 +252,12 @@ class TimeSeriesProcessor():
         # Ensure date_stamp is datetime type
         self._prices_df['date_stamp'] = pd.to_datetime(self._prices_df['date_stamp'])
 
-        # Sort by identity and date_stamp
-        self._prices_df = self._prices_df.sort_values(by=['identity', 'date_stamp'])
+        # Sort by asset and date_stamp
+        self._prices_df = self._prices_df.sort_values(by=['asset', 'date_stamp'])
 
         # Remove duplicate dates, keeping the first occurrence
         self._prices_df = self._prices_df.drop_duplicates(
-            subset=['identity', 'date_stamp'], keep='first'
+            subset=['asset', 'date_stamp'], keep='first'
         )
 
     @staticmethod
@@ -322,7 +324,7 @@ class TimeSeriesProcessor():
         """
         # Check for price outliers in each group and create an outlier index
         group_list = []
-        for identity, group in self._prices_df.groupby('identity'):
+        for asset, group in self._prices_df.groupby('asset'):
             # Sort by date as proper sequence is critical
             group = group.sort_values('date_stamp')
             prices = group['price'].copy()
@@ -339,15 +341,15 @@ class TimeSeriesProcessor():
         matrix estimation. A rule of thumb is at least 10x as many
         observations as assets.
         """
-        num_assets = self._prices_df['identity'].nunique()
+        num_assets = self._prices_df['asset'].nunique()
 
         # Check each series has enough observations
         group_list = []
-        for identity, group in self._prices_df.groupby('identity'):
+        for asset, group in self._prices_df.groupby('asset'):
             num_observations = group['date_stamp'].nunique()
             if num_observations < min_samples_factor * num_assets:
                 logger.warning(
-                    f"Dropping {identity} for insufficient data: "
+                    f"Dropping {asset} for insufficient data: "
                     f"{num_observations} observations for {num_assets} assets. "
                     f"At least {min_samples_factor} times {num_assets} "
                     "observations are required for reliable correlation estimation."
@@ -358,8 +360,8 @@ class TimeSeriesProcessor():
                 group_list.append(group)
         if not group_list:
             raise ValueError(
-                "No identity has sufficient data for reliable correlation estimation. "
-                f"At least one identity must have at least {min_samples_factor} times "
+                "No asset has sufficient data for reliable correlation estimation. "
+                f"At least one asset must have at least {min_samples_factor} times "
                 f"{num_assets} observations."
             )
         self._prices_df = pd.concat(group_list, ignore_index=True)
@@ -390,7 +392,7 @@ class TimeSeriesProcessor():
         """
 
         # Ensure canonical ordering
-        self._prices_df = self._prices_df.sort_values(["identity", "date_stamp"]).copy()
+        self._prices_df = self._prices_df.sort_values(["asset", "date_stamp"]).copy()
 
         # -----------------------
         # Build dividend series
@@ -401,7 +403,7 @@ class TimeSeriesProcessor():
             # Ensure expected column exists (constructor enforces it)
             # Aggregate in case multiple dividends on one date (rare but possible)
             div = (
-                div.groupby(["identity", "date_stamp"], as_index=False)["unadjusted_value"]
+                div.groupby(["asset", "date_stamp"], as_index=False)["unadjusted_value"]
                 .sum()
                 .rename(columns={"unadjusted_value": "dividend"})
             )
@@ -421,7 +423,7 @@ class TimeSeriesProcessor():
 
             if (spl["numerator"] <= 0).any() or (spl["denominator"] <= 0).any():
                 bad = spl[(spl["numerator"] <= 0) | (spl["denominator"] <= 0)][
-                    ["identity", "date_stamp", "numerator", "denominator"]
+                    ["asset", "date_stamp", "numerator", "denominator"]
                 ]
                 raise ValueError(
                     "Found non-positive split numerator/denominator. "
@@ -433,7 +435,7 @@ class TimeSeriesProcessor():
             # Aggregate in case multiple split-like events on same date:
             # multiply ratios (e.g., sequential actions posted same day)
             spl = (
-                spl.groupby(["identity", "date_stamp"], as_index=False)["split_ratio"]
+                spl.groupby(["asset", "date_stamp"], as_index=False)["split_ratio"]
                 .prod()
             )
         else:
@@ -445,12 +447,12 @@ class TimeSeriesProcessor():
         df = self._prices_df.copy()
 
         if div is not None:
-            df = df.merge(div, on=["identity", "date_stamp"], how="left")
+            df = df.merge(div, on=["asset", "date_stamp"], how="left")
         else:
             df["dividend"] = np.nan
 
         if spl is not None:
-            df = df.merge(spl, on=["identity", "date_stamp"], how="left")
+            df = df.merge(spl, on=["asset", "date_stamp"], how="left")
         else:
             df["split_ratio"] = np.nan
 
@@ -459,10 +461,10 @@ class TimeSeriesProcessor():
         df["split_ratio"] = df["split_ratio"].fillna(1.0)
 
         # -----------------------
-        # Compute total return factor per identity
+        # Compute total return factor per asset
         # -----------------------
         out_groups = []
-        for identity, group in df.groupby("identity", sort=False):
+        for asset, group in df.groupby("asset", sort=False):
             group = group.sort_values("date_stamp").copy()
 
             # Prior close (raw)
@@ -471,7 +473,7 @@ class TimeSeriesProcessor():
             # If prev_price missing (first obs), factor/return undefined
             # Protect against divide-by-zero just in case
             if (group["prev_price"] <= 0).any():
-                bad = group[group["prev_price"] <= 0][["identity", "date_stamp", "prev_price"]]
+                bad = group[group["prev_price"] <= 0][["asset", "date_stamp", "prev_price"]]
                 raise ValueError(
                     "Found non-positive prev_price after shifting (unexpected). "
                     f"Bad rows:\n{bad.to_string(index=False)}"
@@ -504,7 +506,7 @@ class TimeSeriesProcessor():
                 "corporate actions first."
             )
         group_list = []
-        for identity, group in self._prices_df.groupby('identity'):
+        for asset, group in self._prices_df.groupby('asset'):
             group["tri"] = group["total_return"].fillna(1.0).cumprod()
             group_list.append(group)
         # Add the new adj_price columns to the main prices_df DataFrame
@@ -527,16 +529,16 @@ class TimeSeriesProcessor():
             )
 
         out_groups = []
-        for identity, group in self._prices_df.groupby('identity'):
+        for asset, group in self._prices_df.groupby('asset'):
             # Add adjusted price based on first price
             first_price = self._prices_df[
-                self._prices_df['identity'] == identity
+                self._prices_df['asset'] == asset
             ]['price'].iloc[0]
             group['adj_price_first'] = group['total_return'].fillna(1.0).cumprod() * first_price
 
             # Add adjusted price based on last price
             last_price = self._prices_df[
-                self._prices_df['identity'] == identity
+                self._prices_df['asset'] == asset
             ]['price'].iloc[-1]
             last_tri = group['total_return'].fillna(1.0).cumprod().iloc[-1]
             group['adj_price_last'] = group['total_return'].fillna(1.0).cumprod() * (last_price / last_tri)
@@ -549,13 +551,13 @@ class TimeSeriesProcessor():
         self._prices_df = df_out
 
     def get_date_index(self) -> pd.DatetimeIndex:
-        """Get unique sorted date index across all identifiers.
+        """Get unique sorted date index across all assets.
 
         Returns
         -------
         pandas.DatetimeIndex
-            DatetimeIndex of unique sorted dates across all identities in the
-            ``identity`` column.
+            DatetimeIndex of unique sorted dates across all assets in the
+            ``asset`` column.
         """
         date_index: pd.DatetimeIndex = pd.DatetimeIndex(
             sorted(self._prices_df['date_stamp'].unique())
@@ -569,7 +571,7 @@ class TimeSeriesProcessor():
         -------
         pandas.DataFrame
             The internal price information DataFrame containing columns such as
-            the security identifier column 'identity', 'date_stamp',
+            the identifier column 'asset', 'date_stamp',
             'price', 'dividend',
             'split_ratio', and if corporate actions have been applied then also
             'total_return', 'tri', 'adj_price_first', and 'adj_price_last'.
@@ -585,13 +587,13 @@ class TimeSeriesProcessor():
         return self._prices_df.copy()
 
     def get_pivoted_price_info_dataframes_dict(self) -> dict[str, pd.DataFrame]:
-        """Pivot price info to date_stamp index and identity columns labels.
+        """Pivot price info to date_stamp index and identifier column labels.
 
-        Takes the internal prices information DataFrame with 'identity' and
-        'date_stamp' columns plus additional data columns, and returns a
+        Takes the internal prices information DataFrame with an identifier
+        column plus a 'date_stamp' column and returns a
         separate pivoted DataFrame for each data column in a dict with the price
         information columns as keys. The pivoted DataFrames have 'date_stamp' as
-        the index, 'identity' values as column labels, and the data column
+        the index, identifier values as column labels, and the data column
         values as the cell values.
 
         This is useful for transforming long-format time series data (as produced
@@ -602,8 +604,8 @@ class TimeSeriesProcessor():
         -------
         dict[str, pd.DataFrame]
             Dictionary mapping column names to pivoted DataFrames. Each pivoted
-            DataFrame has 'date_stamp' as index, 'identity' values as
-            columns (for example, Asset instances), and the corresponding price
+            DataFrame has 'date_stamp' as index, identifier values as columns
+            (for example, Asset instances), and the corresponding price
             information data column labels as values.
 
         Note
@@ -624,7 +626,7 @@ class TimeSeriesProcessor():
         Examples
         --------
         >>> df = pd.DataFrame({
-        ...     'identity': ['AAPL', 'AAPL', 'MSFT', 'MSFT'],
+        ...     'asset': ['AAPL', 'AAPL', 'MSFT', 'MSFT'],
         ...     'date_stamp': pd.to_datetime(['2020-01-01', '2020-01-02',
         ...                                    '2020-01-01', '2020-01-02']),
         ...     'price': [100.0, 101.0, 200.0, 202.0],
@@ -632,22 +634,22 @@ class TimeSeriesProcessor():
         ... })
         >>> pivoted = TimeSeriesProcessor.pivot_dataframes(df)
         >>> pivoted['price']
-        identity  AAPL   MSFT
+        asset  AAPL   MSFT
         date_stamp
         2020-01-01     100.0  200.0
         2020-01-02     101.0  202.0
         """
         df = self.get_raw_price_info_dataframe()
 
-        required_cols = {'identity', 'date_stamp'}
+        required_cols = {self.ASSET_COLUMN, 'date_stamp'}
 
-        # Identify data columns (everything except identity and date_stamp)
+        # Identify data columns (everything except identifier columns and date_stamp)
         data_columns = [col for col in df.columns if col not in required_cols]
 
         if not data_columns:
             raise ValueError(
                 "DataFrame must have at least one data column beyond "
-                "'identity' and 'date_stamp'"
+                "the identifier columns and 'date_stamp'"
             )
 
         # Create a pivoted DataFrame for each data column
@@ -655,7 +657,7 @@ class TimeSeriesProcessor():
         for col in data_columns:
             pivoted = df.pivot(
                 index='date_stamp',
-                columns='identity',
+                columns=self.ASSET_COLUMN,
                 values=col
             )
             pivoted_dfs[col] = pivoted
