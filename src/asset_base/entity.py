@@ -223,8 +223,7 @@ class Currency(Base):
         """A key string unique to the class instance."""
         return self.ticker
 
-    @property
-    def identity_code(self):
+    def _get_identity_code(self):
         """A human readable string unique to the class instance."""
         return self.ticker
 
@@ -488,8 +487,7 @@ class Domicile(Base):
         """A key string unique to the class instance."""
         return self.country_code
 
-    @property
-    def identity_code(self):
+    def _get_identity_code(self):
         """A human readable string unique to the class instance."""
         return self.country_code
 
@@ -1015,8 +1013,7 @@ class Issuer(Institution):
         """A key string unique to the class instance."""
         return f"{self.name}:{self.domicile.country_code}"
 
-    @property
-    def identity_code(self):
+    def _get_identity_code(self):
         """A human readable string unique to the class instance."""
         return f"{self.name}:{self.domicile.country_code}"
 
@@ -1111,8 +1108,7 @@ class Exchange(Institution):
         """A key string unique to the class instance."""
         return self.mic
 
-    @property
-    def identity_code(self):
+    def _get_identity_code(self):
         """A human readable string unique to the class instance."""
         return self.mic
 

@@ -440,6 +440,11 @@ class Common(Base):
         """Instance initialization."""
         self.name = name
 
+        # Set the identity code using the class-specific method that subclasses
+        # must implement. This ensures that the identity code is always
+        # initialized based on the instance's attributes and class logic.
+        self.identity_code = self._get_identity_code()
+
         # Record creation date as today (only set on creation, not modified on updates).
         self.date_create = datetime.datetime.today()
 
@@ -459,10 +464,13 @@ class Common(Base):
         """A key string unique to the class instance."""
         pass
 
-    @property
     @abstractmethod
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
+    def _get_identity_code(self):
+        """ Get the identity code.
+
+        This ensures that the identity code is always initialized based on the
+        instance's attributes and class logic.
+        """
         pass
 
     @property
