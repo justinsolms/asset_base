@@ -101,7 +101,9 @@ def substitute_security_labels(data_frame, identifier, inplace=False, labels_onl
         'id':
             Uses the security (asset) ``id`` number attribute.
         'identity_code':
-            Uses the security (asset) ``identity_code`` attribute.
+            Uses the security (asset) ``identity_code`` attribute. This is the
+            model's persisted semantic identifier, not the current
+            ``TimeSeriesProcessor`` ``identity`` payload.
         'ticker':
             Uses the security (asset) ``ticker`` attribute.
         'isin':
@@ -690,6 +692,10 @@ class ManagerBase(object):
 
     def get_asset_dict(self, identity_code_list):
         """Get a dict of assets based on a list of identity codes.
+
+        This is the main lookup path from persisted semantic identifiers to
+        live ``Asset`` instances. It intentionally uses ``identity_code``
+        rather than the current time-series ``identity`` payload.
 
         Parameters
         ----------

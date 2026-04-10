@@ -67,6 +67,16 @@ Before you submit a pull request, check that it meets these guidelines:
 2. If the pull request adds functionality, the docs should be updated.
 3. The pull request should work for all currently supported operating systems and versions of Python.
 
+## Identity Code Convention
+
+When working on mapped classes that expose `identity_code`, follow these rules:
+
+1. `identity_code` is persisted in the database and initialized during object construction.
+2. If the code is a direct copy of one attribute, set `IDENTITY_CODE_FIELD` on the class and use `IdentityCodeMixin`'s default implementation.
+3. If the code is derived from multiple attributes, override `_get_identity_code()` explicitly.
+4. Only call `sync_identity_code()` after all source attributes have been assigned.
+5. Do not move initialization to ORM insert events because constructors such as `Forex` use `identity_code` before flush time.
+
 ## Code of Conduct
 
 Please note that the `asset_base` project is released with a
