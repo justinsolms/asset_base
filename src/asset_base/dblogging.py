@@ -14,8 +14,7 @@ distributed without the express permission of Justin Solms.
 from sqlalchemy import Column
 from sqlalchemy.types import DateTime, Integer, String, Boolean
 from sqlalchemy.sql import func
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import declarative_base, Session
 from sqlalchemy import create_engine
 
 import traceback

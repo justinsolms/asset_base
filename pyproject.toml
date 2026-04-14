@@ -21,6 +21,7 @@ dependencies = [
     "esbonio",
     "mypy",
     "ipdb",
+    "pytest",
     "tqdm",
     "click",
     "openpyxl",

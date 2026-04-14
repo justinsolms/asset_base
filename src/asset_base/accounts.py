@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # <nbformat>3.0</nbformat>
 
-"""Classes to describe accounts."""
+"""Classes to describe Cash accounts."""
 
 
 from sqlalchemy import Integer
@@ -36,9 +36,8 @@ class SettlementAccount(Cash):
 
     _id = Column(Integer, ForeignKey("cash._id"), primary_key=True)
 
-    @property
-    def identity_code(self):
+    def _get_identity_code(self):
         """A human readable string unique to the class instance."""
-        return super().identity_code + "-S"  # Mark as special settlement account
+        return self.ticker + "-S"  # Mark as special settlement account
 
 

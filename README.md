@@ -17,9 +17,17 @@ $ pip install asset_base
 
 ### Identifier semantics in time-series workflows
 
-- The `TimeSeriesProcessor` input/output column name is `identity`.
-- In current `Asset.get_time_series_processor()` flows, this column stores the `Asset` instance itself (not just `Asset.identity_code` string values).
+- The preferred `TimeSeriesProcessor` object identifier column name is `asset`.
+- In current `Asset.get_time_series_processor()` flows, this payload stores the `Asset` instance itself (not just `Asset.identity_code` string values).
 - This allows downstream workflows to access full asset attributes directly from grouped/pivoted data.
+
+### Identity code initialization
+
+- `identity_code` is a stored database column, not a property computed on every access.
+- Classes using `IdentityCodeMixin` must only call `sync_identity_code()` after assigning every attribute used by `_get_identity_code()`.
+- Simple classes can declare `IDENTITY_CODE_FIELD` and let the mixin copy that attribute into `identity_code`.
+- Derived-code classes such as `Issuer` and `Forex` should continue to override `_get_identity_code()` explicitly.
+- Avoid delaying identity-code population to ORM insert hooks because some constructors need `identity_code` immediately during object setup.
 
 ## Contributing
 

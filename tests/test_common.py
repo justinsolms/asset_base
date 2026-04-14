@@ -411,8 +411,7 @@ class ConcreteCommon(Common):
     def key_code(self):
         return f"cc_{self.name}"
 
-    @property
-    def identity_code(self):
+    def _get_identity_code(self):
         return f"identity_{self.name}"
 
     @property

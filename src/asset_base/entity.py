@@ -96,7 +96,7 @@ from sqlalchemy import UniqueConstraint
 from sqlalchemy.orm import relationship
 from sqlalchemy.orm.exc import NoResultFound
 
-from asset_base.common import Base, Common
+from asset_base.common import Base, Common, IdentityCodeMixin
 from asset_base.exceptions import FactoryError, ReconcileError
 
 # Get module-named logger.
@@ -110,7 +110,7 @@ logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 metadata = MetaData()
 
 
-class Currency(Base):
+class Currency(IdentityCodeMixin, Base):
     """ISO 4217 world currency descriptions.
 
     Currency is treated here as a notion and not an asset, therefore it does not
@@ -190,6 +190,8 @@ class Currency(Base):
     __tablename__ = "currency"
     __table_args__ = (UniqueConstraint("ticker"),)
 
+    IDENTITY_CODE_FIELD = "ticker"
+
     _id = Column(Integer, primary_key=True, autoincrement=True)
     """ Primary key."""
 
@@ -203,6 +205,10 @@ class Currency(Base):
         self.ticker = ticker
         self.name = name
         self.country_code_list = country_code_list
+
+        # Currency is not a Common subclass, so it must explicitly persist the
+        # identity code once its constructor arguments are assigned.
+        self.sync_identity_code()
 
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
@@ -221,11 +227,6 @@ class Currency(Base):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.ticker
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
         return self.ticker
 
     def in_domicile(self, country_code: str):
@@ -382,7 +383,7 @@ class Currency(Base):
         cls.from_data_frame(session, data)
 
 
-class Domicile(Base):
+class Domicile(IdentityCodeMixin, Base):
     """ISO 3166 domicile country descriptions.
 
     ISO 3166 is the International Standard for country codes and codes for
@@ -443,6 +444,8 @@ class Domicile(Base):
 
     __tablename__ = "domicile"
 
+    IDENTITY_CODE_FIELD = "country_code"
+
     _id = Column(Integer, primary_key=True, autoincrement=True)
     """ int : Primary key."""
 
@@ -467,6 +470,10 @@ class Domicile(Base):
         self.country_name = country_name
         self.currency = currency
 
+        # Domicile also lives outside the Common inheritance tree, so it uses
+        # the mixin directly to avoid duplicating the identity-code mechanism.
+        self.sync_identity_code()
+
     def __str__(self):
         """Return the informal string output. Interchangeable with str(x)."""
         return "{} is {} ({})".format(
@@ -486,11 +493,6 @@ class Domicile(Base):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.country_code
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
         return self.country_code
 
     @classmethod
@@ -1015,8 +1017,7 @@ class Issuer(Institution):
         """A key string unique to the class instance."""
         return f"{self.name}:{self.domicile.country_code}"
 
-    @property
-    def identity_code(self):
+    def _get_identity_code(self):
         """A human readable string unique to the class instance."""
         return f"{self.name}:{self.domicile.country_code}"
 
@@ -1070,6 +1071,8 @@ class Exchange(Institution):
         "polymorphic_identity": __tablename__,
     }
 
+    IDENTITY_CODE_FIELD = "mic"
+
     _id = Column(Integer, ForeignKey("institution._id"), primary_key=True)
     """ Primary key."""
 
@@ -1109,11 +1112,6 @@ class Exchange(Institution):
     @property
     def key_code(self):
         """A key string unique to the class instance."""
-        return self.mic
-
-    @property
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
         return self.mic
 
     @property

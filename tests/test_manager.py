@@ -362,7 +362,7 @@ class TestManager(unittest.TestCase):
         tsp = self.manager.get_time_series_processor([listed])
         self.assertIsInstance(tsp, TimeSeriesProcessor)
         self.assertGreater(len(tsp._prices_df), 0)
-        self.assertTrue((tsp._prices_df["identity"] == listed).all())
+        self.assertTrue((tsp._prices_df["asset"] == listed).all())
 
     def test_get_time_series_processor_with_listed_equity_and_cash(self):
         """Test get_time_series_processor with ListedEquity and cash asset."""
@@ -376,10 +376,10 @@ class TestManager(unittest.TestCase):
         self.assertGreater(len(tsp._prices_df), 0)
 
         # Expect both listed equity and USD cash asset objects present
-        identity_codes = set(tsp._prices_df["identity"].unique())
-        self.assertIn(listed, identity_codes)
+        asset_objects = set(tsp._prices_df["asset"].unique())
+        self.assertIn(listed, asset_objects)
         self.assertTrue(
-            any(isinstance(asset, Cash) and asset.identity_code == 'USD' for asset in identity_codes)
+            any(isinstance(asset, Cash) and asset.identity_code == 'USD' for asset in asset_objects)
         )
 
     def test_get_asset_dict_with_unknown_identity_code_raises(self):
