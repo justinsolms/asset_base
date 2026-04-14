@@ -282,6 +282,11 @@ class TestSession(_Session):
     >>>     self.session = self.test_session.new_session()  # Fresh session
     """
 
+    # This is a session helper, not a pytest test case. Mark it explicitly so
+    # pytest does not try to collect it merely because the class name starts
+    # with "Test".
+    __test__ = False
+
     _URL = "sqlite://"  # In-memory SQLite database
 
     def __init__(self, echo=False):
@@ -379,7 +384,57 @@ class CombinedMeta(DeclarativeMeta, ABCMeta):
 Base = declarative_base(metaclass=CombinedMeta)
 
 
-class Common(Base):
+class IdentityCodeMixin:
+    """Provide a stored ``identity_code`` column with shared initialization.
+
+    The code is persisted, not computed on every access. That means each class
+    using this mixin must call :meth:`sync_identity_code` after populating the
+    attributes that its ``_get_identity_code`` implementation depends on.
+
+    For simple cases, subclasses can set ``IDENTITY_CODE_FIELD`` to the name of
+    the attribute that should be copied into ``identity_code``. More complex
+    classes can still override ``_get_identity_code()`` directly.
+
+    Keeping this logic in a mixin avoids duplicating the column definition and
+    the initialization contract across ``Common`` and support tables such as
+    ``Currency`` and ``Domicile`` which do not participate in ``Common``'s
+    joined-table inheritance hierarchy.
+    """
+
+    IDENTITY_CODE_FIELD = None
+
+    # A persisted, human-meaningful identifier for the mapped object. It is
+    # distinct from the database primary key and is used for display, logging,
+    # and semantic lookups. It is not required to be globally unique across the
+    # entire database, but it is expected to be unique within the relevant
+    # class space. For example, the ticker "USD" is unique within Cash even if
+    # another class could also expose "USD" as its identity code.
+    identity_code = Column(String(64), index=True, nullable=False)
+
+    def sync_identity_code(self):
+        """Persist the class-specific identity code onto the mapped column.
+
+        This is intentionally explicit because several constructors derive the
+        code from attributes set earlier in ``__init__``. Relying on an ORM
+        event or on ``Common.__init__`` alone would miss classes such as
+        ``Currency`` and ``Domicile`` and would also delay initialization too
+        late for constructors like ``Forex`` that reuse ``identity_code``
+        immediately.
+        """
+        self.identity_code = self._get_identity_code()
+        return self.identity_code
+
+    def _get_identity_code(self):
+        """Return the semantic identifier to persist on the model."""
+        if self.IDENTITY_CODE_FIELD is None:
+            raise NotImplementedError(
+                f"{self.__class__.__name__} must define IDENTITY_CODE_FIELD "
+                "or override _get_identity_code()."
+            )
+        return getattr(self, self.IDENTITY_CODE_FIELD)
+
+
+class Common(IdentityCodeMixin, Base):
     """Common object.
 
     This is the common base class Assets and Entities. As they and their child
@@ -407,10 +462,10 @@ class Common(Base):
         # no polymorphic_identity here; this class is effectively abstract
     }
 
+    # The name (or label) to attach to the ``key_code`` attribute (@property
+    # method). Override in sub-classes. This might be used as the column name in
+    # tables of key codes when joining enabling automated column identification.
     KEY_CODE_LABEL = "key_code"
-    """str: The name to attach to the ``key_code`` attribute (@property method).
-    Override in  sub-classes. This is used for example as the column name in
-    tables of key codes when joining."""
 
     # Entity dates.
     date_create = Column(Date, nullable=False)
@@ -432,7 +487,12 @@ class Common(Base):
         """Instance initialization."""
         self.name = name
 
-        # Record creation date
+        # Persist the identity code once the subclass has populated the fields
+        # that its `_get_identity_code()` implementation depends on. This keeps
+        # construction-time behaviour consistent for all IdentityCodeMixin users.
+        self.sync_identity_code()
+
+        # Record creation date as today (only set on creation, not modified on updates).
         self.date_create = datetime.datetime.today()
 
     @abstractmethod
@@ -449,12 +509,6 @@ class Common(Base):
     @abstractmethod
     def key_code(self):
         """A key string unique to the class instance."""
-        pass
-
-    @property
-    @abstractmethod
-    def identity_code(self):
-        """A human readable string unique to the class instance."""
         pass
 
     @property

@@ -86,6 +86,7 @@ class TestCurrency(TestBase):
         self.assertIsInstance(currency, Currency)
         self.assertEqual(currency.ticker, "EUR")
         self.assertEqual(currency.name, "Euro")
+        self.assertEqual(currency.identity_code, "EUR")
 
     def test_str_method(self):
         """Test __str__ method returns correct format."""
@@ -295,6 +296,7 @@ class TestDomicile(TestBase):
         self.assertEqual(domicile.country_code, self.test_domicile_code)
         self.assertEqual(domicile.country_name, self.test_domicile_name)
         self.assertEqual(domicile.currency, self.currency)
+        self.assertEqual(domicile.identity_code, self.test_domicile_code)
 
     def test_str_method(self):
         """Test __str__ method returns correct format."""
@@ -579,6 +581,7 @@ class TestExchange(TestBase):
         self.assertEqual(exchange.name, self.test_exchange_name)
         self.assertEqual(exchange.domicile, self.domicile)
         self.assertEqual(exchange.mic, self.test_exchange_mic)
+        self.assertEqual(exchange.identity_code, self.test_exchange_mic)
 
     def test_class_initialization_with_eod_code(self):
         """Test class initialization with optional eod_code."""

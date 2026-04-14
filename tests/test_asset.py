@@ -755,10 +755,6 @@ class TestIndex(TestBase):
         self.assertIn("Index", result)
         self.assertIn(self.currency.ticker, result)
 
-    def test_name_appendix(self):
-        """Test _name_appendix class attribute."""
-        self.assertEqual(Index._name_appendix, "Index")
-
     def test_database_persistence(self):
         """Test that Index instance can be persisted to database."""
         self.session.add(self.index)
@@ -1025,10 +1021,6 @@ class TestExchangeTradeFund(TestBase):
         """Test that MIC is set from exchange."""
         self.assertEqual(self.etf.mic, self.exchange.mic)
 
-    def test_name_appendix(self):
-        """Test _name_appendix class attribute."""
-        self.assertEqual(ExchangeTradeFund._name_appendix, "ETF")
-
     def test_database_persistence(self):
         """Test that ExchangeTradeFund instance can be persisted to database."""
         self.session.add(self.etf)
@@ -1226,7 +1218,7 @@ class TestCashGetTimeSeriesProcessor(TestBase):
             datetime.date(2024, 1, 2)
         ])
         tsp = self.cash.get_time_series_processor(date_index)
-        self.assertIn('identity', tsp._prices_df.columns)
+        self.assertIn('asset', tsp._prices_df.columns)
 
     def test_get_time_series_processor_identity_code_is_cash_instance(self):
         """Test identity_code column contains the Cash instance itself."""
@@ -1235,7 +1227,7 @@ class TestCashGetTimeSeriesProcessor(TestBase):
             datetime.date(2024, 1, 2)
         ])
         tsp = self.cash.get_time_series_processor(date_index)
-        self.assertTrue((tsp._prices_df['identity'] == self.cash).all())
+        self.assertTrue((tsp._prices_df['asset'] == self.cash).all())
 
     def test_get_time_series_processor_prices_are_one(self):
         """Test that cash prices are 1.0 for 'units' quote_units."""
@@ -1371,12 +1363,12 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
     def test_get_time_series_processor_includes_identity_code(self):
         """Test that processor includes identity_code column."""
         tsp = self.listed_equity.get_time_series_processor()
-        self.assertIn('identity', tsp._prices_df.columns)
+        self.assertIn('asset', tsp._prices_df.columns)
 
     def test_get_time_series_processor_identity_code_is_asset_instance(self):
         """Test identity_code column contains the ListedEquity instance itself."""
         tsp = self.listed_equity.get_time_series_processor()
-        self.assertTrue((tsp._prices_df['identity'] == self.listed_equity).all())
+        self.assertTrue((tsp._prices_df['asset'] == self.listed_equity).all())
 
     def test_get_time_series_processor_has_dividends(self):
         """Test that processor includes dividends DataFrame."""
@@ -1389,7 +1381,7 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
         tsp = self.listed_equity.get_time_series_processor()
         self.assertIn('dividend', tsp._dividends_df.columns)
         self.assertIn('unadjusted_value', tsp._dividends_df.columns)
-        self.assertTrue((tsp._dividends_df['identity'] == self.listed_equity).all())
+        self.assertTrue((tsp._dividends_df['asset'] == self.listed_equity).all())
         # Verify dividend equals unadjusted_value
         import numpy as np
         np.testing.assert_array_equal(
@@ -1408,7 +1400,7 @@ class TestListedEquityGetTimeSeriesProcessor(TestBase):
         tsp = self.listed_equity.get_time_series_processor()
         self.assertIn('numerator', tsp._splits_df.columns)
         self.assertIn('denominator', tsp._splits_df.columns)
-        self.assertTrue((tsp._splits_df['identity'] == self.listed_equity).all())
+        self.assertTrue((tsp._splits_df['asset'] == self.listed_equity).all())
 
     def test_get_time_series_processor_price_column_renamed(self):
         """Test that selected price_item is renamed to 'price'."""

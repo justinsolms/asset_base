@@ -156,14 +156,6 @@ class AssetBase(Common):
     _id = Column(Integer, ForeignKey("common._id"), primary_key=True)
     """ Primary key."""
 
-    # A human readable string unique to the class instance. This is not a key
-    # code but is useful for display and debugging purposes. It is not required
-    # to be unique across the entire database but is **required to be unique
-    # within the asset class**. For example, the ticker "USD" is unique within
-    # the Cash class but not across all asset classes as it may also be used as
-    # a ticker in the Listed class.
-    identity_code = Column(String(64), index=True, nullable=False)
-
     # Each Asset has one Currency.
     _currency_id = Column(Integer, ForeignKey("currency._id"), nullable=False)
     currency = relationship(Currency)
@@ -546,8 +538,8 @@ class Asset(AssetBase):
         -------
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
-            asset which includes only the EOD time series and `identity`
-            columns set to this ``Asset`` instance.
+            asset which includes only the EOD time series and an `asset`
+            column set to this ``Asset`` instance.
         """
         # Check price item is valid
         eod = self.get_eod_series()
@@ -557,8 +549,8 @@ class Asset(AssetBase):
                 f"Expected one of {list(eod.columns)}.")
 
         prices_df = eod.reset_index()
-        prices_df["identity"] = self
-        columns_to_keep = ["identity", "date_stamp", price_item]
+        prices_df["asset"] = self
+        columns_to_keep = ["asset", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -615,13 +607,15 @@ class Cash(Asset):
         # Quote units always in 'units' for cash
         super().__init__(name, currency, quote_units="units")
 
-        self.identity_code = self.ticker
-
     def __repr__(self):
         """Return the official string output."""
         msg = "{}(currency={!r})".format(self.__class__.__name__, self.currency)
 
         return msg
+
+    def _get_identity_code(self):
+        """Required for unique identification of instances and is not optional."""
+        return self.ticker
 
     @property
     def ticker(self):
@@ -849,8 +843,8 @@ class Cash(Asset):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset which includes only the Cash EOD time series of price = 1.0
-            with dates from the `date_index` argument and `identity`
-            columns set to this ``Cash`` instance.
+            with dates from the `date_index` argument and an `asset` column set
+            to this ``Cash`` instance.
         """
         # Check that the price_item argument is 'price for this Cash class
         if price_item != 'price':
@@ -859,8 +853,8 @@ class Cash(Asset):
                 "Expected 'price' for this asset class.")
 
         prices_df = self.get_eod_series(date_index).reset_index()
-        prices_df["identity"] = self
-        columns_to_keep = ["identity", "date_stamp", price_item]
+        prices_df["asset"] = self
+        columns_to_keep = ["asset", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
 
         tsp = TimeSeriesProcessor(prices_df=prices_df)
@@ -979,11 +973,6 @@ class Forex(Cash):
         """Instance initialization."""
         # FIXME: For this version assert the ``base_currency`` to be the ``root_currency_ticker`` and state clearly in the documentation
 
-        # Note that we set the pricing currency of the cash asset here.
-        super().__init__(price_currency)
-
-
-
         # Expect the `base_currency` to be the root currency (USD).
         if base_currency.ticker != self.root_currency_ticker:
             raise AssertionError(
@@ -991,18 +980,31 @@ class Forex(Cash):
             )
         self.base_currency = base_currency
 
-        # All are joined ISO 4217 3-letter currency code which is constrained
-        # to be unique by the UniqueConstraint on the ticker column.
-        joined_ticker = f"{self.base_currency.ticker}{self.currency.ticker}"
-        self.ticker = joined_ticker
-        self.identity_code = joined_ticker
-        self.name = joined_ticker  # Override the name
+        # The pricing currency the denominator and the base currency is the
+        # numerator of the exchange rate. We expect the base currency to have
+        # been already set so that the superclass can create the identity_code
+        # attribute which is also used as the forex's ticker.
+        super().__init__(price_currency)
+
+        # The ticker and name are the two joined ISO 4217 3-letter currency
+        # codes of the base and price currencies. For example, USDJPY for the
+        # price of 1 USD in JPY.
+        self.ticker = self.identity_code
+        self.name = self.identity_code  # Override the name to be the ticker
 
     def __repr__(self):
         """Return the official string output."""
         return "{}(base_currency={!r}, price_currency={!r})".format(
             self.__class__.__name__, self.base_currency.ticker, self.currency.ticker
         )
+
+    def _get_identity_code(self):
+        """Required for unique identification of instances and is not optional."""
+        return self._get_forex_ticker()
+
+    def _get_forex_ticker(self):
+        """Return the forex double currency ticker code."""
+        return f"{self.base_currency.ticker}{self.currency.ticker}"
 
     @property
     def base_currency_ticker(self):
@@ -1513,6 +1515,16 @@ class Listed(Share):
 
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""
+        # Check to see if the isin number provided is valid. This checks the
+        # length and check digit.
+        isin = Listed._check_isin(isin)
+        # Check issuer domicile against the 1st two ISIN letters (ISO 3166-1
+        # alpha-2 code)
+        if isin[0:2] == issuer.domicile.country_code:
+            self.isin = isin
+        else:
+            raise ValueError("Unexpected domicile. Does not match ISIN country code.")
+
         # Do no remove this code!!. Some methods that use this class (such as
         # factory methods) are able to place arguments with a None value, this
         # circumventing Python's positional-arguments checks. Check manually
@@ -1554,18 +1566,16 @@ class Listed(Share):
         self.ticker = ticker
         self.status = status
 
-        # Check to see if the isin number provided is valid. This checks the
-        # length and check digit.
-        isin = Listed._check_isin(isin)
-        # Check issuer domicile against the 1st two ISIN letters (ISO 3166-1
-        # alpha-2 code)
-        if isin[0:2] == issuer.domicile.country_code:
-            self.isin = isin
-        else:
-            raise ValueError("Unexpected domicile. Does not match ISIN country code.")
-
         super().__init__(name, issuer, currency, **kwargs)
 
+    def __repr__(self):
+        """Return the official string output."""
+        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
+            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
+        )
+
+    def _get_identity_code(self):
+        """Required for unique identification of instances and is not optional."""
         # The identity code is the combination of the ticker and the widely used
         # eodhistoricaldata.com exchange code. This is because the ticker is not
         # unique across all exchanges, but the combination of ticker and
@@ -1573,13 +1583,7 @@ class Listed(Share):
         # same ticker "ABC" listed on two different exchanges with codes "X" and
         # "Y", then their identity codes will be "ABC.X" and "ABC.Y"
         # respectively, which are unique.
-        self.identity_code = self.ticker + "." + self.exchange.eod_code
-
-    def __repr__(self):
-        """Return the official string output."""
-        return '{}(name="{}", issuer={!r}, isin="{}", exchange={!r}, ticker="{}", status="{}")'.format(
-            self.__class__.__name__, self.name, self.issuer, self.isin, self.exchange, self.ticker, self.status
-        )
+        return self.ticker + "." + self.exchange.eod_code
 
     @property
     def domicile(self):
@@ -2477,8 +2481,8 @@ class ListedEquity(Listed):
         .time_series_processor.TimeSeriesProcessor
             A ``.time_series_processor.TimeSeriesProcessor`` instance for this
             asset with the end-of-day prices, dividends, and splits data
-            series. The `identity` column is set to this
-            ``ListedEquity`` instance.
+            series. The `asset` column is set to this ``ListedEquity``
+            instance.
 
         Raises
         ------
@@ -2498,8 +2502,8 @@ class ListedEquity(Listed):
 
         # Get prices, select price item, and rename to "price" for the processor.
         prices_df = eod.reset_index()
-        prices_df["identity"] = self
-        columns_to_keep = ["identity", "date_stamp", price_item]
+        prices_df["asset"] = self
+        columns_to_keep = ["asset", "date_stamp", price_item]
         prices_df = prices_df[columns_to_keep]
         columns_to_rename = {price_item: "price"}
         prices_df.rename(columns=columns_to_rename, inplace=True)
@@ -2514,8 +2518,8 @@ class ListedEquity(Listed):
                 "Distributions were expected but Dividend series will be empty.")
             dividends_df = None
         else:
-            dividends_df["identity"] = self
-            columns_to_keep = ["identity", "date_stamp", "unadjusted_value"]
+            dividends_df["asset"] = self
+            columns_to_keep = ["asset", "date_stamp", "unadjusted_value"]
             dividends_df = dividends_df[columns_to_keep]
             # Add dividend column as a copy of unadjusted_value
             dividends_df["dividend"] = dividends_df["unadjusted_value"]
@@ -2526,8 +2530,8 @@ class ListedEquity(Listed):
         except SplitSeriesNoData:
             splits_df = None
         else:
-            splits_df["identity"] = self
-            columns_to_keep = ["identity", "date_stamp", "numerator", "denominator"]
+            splits_df["asset"] = self
+            columns_to_keep = ["asset", "date_stamp", "numerator", "denominator"]
             splits_df = splits_df[columns_to_keep]
 
         # Create and return the processor
@@ -2631,16 +2635,19 @@ class Index(AssetBase):
 
         super().__init__(name, currency, **kwargs)
 
-        # TODO: MAke sure Index tickers are unique across the world.
-        # This is a big assumption but it is necessary for the key_code to be j
-        # ust the ticker.
-        self.identity_code = self.ticker
+        # TODO: MAke sure Index tickers are unique across the world. This is a
+        # big assumption but it is necessary for the key_code to be just the
+        # ticker.
 
     def __repr__(self):
         """Return the official string output."""
         return '{}(name="{}", ticker="{}", currency={!r}, total_return={!r}, static={!r})'.format(
             self.__class__.__name__, self.name, self.ticker, self.currency, self.total_return, self.static
         )
+
+    def _get_identity_code(self):
+        """Required for unique identification of instances and is not optional."""
+        return self.ticker
 
     @property
     def key_code(self):
