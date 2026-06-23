@@ -55,7 +55,7 @@ def update():
             abm.update_all()
         except NotSetUp as ex:
             logger.error(
-                "The database has not been set up. Please run the 'init' "
+                "The database has not been set up. Please run the 'setup' "
                 "command first.")
 
 @click.command()
@@ -72,7 +72,7 @@ def delete():
             abm.close(drop=True)
         except NotSetUp as ex:
             logger.error(
-                "The database has not been set up. Please run the 'init' "
+                "The database has not been set up. Please run the 'setup' "
                 "command first.")
         else:
             logger.info("Database successfully deleted.")
@@ -87,11 +87,31 @@ def dump():
             abm.dump()
         except NotSetUp as ex:
             logger.error(
-                "The database has not been set up. Please run the 'init' "
+                "The database has not been set up. Please run the 'setup' "
                 "command first.")
         else:
             logger.info("Database reusable data dumped successfully for use in "
                         "a new database setup.")
+
+
+@click.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]), default="bash")
+def completion(shell):
+    """Output shell completion script for SHELL (bash, zsh, or fish).
+
+    Source the output to enable tab-completion. Add one of the following to
+    your shell config:\n
+    \b
+    bash:  eval "$(asset-base completion bash)"
+    zsh:   eval "$(asset-base completion zsh)"
+    fish:  asset-base completion fish | source
+    """
+    from click.shell_completion import BashComplete, ZshComplete, FishComplete
+
+    comp_cls = {"bash": BashComplete, "zsh": ZshComplete, "fish": FishComplete}[shell]
+    comp = comp_cls(cli, {}, "asset-base", "_ASSET_BASE_COMPLETE")
+    click.echo(comp.source())
+
 
 cli.add_command(setup)
 cli.add_command(update)

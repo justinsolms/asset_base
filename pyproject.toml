@@ -18,6 +18,7 @@ dependencies = [
     "ipython",
     "jupyter",
     "setuptools",
+    "build",
     "esbonio",
     "mypy",
     "ipdb",
@@ -52,7 +53,8 @@ email = "justinsolms@gmail.com"
 asset_base = [
     "data/static/*",
     "data/dumps/*",
-    "config/*"
+    "config/*",
+    "_cache/*", 
 ]
 
 [tool.setuptools]
