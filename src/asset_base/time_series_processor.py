@@ -33,6 +33,10 @@ class TimeSeriesProcessor():
         Share split data with columns:
         ``['asset', 'date_stamp', 'numerator', 'denominator']``.
         Default is ``None``.
+    keep_list : list, optional
+        List of asset identifiers (matching the ``asset`` column values) to
+        retain regardless of any criteria that would otherwise cause them to
+        be dropped. Default is ``None``.
 
     Notes
     -----
@@ -94,6 +98,7 @@ class TimeSeriesProcessor():
         prices_df: pd.DataFrame,
         dividends_df: pd.DataFrame | None = None,
         splits_df: pd.DataFrame | None = None,
+        keep_list: list | None = None,
     ) -> None:
         """Initialize the TimeSeriesProcessor with type checking."""
 
@@ -130,6 +135,7 @@ class TimeSeriesProcessor():
         self._splits_df: pd.DataFrame | None = (
             splits_df.copy() if splits_df is not None else None
         )
+        self._keep_list: set = set(keep_list) if keep_list else set()
 
         # Normalize date column types where possible
         try:
@@ -148,6 +154,18 @@ class TimeSeriesProcessor():
                 self._splits_df["date_stamp"] = pd.to_datetime(self._splits_df["date_stamp"])
             except Exception:
                 raise TypeError("splits_df.date_stamp must be convertible to pandas datetime")
+
+    def set_keep_list(self, keep_list: list | None) -> None:
+        """Set asset identifiers to retain regardless of later drop criteria.
+
+        Parameters
+        ----------
+        keep_list : list, optional
+            List of asset identifiers (matching the ``asset`` column values)
+            to retain regardless of any criteria that would otherwise cause
+            them to be dropped.
+        """
+        self._keep_list = set(keep_list) if keep_list else set()
 
     def process(self) -> None:
         """Execute all processing steps in order.
@@ -347,7 +365,7 @@ class TimeSeriesProcessor():
         group_list = []
         for asset, group in self._prices_df.groupby('asset'):
             num_observations = group['date_stamp'].nunique()
-            if num_observations < min_samples_factor * num_assets:
+            if num_observations < min_samples_factor * num_assets and asset not in self._keep_list:
                 logger.warning(
                     f"Dropping {asset} for insufficient data: "
                     f"{num_observations} observations for {num_assets} assets. "

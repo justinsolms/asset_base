@@ -556,7 +556,8 @@ class ManagerBase(object):
     # dataframe of mixed currency time series.
 
     def get_time_series_processor(
-        self, asset_list, cash_currency_ticker=None, price_item="close"):
+        self, asset_list, cash_currency_ticker=None, price_item="close",
+        keep_list=None):
         """Get a time series processor for a list of assets.
 
         Parameters
@@ -573,6 +574,11 @@ class ManagerBase(object):
             The price item to use for listed assets. These could be 'open',
             'close', 'high' or 'low' depending on the available data. Default is
             'close'.
+        keep_list : list of asset_base.asset.AssetBase, optional
+            List of ``Asset`` (or polymorph) instances to retain in the
+            returned ``TimeSeriesProcessor`` regardless of any criteria that
+            would otherwise cause them to be dropped during processing. Must
+            be a subset of ``asset_list``. Default is ``None``.
 
         Returns
         -------
@@ -687,6 +693,9 @@ class ManagerBase(object):
             tsp_all = TimeSeriesProcessor.concat([non_cash_tsp, cash_tsp])
         else:
             tsp_all = non_cash_tsp
+
+        if keep_list:
+            tsp_all.set_keep_list(keep_list)
 
         return tsp_all
 
