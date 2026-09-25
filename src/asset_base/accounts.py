@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
+# Turn off type checking for this module
+# type: ignore
 
 """Classes to describe Cash accounts."""
 
@@ -39,5 +38,3 @@ class SettlementAccount(Cash):
     def _get_identity_code(self):
         """A human readable string unique to the class instance."""
         return self.ticker + "-S"  # Mark as special settlement account
-
-

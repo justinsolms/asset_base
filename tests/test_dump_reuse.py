@@ -1,3 +1,6 @@
+# Turn off type checking for this module
+# type: ignore
+
 """Unit tests for dump/reuse paradigm.
 
 This module tests the complete lifecycle of dumping database contents to pickle

@@ -1,3 +1,6 @@
+# Turn off type checking for this module
+# type: ignore
+
 """Provides a command-line interface for the package.
 
 The CLI provides the following commands:

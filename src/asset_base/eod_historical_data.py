@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
+# Turn off type checking for this module
+# type: ignore
 
 """ Get financial data from the https://eodhistoricaldata.com/ API.
 

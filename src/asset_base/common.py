@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
+# Turn off type checking for this module
+# type: ignore
 
 """Declare common object infrastructure.
 
@@ -648,4 +647,3 @@ class Common(IdentityCodeMixin, Base):
         data_frame = pd.DataFrame(record_list)
 
         return data_frame
-

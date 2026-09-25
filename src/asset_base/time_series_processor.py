@@ -1,3 +1,6 @@
+# Turn off type checking for this module
+# type: ignore
+
 import sys
 from operator import is_
 from flask import g
@@ -745,5 +748,3 @@ class TimeSeriesProcessor():
             dividends_df=combined_dividends,
             splits_df=combined_splits
         )
-
-

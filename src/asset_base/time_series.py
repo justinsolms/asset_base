@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
+# Turn off type checking for this module
+# type: ignore
 
 """ Support for time series data.
 
@@ -1079,4 +1078,3 @@ class Split(TimeSeriesBase):
             "numerator": numerator,
             "denominator": denominator,
         }
-

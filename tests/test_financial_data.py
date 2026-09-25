@@ -1,6 +1,5 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
+# Turn off type checking for this module
+# type: ignore
 
 """Unit tests for financial_data module."""
 

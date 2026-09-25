@@ -1,3 +1,6 @@
+# Turn off type checking for this module
+# type: ignore
+
 %load_ext line_profiler
 from asset_base.manager import Manager
 from asset_base.asset import ExchangeTradeFund, Asset

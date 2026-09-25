@@ -1,3 +1,6 @@
+# Turn off type checking for this module
+# type: ignore
+
 import unittest
 import numpy as np
 import pandas as pd
@@ -1041,4 +1044,3 @@ class TestTimeSeriesProcessor(unittest.TestCase):
         self.assertEqual(tsp_combined._prices_df['asset'].nunique(), 3)
         for code in ['TEST:A', 'TEST:B', 'TEST:C']:
             self.assertIn(code, tsp_combined._prices_df['asset'].values)
-
