@@ -128,23 +128,23 @@ class _Session(ABC):
         """Initialize database engine, create database if needed, and create session."""
         # Create the SQLAlchemy ORM engine.
         self.engine = create_engine(self.db_url, echo=self.echo)
-        logger.debug(f"Created database engine {self.db_url}")
+        logger.info(f"Created database engine {self.db_url}")
 
         # Create database if it doesn't exist (skip for in-memory SQLite)
         if not self.db_url.startswith("sqlite:///:memory:") and not database_exists(self.db_url):
-            logger.debug(f"Database {self.db_url} does not exist. Creating...")
+            logger.info(f"Database {self.db_url} does not exist. Creating...")
             create_database(self.db_url)
-            logger.debug(f"Created database {self.db_url}.")
+            logger.info(f"Created database {self.db_url}.")
         else:
-            logger.debug(f"Database {self.db_url} ready.")
+            logger.info(f"Database {self.db_url} ready.")
 
         # Create all tables
         Base.metadata.create_all(self.engine)
-        logger.debug(f"Ensuring all tables exist in {self.db_url}.")
+        logger.info(f"Ensuring all tables exist in {self.db_url}.")
 
         # Create session
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.debug(f"Opened database session {self.db_url}")
+        logger.info(f"Opened database session {self.db_url}")
 
     def __enter__(self):
         """Context manager entry."""
@@ -174,7 +174,7 @@ class _Session(ABC):
             self.session.close()
 
         self.session = Session(self.engine, autoflush=True, autocommit=False)
-        logger.debug(f"Created new session for {self.db_url}")
+        logger.info(f"Created new session for {self.db_url}")
         return self.session
 
     def __del__(self):
@@ -207,7 +207,7 @@ class _Session(ABC):
             if hasattr(self, 'session') and self.session is not None:
                 try:
                     self.session.close()
-                    logger.debug(f"Closed session for {self.db_url}.")
+                    logger.info(f"Closed session for {self.db_url}.")
                 except Exception as e:
                     logger.error(f"Error closing session for {self.db_url}: {e}")
                 finally:
@@ -217,7 +217,7 @@ class _Session(ABC):
             if hasattr(self, 'engine') and self.engine is not None:
                 try:
                     self.engine.dispose()
-                    logger.debug(f"Disposed of engine for {self.db_url}.")
+                    logger.info(f"Disposed of engine for {self.db_url}.")
                 except Exception as e:
                     logger.error(f"Error disposing engine for {self.db_url}: {e}")
                 finally:
@@ -233,13 +233,13 @@ class _Session(ABC):
         Only use for testing or when you're certain you want to delete everything.
         """
         if self.db_url.startswith("sqlite:///:memory:"):
-            logger.debug("In-memory database will be dropped automatically.")
+            logger.info("In-memory database will be dropped automatically.")
             return
 
         try:
             if database_exists(self.db_url):
                 drop_database(self.db_url)
-                logger.debug(f"Dropped database {self.db_url}.")
+                logger.info(f"Dropped database {self.db_url}.")
         except Exception as e:
             logger.error(f"Error dropping database {self.db_url}: {e}")
             raise
