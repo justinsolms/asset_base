@@ -1,3 +1,6 @@
+# Turn off type checking for this module
+# type: ignore
+
 """Functional tests for package-level functionality."""
 import os
 

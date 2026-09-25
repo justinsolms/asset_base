@@ -1,6 +1,5 @@
-#!/usr/bin/env unittest
-# -*- coding: utf-8 -*-
-# <nbformat>3.0</nbformat>
+# Turn off type checking for this module
+# type: ignore
 
 """Test suite for the asset_base module.
 

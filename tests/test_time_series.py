@@ -1,3 +1,6 @@
+# Turn off type checking for this module
+# type: ignore
+
 from io import StringIO
 from os import close
 import unittest
