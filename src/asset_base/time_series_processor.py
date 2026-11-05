@@ -610,6 +610,7 @@ class TimeSeriesProcessor():
     def get_pivoted_price_info_dataframes_dict(self) -> dict[str, pd.DataFrame]:
         """Pivot price info to date_stamp index and identifier column labels.
 
+        FIXME: Really rubbish description, should be improved to clearly explain the structure of the returned dictionary.
         Takes the internal prices information DataFrame with an identifier
         column plus a 'date_stamp' column and returns a
         separate pivoted DataFrame for each data column in a dict with the price
@@ -624,6 +625,7 @@ class TimeSeriesProcessor():
         Returns
         -------
         dict[str, pd.DataFrame]
+            FIXME: Really rubbish description, should be improved to clearly explain the structure of the returned dictionary.
             Dictionary mapping column names to pivoted DataFrames. Each pivoted
             DataFrame has 'date_stamp' as index, identifier values as columns
             (for example, Asset instances), and the corresponding price

@@ -557,6 +557,8 @@ class ManagerBase(object):
     def get_time_series_processor(
         self, asset_list, cash_currency_ticker=None, price_item="close",
         keep_list=None):
+        # BUG: When cash_currency_ticker="ZAR" throws `TimeSeriesNoData: TimeSeriesNoData : Multiple Cash assets found for currency ticker 'ZAR'. Exactly one Cash asset is required.`
+
         """Get a time series processor for a list of assets.
 
         Parameters
@@ -581,7 +583,7 @@ class ManagerBase(object):
 
         Returns
         -------
-        TimeSeriesProcessor
+        .time_series_processor.TimeSeriesProcessor
             A TimeSeriesProcessor instance with time-series data loaded for all
             assets referenced in ``asset_list`` and the cash asset
             if specified by ``cash_currency_ticker``. The time-series data is
@@ -591,13 +593,13 @@ class ManagerBase(object):
 
         Notes
         -----
-                - Assets with missing time-series data are skipped and a warning is
-                    logged and the method proceeds with the
-          remaining assets. If no assets with usable time-series data are found
-          then a ``TimeSeriesNoData`` exception is raised.
+        - Assets with missing time-series data are skipped and a warning is
+          logged and the method proceeds with the remaining assets. If no assets
+          with usable time-series data are found then a ``TimeSeriesNoData``
+          exception is raised.
         - All listed assets and the cash asset must share the same price
-            currency. Currently mixed-currency portfolios are rejected with a
-            ``ValueError``.
+          currency. Currently mixed-currency portfolios are rejected with a
+          ``ValueError``.
         - The returned TimeSeriesProcessor performs validation, corporate action
           adjustment and resampling on a per-asset basis.
 
