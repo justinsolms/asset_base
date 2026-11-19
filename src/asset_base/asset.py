@@ -1881,11 +1881,17 @@ class Listed(Share):
         # Update Listed instances metadata as per the latest data from the data source.
         cls.update_meta_data(session)
 
-        # Only update time series for listed securities ignoring de-listed ones.
-        asset_list = session.query(cls).filter(cls.status == "listed").all()
+        # Update time series for de-listed securities
+        delisted_asset_list = session.query(cls).filter(cls.status == "delisted").all()
+
+        # Update time series for listed securities
+        listed_asset_list = session.query(cls).filter(cls.status == "listed").all()
 
         # Get EOD trade data for this Listed subclass.
-        cls.update_eod_time_series(session, asset_list)
+        cls.update_eod_time_series(session, delisted_asset_list + listed_asset_list)
+        
+        # Return the lists of delisted and listed assets for use in child classes
+        return delisted_asset_list, listed_asset_list
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -2213,13 +2219,13 @@ class ListedEquity(Listed):
 
         # The superclasses will get securities metadata and EOD trade data for
         # this ListedEquity subclass
-        super().update_all(session)
-
-        # Only update time series for listed securities ignoring de-listed ones.
-        asset_list = session.query(cls).filter(cls.status == "listed").all()
+        delisted_asset_list, listed_asset_list = super().update_all(session)
 
         # Get Dividend and Split time-series data.
-        cls.update_corporate_time_series(session, asset_list)
+        cls.update_corporate_time_series(session, delisted_asset_list + listed_asset_list)
+
+        # Return the lists of delisted and listed assets for use in child classes
+        return delisted_asset_list, listed_asset_list
 
     @classmethod
     def dump(cls, session, dumper: Dump):
