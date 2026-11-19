@@ -427,7 +427,12 @@ class StaticIndices(_Feed):
 
 
 class MetaData(_Feed):
-    """Provide fundamental and meta-data of the working universe securities."""
+    """Provide fundamental and meta-data of the working universe securities.
+    
+    Methods to fetch financial instrument meta-data such as ticker, ISIN, name,
+    and other relevant attributes are (or will be) housed in this class.
+    
+    """
 
     def get_class_data_path(self) -> Optional[str]:
         """Return the class data path."""

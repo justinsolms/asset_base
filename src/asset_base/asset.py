@@ -219,8 +219,9 @@ class AssetBase(Common):
             A session attached to the desired database.
 
         """
+        # See the Common parent class for how METADATA_GET_METHOD should be defined.   
+        data_frame = cls.METADATA_GET_METHOD()  
         # Bulk add/update metadata uses the class factory method
-        data_frame = cls.METADATA_GET_METHOD()
         cls.from_data_frame(session, data_frame)
 
     @classmethod
@@ -253,8 +254,12 @@ class AssetBase(Common):
 
         Note
         ----
-        It will often be necessary to override this method in child classes
-        and it is possible that this instance of this method mey never be used.
+        In classes that represent concrete asset types, such as ``ListedEquity``,
+        ``ExchangeTradedFund``, etc., this method should be overridden to handle the
+        specific update logic for those asset types. If the concrete class does
+        not override this method, the default behaviour will be applied, which
+        may not be appropriate for all asset types but may be to some such as
+        ``Forex``, etc.
 
         """
         # Update Listed instances metadata as per the latest data from the data source.
@@ -265,6 +270,10 @@ class AssetBase(Common):
 
         # Get EOD trade data for this Listed subclass.
         cls.update_eod_time_series(session, asset_list)
+        
+        # Return the list of assets instances for this class for use in
+        # subclasses update_all methods
+        return asset_list
 
 class Asset(AssetBase):
     """A financial asset.
@@ -769,7 +778,7 @@ class Cash(Asset):
         # A cash instance for every currency
         currency_list = session.query(Currency).all()
         if len(currency_list) == 0:
-            raise Exception("No Currency instances found. ")
+            raise Exception("No Currency instances found. Please set up the database first.")
         for currency in currency_list:
             cls.factory(session, currency.ticker)
 
@@ -1164,24 +1173,27 @@ class Forex(Cash):
         for price_currency in foreign_currencies_list:
             cls.factory(session, cls.root_currency_ticker, price_currency.ticker)
 
-    @classmethod
-    def update_all(cls, session):
-        """Update/create Forex instances and their trade time-series data.
+    # TODO: We might not need this as the AssetBase already handles update logic for many simple asset types (Commented out to test this idea).
+    # FIXME: This method is lso broken due to other changes in the update logic and might not be needed anymore.
+    # @classmethod
+    # def update_all(cls, session):
+    #     """Update/create Forex instances and their trade time-series data.
 
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        """
-        # Bulk add/update metadata uses the class factory method an creates
-        # Forex based on Currency instances.
-        cls.update_meta_data(session)
+    #     Parameters
+    #     ----------
+    #     session : sqlalchemy.orm.Session
+    #         A session attached to the desired database.
+    #     """
+    #     # Bulk add/update metadata uses the class factory method an creates
+    #     # Forex based on Currency instances.
+    #     cls.update_meta_data(session)
 
-        # Get the list of foreign currencies in the database
-        foreign_currencies_list = session.query(Forex).all()
+    #     # Get the list of foreign currencies in the database
+    #     foreign_currencies_list = session.query(Forex).all()
 
-        # Update EOD trade time-series data for Forex.
-        cls.update_eod_time_series(session, foreign_currencies_list)
+    #     # Update EOD trade time-series data for Forex.
+    #     cls.update_eod_time_series(session, foreign_currencies_list)
+
 
     @classmethod
     def get_rates_data_frame(
@@ -1867,25 +1879,33 @@ class Listed(Share):
 
         return obj
 
-    @classmethod
-    def update_all(cls, session):
-        """Update/create Listed instances and their trade time-series data.
+    # TODO: We may not need this as Listed is not a concrete security class.
+    # FIXME: This method is lso broken due to other changes in the update logic and might not be needed anymore.
+    # @classmethod
+    # def update_all(cls, session):
+    #     """Update/create Listed instances and their trade time-series data.
 
-        Updates time series for only listed securities ignoring de-listed ones.
+    #     Updates time series for only listed securities ignoring de-listed ones.
 
-        Parameters
-        ----------
-        session : sqlalchemy.orm.Session
-            A session attached to the desired database.
-        """
-        # Update Listed instances metadata as per the latest data from the data source.
-        cls.update_meta_data(session)
+    #     Parameters
+    #     ----------
+    #     session : sqlalchemy.orm.Session
+    #         A session attached to the desired database.
+    #     """
+    #     # Update Listed instances metadata as per the latest data from the data source.
+    #     cls.update_meta_data(session)
 
-        # Only update time series for listed securities ignoring de-listed ones.
-        asset_list = session.query(cls).filter(cls.status == "listed").all()
+    #     # Update time series for de-listed securities
+    #     delisted_asset_list = session.query(cls).filter(cls.status == "delisted").all()
 
-        # Get EOD trade data for this Listed subclass.
-        cls.update_eod_time_series(session, asset_list)
+    #     # Update time series for listed securities
+    #     listed_asset_list = session.query(cls).filter(cls.status == "listed").all()
+
+    #     # Get EOD trade data for this Listed subclass.
+    #     cls.update_eod_time_series(session, delisted_asset_list + listed_asset_list)
+        
+    #     # Return the lists of delisted and listed assets for use in child classes
+    #     return delisted_asset_list, listed_asset_list
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -2210,16 +2230,15 @@ class ListedEquity(Listed):
         session : sqlalchemy.orm.Session
             A session attached to the desired database.
         """
+        asset_list = super().update_all(session)
 
-        # The superclasses will get securities metadata and EOD trade data for
-        # this ListedEquity subclass
-        super().update_all(session)
+        # TODO: Any possible future asset_list filter we should put here as a list comprehension
 
-        # Only update time series for listed securities ignoring de-listed ones.
-        asset_list = session.query(cls).filter(cls.status == "listed").all()
-
-        # Get Dividend and Split time-series data.
+        # Update Dividend and Split corporate action time-series data.
         cls.update_corporate_time_series(session, asset_list)
+
+        # Return the list of assets for use in child classes
+        return asset_list
 
     @classmethod
     def dump(cls, session, dumper: Dump):
@@ -2866,7 +2885,7 @@ class ExchangeTradeFund(ListedEquity):
     ter = Column(Float, nullable=True)
 
     # The financial_data METADATA_GET_METHOD method is overridden here
-    METADATA_GET_METHOD = AssetBase.METADATA_INSTANCE.get_etfs_meta
+    METADATA_GET_METHOD = Common.FINANCIAL_METADATA_CLASS_INSTANCE.get_etfs_meta
 
     def __init__(self, name, issuer, isin, exchange, ticker, status, **kwargs):
         """Instance initialization."""

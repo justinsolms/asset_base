@@ -473,13 +473,14 @@ class Common(IdentityCodeMixin, Base):
     date_mod_stamp = Column(Date, nullable=True)
     """sqlalchemy.DateTime: Modification date stamp. May be in the past."""
 
-    # The financial_data module metadata getter method provider instance for all
-    # classes inheriting from Common.
-    METADATA_INSTANCE = FinancialMetaData()
+    # The financial metadata class should be overridden in child classes and is used in conjunction
+    # with the METADATA_GET_METHOD below to fetch the relevant metadata for the class.
+    FINANCIAL_METADATA_CLASS_INSTANCE = FinancialMetaData()
 
     # The metadata get method should be overridden in child classes to return
-    # the appropriate metadata get method for that class. Use the METADATA
-    # instance.
+    # the appropriate metadata get method for that class. This should be a
+    # callable that returns the relevant metadata and must overridden as such:
+    #   METADATA_GET_METHOD = Common.FINANCIAL_METADATA_CLASS_INSTANCE.<getter method>
     METADATA_GET_METHOD = None
 
     def __init__(self, name):
