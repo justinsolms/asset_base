@@ -1173,26 +1173,31 @@ class Forex(Cash):
         for price_currency in foreign_currencies_list:
             cls.factory(session, cls.root_currency_ticker, price_currency.ticker)
 
-    # TODO: We might not need this as the AssetBase already handles update logic for many simple asset types (Commented out to test this idea).
-    # FIXME: This method is lso broken due to other changes in the update logic and might not be needed anymore.
-    # @classmethod
-    # def update_all(cls, session):
-    #     """Update/create Forex instances and their trade time-series data.
+    @classmethod
+    def update_all(cls, session):
+        """Update/create Forex instances and their trade time-series data.
 
-    #     Parameters
-    #     ----------
-    #     session : sqlalchemy.orm.Session
-    #         A session attached to the desired database.
-    #     """
-    #     # Bulk add/update metadata uses the class factory method an creates
-    #     # Forex based on Currency instances.
-    #     cls.update_meta_data(session)
+        Parameters
+        ----------
+        session : sqlalchemy.orm.Session
+            A session attached to the desired database.
+            
+        """
+        # NOTE: that we must override this method in subclasses if they have
+        # specific update logic beyond the generic metadata and EOD time-series
+        # updates. In this case we cannot use the super().update_all() method
+        # directly as that would call the Cash.update_all() method, which is not
+        # applicable for Forex.
+        
+        # Bulk add/update metadata uses the class factory method an creates
+        # Forex based on Currency instances.
+        cls.update_meta_data(session)
 
-    #     # Get the list of foreign currencies in the database
-    #     foreign_currencies_list = session.query(Forex).all()
+        # Get the list of foreign currencies in the database
+        foreign_currencies_list = session.query(Forex).all()
 
-    #     # Update EOD trade time-series data for Forex.
-    #     cls.update_eod_time_series(session, foreign_currencies_list)
+        # Update EOD trade time-series data for Forex.
+        cls.update_eod_time_series(session, foreign_currencies_list)
 
 
     @classmethod
@@ -1880,7 +1885,6 @@ class Listed(Share):
         return obj
 
     # TODO: We may not need this as Listed is not a concrete security class.
-    # FIXME: This method is lso broken due to other changes in the update logic and might not be needed anymore.
     # @classmethod
     # def update_all(cls, session):
     #     """Update/create Listed instances and their trade time-series data.
