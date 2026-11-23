@@ -2530,8 +2530,7 @@ class ListedEquity(Listed):
         columns_to_rename = {price_item: "price"}
         prices_df.rename(columns=columns_to_rename, inplace=True)
 
-        # Get dividends, select dividends unadjusted value item, and rename to
-        # "dividend" for the processor.
+        # If distributions are expected, attempt to get dividends. 
         try:
             dividends_df = self.get_dividend_series().reset_index()
         except DividendSeriesNoData:
@@ -2540,11 +2539,18 @@ class ListedEquity(Listed):
                 "Distributions were expected but Dividend series will be empty.")
             dividends_df = None
         else:
-            dividends_df["asset"] = self
-            columns_to_keep = ["asset", "date_stamp", "unadjusted_value"]
-            dividends_df = dividends_df[columns_to_keep]
-            # Add dividend column as a copy of unadjusted_value
-            dividends_df["dividend"] = dividends_df["unadjusted_value"]
+            if not self.distributions:
+                logger.warning(
+                    f"Distributions are not expected for {self.identity_code}. "
+                    "Declared dividend series will be ignored.")
+                dividends_df = None
+            else:
+                dividends_df["asset"] = self
+                columns_to_keep = ["asset", "date_stamp", "unadjusted_value"]
+                dividends_df = dividends_df[columns_to_keep]
+                # Add dividend column as a copy of unadjusted_value
+                dividends_df["dividend"] = dividends_df["unadjusted_value"]
+            
 
         # Get splits
         try:
