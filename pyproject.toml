@@ -72,3 +72,4 @@ local_scheme = "dirty-tag"
 
 [project.scripts]
 asset-base = "asset_base.__main__:cli"
+check-eod-data = "asset_base.check_eod_data:cli"

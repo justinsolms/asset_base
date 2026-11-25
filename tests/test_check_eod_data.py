@@ -3,7 +3,7 @@ import pytest
 import requests
 from click.testing import CliRunner
 
-from notebooks import check_eod_data
+from asset_base import check_eod_data
 
 get_distributions_dict = check_eod_data.get_distributions_dict
 
