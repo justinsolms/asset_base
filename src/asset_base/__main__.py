@@ -23,9 +23,18 @@ logger = logging.getLogger(__name__)
 @click.group()
 @click.version_option(version("asset-base"), '-v', '--version', message='version==%(version)s')
 def cli():
-    """
-    Tool for managing the financial database and updating it with fresh data
-    from the API.
+    """Manage the asset-base database and data supplied by external APIs.
+
+    Run a command with --help to see command-specific options and examples.
+
+    \b
+    Examples:
+      asset-base setup
+      asset-base setup --hard
+      asset-base update
+      asset-base dump
+      asset-base delete
+      asset-base completion bash
     """
     pass
 
@@ -120,6 +129,7 @@ cli.add_command(setup)
 cli.add_command(update)
 cli.add_command(delete)
 cli.add_command(dump)
+cli.add_command(completion)
 
 if __name__ == "__main__":
     cli()

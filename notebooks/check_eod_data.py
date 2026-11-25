@@ -271,6 +271,9 @@ def format_issue_categories(ticker_issues):
 
     if ticker_issues['failed_data']:
         categories.append(f"FETCH FAILED({', '.join(ticker_issues['failed_data'])})")
+
+    if ticker_issues['skipped_data']:
+        categories.append(f"SKIPPED({', '.join(ticker_issues['skipped_data'])})")
     
     if not categories:
         return "✅ CLEAN"
@@ -336,7 +339,14 @@ def print_summary_report(results, no_volume=False, no_zeros=False, no_clean=Fals
             else:
                 status = "✅"
             
-            if not no_clean or issue_summary != "✅ CLEAN":
+            has_data_issues = any((
+                ticker_issues['zero_values'],
+                ticker_issues['scaling_issues'],
+                ticker_issues['duplicate_dividends'],
+                ticker_issues['missing_data'],
+                ticker_issues['failed_data'],
+            ))
+            if not no_clean or has_data_issues:
                 print(f"{ticker:<15} {issue_summary:<50}  {status}")
     
     print("=" * 80)
@@ -476,7 +486,26 @@ def main(verb=0, no_eod=False, no_div=False, no_splits=False, test=False,
 @click.option("--test", is_flag=True, help="Audit a random selection of up to 10 selected tickers.")
 def cli(verb, no_eod, no_div, no_splits, no_volume, no_zeros, no_clean, cleanup,
         use_cache, listed, delisted, ticker, test):
-    """Audit the configured JSE tickers for data quality issues."""
+    """Audit configured JSE ETFs for missing, zero, scaled, or duplicate data.
+
+    By default, the audit checks EOD prices and volume, dividends, splits, and
+    zero values.  API responses are cached as ``.check.csv`` files in the
+    package temporary directory.  Pass --cache to prefer those files for an
+    existing audit, or --cleanup to remove all cache files and exit.
+
+    Use --listed or --delisted to restrict the audit by listing status.  The
+    two filters are mutually exclusive.  Use --ticker repeatedly for an explicit
+    ticker list, optionally with --test to sample at most ten selections.
+
+    \b
+    Examples:
+      python notebooks/check_eod_data.py
+      python notebooks/check_eod_data.py --listed --verb 1
+      python notebooks/check_eod_data.py --ticker A --ticker B --no-splits
+      python notebooks/check_eod_data.py --test --no-div --no-splits
+      python notebooks/check_eod_data.py --cache --no-eod --no-splits
+      python notebooks/check_eod_data.py --cleanup
+    """
     if cleanup:
         main(cleanup=True)
         return
