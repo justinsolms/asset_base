@@ -33,12 +33,12 @@ _CONFIG = "config"
 # Tests path
 _TESTS = "tests"
 
-# Log, tmp an cache path under variable data path with the "_" prefix which is ignored by git
-# and other version control systems.
-_LOG = "_log"
-_TMP = "_tmp"
-_CACHE = "_cache"
-_TEST_CACHE = "_test_cache"
+# Log, tmp an cache path under variable data path
+_VAR = "var"
+_LOG = "log"
+_TMP = "tmp"
+_CACHE = "cache"
+_TEST_CACHE = "test_cache"
 
 # Authentication certificates path
 _CERTIFICATES = 'certificates'
@@ -54,6 +54,15 @@ _ART = 'art'
 
 # General output path
 _OUTPUT = '~/Downloads'
+
+def get_project_root_folder():
+    """Get the project root folder by traversing up from the current file until we find pyproject.toml."""
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    while current_dir != os.path.dirname(current_dir):  # Stop at filesystem root
+        if os.path.isfile(os.path.join(current_dir, 'pyproject.toml')):
+            return current_dir
+        current_dir = os.path.dirname(current_dir)
+    raise FileNotFoundError("Could not find project root (pyproject.toml)")
 
 def get_output_path(sub_path=None):
     output_path = os.path.expanduser(_OUTPUT)
@@ -154,10 +163,10 @@ def get_tests_path(sub_path=None):
     return os.path.abspath(tests_path)
 
 def get_log_path(sub_path=None):
-    # Get the directory of the current file (__init__.py)
-    current_dir = os.path.dirname(os.path.abspath(__file__))
+    # Get the project root folder
+    project_root = get_project_root_folder()
     # Construct the full path to the log folder
-    log_path = os.path.join(current_dir, _LOG)
+    log_path = os.path.join(project_root, _VAR, _LOG)
     # Create the log directory if it does not exist
     if not os.path.exists(log_path):
         os.makedirs(log_path)
@@ -167,10 +176,10 @@ def get_log_path(sub_path=None):
     return log_path
 
 def get_tmp_path(sub_path=None):
-    # Get the directory of the current file (__init__.py)
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    # Use the test variable to determine the tmp path
-    tmp_path = os.path.join(current_dir, _TMP)
+    # Get the project root folder
+    project_root = get_project_root_folder()
+    # Use the project root to determine the tmp path
+    tmp_path = os.path.join(project_root, _VAR, _TMP)
     # Create the tmp directory if it does not exist
     if not os.path.exists(tmp_path):
         os.makedirs(tmp_path)
@@ -180,9 +189,9 @@ def get_tmp_path(sub_path=None):
     return tmp_path
 
 def get_cache_path(sub_path=None, testing=False):
-    # Get the directory of the current file (__init__.py)
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    cache_path = os.path.join(current_dir, _CACHE if not testing else _TEST_CACHE)
+    # Get the project root folder
+    project_root = get_project_root_folder()
+    cache_path = os.path.join(project_root, _VAR, _CACHE if not testing else _TEST_CACHE)
     # Create the cache directory if it does not exist
     if not os.path.exists(cache_path):
         os.makedirs(cache_path)
