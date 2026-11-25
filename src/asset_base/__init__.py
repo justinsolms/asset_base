@@ -39,6 +39,7 @@ _LOG = "log"
 _TMP = "tmp"
 _CACHE = "cache"
 _TEST_CACHE = "test_cache"
+_BASE_PATH = "ASSET_BASE_HOME"
 
 # Authentication certificates path
 _CERTIFICATES = 'certificates'
@@ -56,13 +57,20 @@ _ART = 'art'
 _OUTPUT = '~/Downloads'
 
 def get_project_root_folder():
-    """Get the project root folder by traversing up from the current file until we find pyproject.toml."""
+    """Return the source root, or a writable data root for an installed package.
+
+    Set ``ASSET_BASE_HOME`` to override the root used for runtime files. When
+    installed from a wheel, the default is ``~/.local/share/asset_base``.
+    """
     current_dir = os.path.dirname(os.path.abspath(__file__))
     while current_dir != os.path.dirname(current_dir):  # Stop at filesystem root
         if os.path.isfile(os.path.join(current_dir, 'pyproject.toml')):
             return current_dir
         current_dir = os.path.dirname(current_dir)
-    raise FileNotFoundError("Could not find project root (pyproject.toml)")
+    data_root = os.environ.get(_BASE_PATH)
+    if data_root is None:
+        data_root = os.path.join(os.path.expanduser("~"), ".local", "share", "asset_base")
+    return os.path.abspath(os.path.expanduser(data_root))
 
 def get_output_path(sub_path=None):
     output_path = os.path.expanduser(_OUTPUT)
@@ -167,9 +175,7 @@ def get_log_path(sub_path=None):
     project_root = get_project_root_folder()
     # Construct the full path to the log folder
     log_path = os.path.join(project_root, _VAR, _LOG)
-    # Create the log directory if it does not exist
-    if not os.path.exists(log_path):
-        os.makedirs(log_path)
+    os.makedirs(log_path, exist_ok=True)
     # Add the sub_path if it is not None
     if sub_path is not None:
         log_path = os.path.join(log_path, sub_path)
@@ -180,9 +186,7 @@ def get_tmp_path(sub_path=None):
     project_root = get_project_root_folder()
     # Use the project root to determine the tmp path
     tmp_path = os.path.join(project_root, _VAR, _TMP)
-    # Create the tmp directory if it does not exist
-    if not os.path.exists(tmp_path):
-        os.makedirs(tmp_path)
+    os.makedirs(tmp_path, exist_ok=True)
     # Add the sub_path if it is not None
     if sub_path is not None:
         tmp_path = os.path.join(tmp_path, sub_path)
@@ -192,9 +196,7 @@ def get_cache_path(sub_path=None, testing=False):
     # Get the project root folder
     project_root = get_project_root_folder()
     cache_path = os.path.join(project_root, _VAR, _CACHE if not testing else _TEST_CACHE)
-    # Create the cache directory if it does not exist
-    if not os.path.exists(cache_path):
-        os.makedirs(cache_path)
+    os.makedirs(cache_path, exist_ok=True)
     # Add the sub_path if it is not None
     if sub_path is not None:
         cache_path = os.path.join(cache_path, sub_path)
