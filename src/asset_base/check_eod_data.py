@@ -272,9 +272,6 @@ def format_issue_categories(ticker_issues):
     if ticker_issues['failed_data']:
         categories.append(f"FETCH FAILED({', '.join(ticker_issues['failed_data'])})")
 
-    if ticker_issues['skipped_data']:
-        categories.append(f"SKIPPED({', '.join(ticker_issues['skipped_data'])})")
-    
     if not categories:
         return "✅ CLEAN"
     
@@ -411,8 +408,7 @@ def main(verb=0, no_eod=False, no_div=False, no_splits=False, test=False,
             'scaling_issues': [],
             'duplicate_dividends': [],
             'missing_data': [],
-            'failed_data': [],
-            'skipped_data': []
+            'failed_data': []
         }
         
         if verb:
@@ -420,12 +416,10 @@ def main(verb=0, no_eod=False, no_div=False, no_splits=False, test=False,
 
         for endpoint, data_type, skip, columns, scaling_column in checks:
             if skip:
-                ticker_issues['skipped_data'].append(data_type)
                 continue
             if endpoint == "div":
                 expected = distributions.get(ticker)
                 if expected is False:
-                    ticker_issues['skipped_data'].append("DIV: no distributions expected")
                     continue
                 if expected is not True:
                     tqdm.write(f"Warning: Unknown distribution expectation for {ticker}; checking DIV data.")

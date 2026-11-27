@@ -101,16 +101,16 @@ def test_request_failure_is_not_reported_as_missing_or_clean(monkeypatch, capsys
 
 
 @pytest.mark.parametrize(
-    ("flags", "expected", "skipped"),
+    ("flags", "expected"),
     [
-        ([], ["eod", "div", "splits"], None),
-        (["--no-eod"], ["div", "splits"], "SKIPPED(EOD)"),
-        (["--no-div"], ["eod", "splits"], "SKIPPED(DIV)"),
-        (["--no-splits"], ["eod", "div"], "SKIPPED(SPLIT)"),
-        (["--no-eod", "--no-splits"], ["div"], "SKIPPED(EOD, SPLIT)"),
+        ([], ["eod", "div", "splits"]),
+        (["--no-eod"], ["div", "splits"]),
+        (["--no-div"], ["eod", "splits"]),
+        (["--no-splits"], ["eod", "div"]),
+        (["--no-eod", "--no-splits"], ["div"]),
     ],
 )
-def test_cli_selects_endpoints(monkeypatch, flags, expected, skipped):
+def test_cli_selects_endpoints(monkeypatch, flags, expected):
     calls = []
 
     def fetch(ticker, endpoint):
@@ -125,8 +125,7 @@ def test_cli_selects_endpoints(monkeypatch, flags, expected, skipped):
     assert result.exit_code == 0, result.output
     assert calls == [("FIRST.JSE", endpoint) for endpoint in expected]
     assert "SUMMARY REPORT" in result.output
-    if skipped:
-        assert skipped in result.output
+    assert "SKIPPED(" not in result.output
 
 
 def test_cli_verbosity_preserves_summary(monkeypatch):
@@ -268,7 +267,7 @@ def test_no_zeros_bypasses_check_and_retains_missing_data_reporting(monkeypatch)
     result = CliRunner().invoke(check_eod_data.cli, ["--no-zeros", "--no-eod"])
     assert result.exit_code == 0, result.output
     assert "NO DATA(SPLIT)" in result.stdout
-    assert "SKIPPED(EOD)" in result.stdout
+    assert "SKIPPED(" not in result.stdout
     assert "Total Zero Value Issues: SKIPPED" in result.stdout
 
 
@@ -355,6 +354,9 @@ def test_no_clean_filters_only_clean_summary_rows(monkeypatch, no_clean):
     rows = {line.split()[0]: line for line in summary.splitlines()
             if line.split() and line.split()[0] in tickers}
     assert ("CLEAN.JSE" in rows) is not no_clean
+    if not no_clean:
+        assert "✅ CLEAN" in rows["CLEAN.JSE"]
+    assert "SKIPPED(" not in summary
     assert "ZEROS(EOD: 1)" in rows["ZERO.JSE"]
     assert "NO DATA(EOD)" in rows["MISSING.JSE"]
     assert "FETCH FAILED(EOD)" in rows["FAILED.JSE"]
@@ -605,7 +607,7 @@ def test_dividends_are_skipped_only_when_distributions_are_not_expected(monkeypa
     summary = result.stdout.split("SUMMARY REPORT", 1)[1]
     accum = next(line for line in summary.splitlines() if line.startswith("ACCUM.JSE"))
     pays = next(line for line in summary.splitlines() if line.startswith("PAYS.JSE"))
-    assert "SKIPPED(DIV: no distributions expected)" in accum
+    assert "SKIPPED(" not in accum
     assert "NO DATA(EOD, SPLIT)" in accum
     assert "NO DATA(EOD, DIV, SPLIT)" in pays
     assert "Unknown distribution expectation for UNKNOWN.JSE" in result.output
@@ -656,4 +658,4 @@ def test_no_div_option_does_not_load_distribution_metadata(monkeypatch):
 
     result = CliRunner().invoke(check_eod_data.cli, ["--no-div"])
     assert result.exit_code == 0, result.output
-    assert "SKIPPED(DIV)" in result.output
+    assert "SKIPPED(" not in result.output
